@@ -21,6 +21,39 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestCleanupIncompleteBackupArtifactsAfterProcessTermination(t *testing.T) {
+	ctx := context.Background()
+	backupsDir := filepath.Join(t.TempDir(), "backups")
+	require.NoError(t, os.MkdirAll(backupsDir, 0o700))
+	stale := []string{
+		".snapshot-crashed.db",
+		".snapshot-crashed.db-wal",
+		".snapshot-crashed.db-shm",
+		"video-record-123-crashed.vrbackup.partial",
+		".restore-upload-crashed.partial",
+	}
+	for _, name := range stale {
+		require.NoError(t, os.WriteFile(filepath.Join(backupsDir, name), []byte("synthetic"), 0o600))
+	}
+	keep := []string{"notes.txt", "video-record-valid.vrbackup"}
+	for _, name := range keep {
+		require.NoError(t, os.WriteFile(filepath.Join(backupsDir, name), []byte("keep"), 0o600))
+	}
+	manager := NewBackupManager(nil, BackupOptions{BackupsDir: backupsDir})
+
+	require.NoError(t, manager.CleanupIncomplete(ctx))
+
+	for _, name := range stale {
+		_, err := os.Stat(filepath.Join(backupsDir, name))
+		require.ErrorIs(t, err, os.ErrNotExist, name)
+	}
+	for _, name := range keep {
+		_, err := os.Stat(filepath.Join(backupsDir, name))
+		require.NoError(t, err, name)
+	}
+	require.NoError(t, manager.CleanupIncomplete(ctx), "cleanup is idempotent")
+}
+
 func TestOnlineBackupProducesConsistentChecksummedSnapshotDuringWrites(t *testing.T) {
 	ctx := context.Background()
 	db := openBackupTestDB(t)

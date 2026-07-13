@@ -68,10 +68,13 @@ func main() {
 	recordService := records.NewService(records.NewRepository(db))
 	statsService := statsdomain.NewService(statsdomain.NewRepository(db))
 	householdService := household.NewService(household.NewRepository(db))
-	backupManager := storage.NewBackupManager(db, storage.BackupOptions{
-		BackupsDir:             filepath.Join(cfg.DataDir, "backups"),
-		EncryptionKeyAvailable: len(cfg.EncryptionKey) > 0,
-	})
+	backupManager, err := newBackupManager(
+		appContext, db, filepath.Join(cfg.DataDir, "backups"), len(cfg.EncryptionKey) > 0,
+	)
+	if err != nil {
+		logger.Error("incomplete backup cleanup failed", slog.Any("error", err))
+		os.Exit(1)
+	}
 	syncRuntime, err := newSyncRuntime(appContext, db, cfg.EncryptionKey)
 	if err != nil {
 		logger.Error("sync scheduler initialization failed", slog.Any("error", err))
@@ -110,6 +113,21 @@ func main() {
 		logger.Error("server stopped", slog.Any("error", err))
 		os.Exit(1)
 	}
+}
+
+func newBackupManager(
+	ctx context.Context,
+	db *storage.DB,
+	backupsDir string,
+	encryptionKeyAvailable bool,
+) (*storage.BackupManager, error) {
+	manager := storage.NewBackupManager(db, storage.BackupOptions{
+		BackupsDir: backupsDir, EncryptionKeyAvailable: encryptionKeyAvailable,
+	})
+	if err := manager.CleanupIncomplete(ctx); err != nil {
+		return nil, err
+	}
+	return manager, nil
 }
 
 func newSyncRuntime(ctx context.Context, db *storage.DB, encryptionKey []byte) (syncRuntime, error) {

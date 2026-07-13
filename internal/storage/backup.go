@@ -109,6 +109,49 @@ func NewBackupManager(db *DB, options BackupOptions) *BackupManager {
 	}
 }
 
+func (manager *BackupManager) CleanupIncomplete(ctx context.Context) error {
+	entries, err := os.ReadDir(manager.backupsDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	removed := false
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if entry.IsDir() || !isIncompleteBackupArtifact(entry.Name()) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 {
+			continue
+		}
+		if err := os.Remove(filepath.Join(manager.backupsDir, entry.Name())); err != nil {
+			return err
+		}
+		removed = true
+	}
+	if removed {
+		return syncDirectory(manager.backupsDir)
+	}
+	return nil
+}
+
+func isIncompleteBackupArtifact(name string) bool {
+	if strings.HasPrefix(name, ".snapshot-") {
+		return strings.HasSuffix(name, ".db") || strings.HasSuffix(name, ".db-wal") ||
+			strings.HasSuffix(name, ".db-shm")
+	}
+	return strings.HasPrefix(name, "video-record-") && strings.HasSuffix(name, ".vrbackup.partial") ||
+		strings.HasPrefix(name, ".restore-upload-") && strings.HasSuffix(name, ".partial")
+}
+
 func (manager *BackupManager) Create(ctx context.Context) (BackupArtifact, error) {
 	if err := os.MkdirAll(manager.backupsDir, 0o700); err != nil {
 		return BackupArtifact{}, err

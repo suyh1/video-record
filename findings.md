@@ -412,3 +412,17 @@
 - Playwright 默认快照名含 host OS，Darwin 基线无法供 Linux CI 使用；自定义 `snapshotPathTemplate` 去除 OS 后缀，并保留适合跨平台字体渲染的 1% 容差。
 - CLI 退出不一定意味着 Playwright 启动的 Go/Vite 子进程已释放监听端口；runner 应等待端口拒绝连接再删除 SQLite 数据目录，以支持连续运行和 CI 重试。
 - in-app browser 当前返回的 selected tab 不属于任务 session，且 tab list/get 解析不一致；browser 技能禁止改用无关后端绕过，会话级实机验证应明确记录为工具限制而非伪称通过。
+
+## Task 24：性能与故障恢复基线
+
+- 性能种子必须复用应用固定九位纳秒时间格式；标准 `time.RFC3339Nano` 会省略整秒的小数位，无法通过 records 层的严格时间解析。
+- 精确数据集通过单事务和预编译语句写入，密码哈希只计算一次；低优先级 `external_default` 状态使 `confirmed_sync` 能走真实覆盖路径，而不是绕过来源优先级。
+- 同步性能不能只循环调用候选服务。当前门禁经过加密凭据读取、Scheduler 任务领取、ProviderRunner 分页与 HistoryPage 校验、候选事务、run summary 和持久游标。
+- 性能断言同时验证业务结果：7 月日历固定 301 条、影库固定 100 条，初次/增量后候选和事件分别增加 10,000/100，参与者同量增加，映射保持 10,000，全部状态来源升级为 `confirmed_sync`。
+- 初次同步期间直接测量认证 HTTP 请求，三轮日历 p95 最高 `54.148416ms`、影库 p95 最高 `10.815708ms`；初次同步最慢 `4.586084833s`、增量最慢 `44.458167ms`，无需新增索引或修改查询。
+- 迁移中断使用仅注册到子进程 SQLite 新连接的阻塞函数，真实 `applyMigration` 在 DDL 后、版本记录前被 SIGKILL；事务原子性由探针表和版本行同时不存在证明。
+- 同步中断使用 TEMP trigger 在真实 `CandidateService.Ingest` 最后候选写入处阻塞；触发前已经执行的事件、参与者、状态、日期和外部映射会随同一事务回滚。
+- SIGKILL 不执行 Go defer，SQLite Online Backup 的 `.snapshot-*` 会残留。`BackupManager.CleanupIncomplete` 只清除本系统命名的快照/WAL/SHM、归档 partial 与恢复上传临时文件，并在服务启动时执行和 fsync 目录。
+- 恢复父测试必须在子进程启动后立即注册 Kill/Wait cleanup，否则等待 ready 超时会遗留阻塞进程。
+- 普通写入、迁移、同步和备份四个中断点都在重启后重新执行迁移、readiness 与 `PRAGMA integrity_check`；未提交探针消失且原有合成数据精确保留。
+- 独立复审在初版门禁发现 5 个 Important 与 2 个 Minor；修正后审查者独立运行性能/恢复各三轮和定向 race，确认全部关闭且无剩余 Critical/Important。

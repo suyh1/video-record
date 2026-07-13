@@ -41,7 +41,10 @@
 - [x] Task 21：候选匹配、冲突解决与同步界面
 - [x] Task 22：OpenAPI 合约与完整 HTTP 安全测试
 - [x] Task 23：E2E、无障碍与视觉回归
-- [ ] Task 24-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
+- [x] Task 24：性能与故障恢复基线
+- [ ] Task 25：生产 Docker 镜像与 Compose
+- [ ] Task 26：CI、双架构发布与供应链元数据
+- [ ] Task 27：运维文档与 v1 发布门禁
 
 ## 已确认约束
 
@@ -121,3 +124,6 @@
 | Task 23 E2E 紧邻重跑时 Playwright 子服务尚未完全释放端口 | 1 | runner 等待前后端端口拒绝连接后再清理数据并退出，独立复审连续两次 9/9 |
 | Task 23 工作树 gitleaks 把长合成 password 字面量判为 generic-api-key | 1 | 不加 allowlist，改为运行时拼接短公开测试片段，工作树与历史扫描均为零匹配 |
 | Task 23 in-app browser 标签列表与当前任务会话错配 | 2 | 按 browser 技能读取诊断并停止跨后端重试；保留真实 Chromium E2E、axe 与像素快照证据 |
+| Task 24 性能与恢复脚本首次运行缺少 `internal/testutil` 非测试实现 | 1 | RED 阶段预期失败；保留证据并按真实迁移约束实现最小 `Seed` API |
+| Task 24 首次完整性能基线在日历请求返回 `500 internal_error` | 1 | 不重复盲跑；沿 HTTP、records 与 SQLite 数据格式边界定位根因后补回归测试 |
+| Task 24 独立审查发现恢复/同步门禁可被空结果或普通事务回滚绕过 | 1 | 暂停提交；用真实迁移原子边界、候选多表副作用、SIGKILL 临时快照清理、精确计数和同步期间 HTTP 采样加固 |

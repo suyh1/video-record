@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -11,6 +12,25 @@ import (
 	"video-record/internal/integrations"
 	"video-record/internal/storage"
 )
+
+func TestNewBackupManagerCleansInterruptedArtifacts(t *testing.T) {
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	db, err := storage.Open(ctx, filepath.Join(dataDir, "video-record.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	backupsDir := filepath.Join(dataDir, "backups")
+	require.NoError(t, os.MkdirAll(backupsDir, 0o700))
+	stalePath := filepath.Join(backupsDir, ".snapshot-interrupted.db")
+	require.NoError(t, os.WriteFile(stalePath, []byte("synthetic"), 0o600))
+
+	manager, err := newBackupManager(ctx, db, backupsDir, false)
+
+	require.NoError(t, err)
+	require.NotNil(t, manager)
+	_, err = os.Stat(stalePath)
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
 
 func TestNewSyncRuntimeInitializesEnabledAccountJobs(t *testing.T) {
 	ctx := context.Background()
