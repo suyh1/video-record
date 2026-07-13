@@ -234,3 +234,14 @@
 - `internal/storage` 精确语句覆盖率为 85.1351%；最终全仓 `go test ./... -race -count=1`、`go vet ./...`、前端 12 个测试文件 24 项测试、typecheck/build、npm audit、`git diff --check` 与工作树/历史 gitleaks 均通过。
 - 浏览器使用合成管理员和真实 API 验证 `1440x900` 与 `375x812`：无横向溢出，移动底部导航不遮挡恢复控件，控制台无 warning/error；临时登录页、数据库和服务已清理。
 - 两轮独立代码审阅确认原子性、取消恢复、并发串行、流式 I/O、空间检查和快照 manifest 修复后无剩余 Critical/Important。
+
+### Task 17：Provider 契约、加密账户与持久化调度器
+
+- 已先写 Provider/凭据/调度红测并确认接口、加密账户仓储、迁移和调度服务缺失，再实现统一 Provider 契约、AES-256-GCM 凭据和 `0010_integrations.sql`。
+- 加密账户创建先加密再写库；只返回元数据、指纹和锁定状态。缺失/更换密钥、篡改密文和跨用户读取均有真实 SQLite 测试，基础 URL 的明文凭据旁路已通过红测封堵。
+- 持久化调度包含 15 分钟增量、每日补偿、重启补跑、原子领取、默认 UUID owner、过期租约拒绝提交和新实例重新领取。
+- 成功运行更新 job/run 游标与受控 JSON 摘要；失败运行不推进游标、不保存原始错误，Provider 临时失败不会终止后续轮询。
+- 正式 `external_accounts` 迁移使 Task 16 两条占位表测试失败；已改用满足 STRICT/外键约束的正式合成数据，并重新验证快照时点的加密密钥要求。
+- Task 17 定向 race 通过；覆盖率为 `internal/integrations 91.7%`、`internal/sync 87.1%`，均高于关键领域包 85% 基线。
+- 全仓 `go test ./... -race -count=1` 与 `go vet ./...` 通过；前端 12 个测试文件 24 项测试、typecheck、build 和高危依赖审计通过。
+- 未创建 `.tmdb-token`，未使用真实 TMDB 或媒体服务器凭据；所有测试数据均为显式合成值。

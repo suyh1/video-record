@@ -34,7 +34,8 @@
 - [x] Task 14：家庭成员与隐私边界
 - [x] Task 15：JSON/CSV 安全导入导出
 - [x] Task 16：一致性备份与原子恢复
-- [ ] Task 17-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
+- [x] Task 17：Provider 契约、加密账户与持久化调度器
+- [ ] Task 18-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 
 ## 已确认约束
 
@@ -92,3 +93,6 @@
 | Task 16 通用幂等中间件把大于 1 MiB 的恢复上传提前拒绝 | 1 | 以归档内容哈希执行专用幂等路径，multipart 流式写入私有暂存文件，不缓存完整请求体 |
 | Task 16 全仓 race 发现关闭数据库后仓储拿到 nil 连接并 panic | 1 | 普通 `DB.Close` 保留已关闭句柄契约；恢复内部关闭仍清空连接以支持原位重开 |
 | Task 16 流式与空间校验新增分支使存储覆盖率低于 85% | 4 | 补齐暂存、畸形 ZIP、跨文件系统空间探测、超时恢复、N-1 和迁移篡改测试，精确覆盖率达到 85.1351% |
+| Task 17 游标结果参数与 SQL Result 局部变量同名导致编译失败 | 1 | 保留领域参数名，将数据库执行结果改为 `execResult` 后重跑定向测试 |
+| Task 17 篡改密文测试用 BLOB 拼接产生 STRICT TEXT 类型错误 | 1 | 读取真实字节后在 Go 中篡改，并以 `[]byte` 参数写回 BLOB 列 |
+| Task 17 正式迁移创建 `external_accounts` 后旧备份测试重复建表 | 1 | 删除占位表夹具，改为向正式 STRICT 表插入满足外键的合成用户和账户 |

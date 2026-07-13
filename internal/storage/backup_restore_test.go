@@ -218,13 +218,11 @@ func TestBackupManifestMarksEncryptedIntegrationAccounts(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, listed)
 
-	_, err = db.Writer().ExecContext(ctx, "CREATE TABLE external_accounts (id TEXT PRIMARY KEY)")
-	require.NoError(t, err)
 	artifact, err := manager.Create(ctx)
 	require.NoError(t, err)
 	require.False(t, artifact.Manifest.RequiresEncryptionKey)
-	_, err = db.Writer().ExecContext(ctx, "INSERT INTO external_accounts (id) VALUES ('synthetic-account')")
-	require.NoError(t, err)
+	require.NoError(t, insertBackupIntegrationUser(ctx, db, "backup-user", "backup-owner"))
+	require.NoError(t, insertBackupIntegrationAccount(ctx, db, "synthetic-account", "backup-user"))
 	artifact, err = manager.Create(ctx)
 	require.NoError(t, err)
 	require.True(t, artifact.Manifest.RequiresEncryptionKey)
@@ -680,18 +678,36 @@ func TestRestoreSpaceCheckIncludesCurrentDatabaseBackupPeak(t *testing.T) {
 func TestBackupManifestReadsEncryptionRequirementFromSnapshot(t *testing.T) {
 	ctx := context.Background()
 	db := openBackupTestDB(t)
-	_, err := db.Writer().ExecContext(ctx, "CREATE TABLE external_accounts (id TEXT PRIMARY KEY)")
-	require.NoError(t, err)
+	require.NoError(t, insertBackupIntegrationUser(ctx, db, "snapshot-user", "snapshot-owner"))
 	manager := NewBackupManager(db, BackupOptions{
 		BackupsDir: filepath.Join(t.TempDir(), "backups"),
 		AfterSnapshot: func() error {
-			_, insertErr := db.Writer().ExecContext(ctx, "INSERT INTO external_accounts (id) VALUES ('created-after-snapshot')")
-			return insertErr
+			return insertBackupIntegrationAccount(ctx, db, "created-after-snapshot", "snapshot-user")
 		},
 	})
 	artifact, err := manager.Create(ctx)
 	require.NoError(t, err)
 	require.False(t, artifact.Manifest.RequiresEncryptionKey)
+}
+
+func insertBackupIntegrationUser(ctx context.Context, db *DB, id, username string) error {
+	_, err := db.Writer().ExecContext(ctx, `
+		INSERT INTO users (id, username, password_hash, role, active, created_at)
+		VALUES (?, ?, 'synthetic-hash', 'member', 1, 0)
+	`, id, username)
+	return err
+}
+
+func insertBackupIntegrationAccount(ctx context.Context, db *DB, id, userID string) error {
+	_, err := db.Writer().ExecContext(ctx, `
+		INSERT INTO external_accounts (
+			id, user_id, provider, name, base_url, credential_ciphertext,
+			credential_nonce, credential_version, credential_fingerprint,
+			enabled, created_at, updated_at
+		) VALUES (?, ?, 'jellyfin', 'Synthetic', 'https://media.example.test',
+		          x'01', x'02', 1, 'fingerprint', 1, 0, 0)
+	`, id, userID)
+	return err
 }
 
 func TestRestoreSpaceCheckSeparatesFilesystemsAndReportsProbeFailures(t *testing.T) {
