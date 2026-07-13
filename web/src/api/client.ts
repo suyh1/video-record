@@ -17,8 +17,10 @@ import type {
   SyncStatusResponse,
   SearchResultsResponse,
   RestoreResult,
+  SetupStatus,
   TMDBSearchResponse,
   WatchEvent,
+  LoginResponse,
 } from './types'
 
 export class APIError extends Error {
@@ -113,6 +115,10 @@ export function getWatchEvents(mediaID: string, signal?: AbortSignal) {
   return requestJSON<WatchEvent[]>(`/api/v1/records/${encodeURIComponent(mediaID)}/events`, signal ? { signal } : undefined)
 }
 
+export function createRewatch(mediaID: string, payload: { watchedAt: string; viewingMethod?: string }) {
+  return protectedWrite<WatchEvent>(`/api/v1/records/${encodeURIComponent(mediaID)}/events`, payload)
+}
+
 export function getEpisodeProgress(mediaID: string, signal?: AbortSignal) {
   return requestJSON<SeriesProgress>(
     `/api/v1/records/${encodeURIComponent(mediaID)}/progress`,
@@ -132,6 +138,26 @@ export function getStats(timezone: string, signal?: AbortSignal) {
 
 export function getCurrentUser(signal?: AbortSignal) {
   return requestJSON<CurrentUser>('/api/v1/auth/me', signal ? { signal } : undefined)
+}
+
+export function getSetupStatus(signal?: AbortSignal) {
+  return requestJSON<SetupStatus>('/api/v1/setup/status', signal ? { signal } : undefined)
+}
+
+export function initializeAdministrator(username: string, password: string) {
+  return requestJSON<CurrentUser>('/api/v1/setup/admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+}
+
+export function loginUser(username: string, password: string) {
+  return requestJSON<LoginResponse>('/api/v1/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
 }
 
 export function getHouseholdMembers(signal?: AbortSignal) {

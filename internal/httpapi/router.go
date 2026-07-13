@@ -38,7 +38,12 @@ func NewRouter(dependencies Dependencies) http.Handler {
 	router.Get("/healthz", healthz)
 	router.Get("/readyz", readyz(dependencies.Storage))
 	if dependencies.Auth != nil {
-		handlers := authHandlers{service: dependencies.Auth, cookieSecure: dependencies.CookieSecure}
+		handlers := authHandlers{
+			service:      dependencies.Auth,
+			cookieSecure: dependencies.CookieSecure,
+			storage:      dependencies.Storage,
+			tmdb:         dependencies.TMDB,
+		}
 		router.Route("/api/v1", func(api chi.Router) {
 			api.NotFound(func(w http.ResponseWriter, r *http.Request) {
 				writeProblem(w, r, http.StatusNotFound, "Not Found", "route_not_found")

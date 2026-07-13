@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"video-record/internal/auth"
+	"video-record/internal/integrations/tmdb"
+	"video-record/internal/storage"
 )
 
 const SessionCookieName = "video_record_session"
@@ -15,6 +17,8 @@ const SessionCookieName = "video_record_session"
 type authHandlers struct {
 	service      *auth.Service
 	cookieSecure bool
+	storage      *storage.DB
+	tmdb         *tmdb.Client
 }
 
 type credentialsRequest struct {
@@ -34,7 +38,16 @@ func (handlers authHandlers) setupStatus(w http.ResponseWriter, r *http.Request)
 		writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"initialized": initialized})
+	storageReady := false
+	if handlers.storage != nil {
+		storageReady = handlers.storage.Ready(r.Context()) == nil
+	}
+	tmdbConfigured := handlers.tmdb != nil && handlers.tmdb.Configured()
+	writeJSON(w, http.StatusOK, map[string]bool{
+		"initialized":    initialized,
+		"storageReady":   storageReady,
+		"tmdbConfigured": tmdbConfigured,
+	})
 }
 
 func (handlers authHandlers) initialize(w http.ResponseWriter, r *http.Request) {

@@ -16,6 +16,7 @@ import { BrowserRouter, NavLink, Route, Routes, useNavigate } from 'react-router
 import { createMediaFromTMDB } from '../api/client'
 import type { MediaSearchResult } from '../api/types'
 import { CalendarPage } from '../features/calendar/CalendarPage'
+import { AuthGate } from '../features/auth/AuthGate'
 import { MemberSettings } from '../features/household/MemberSettings'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { MediaDetailsPage } from '../features/media/MediaDetailsPage'
@@ -41,20 +42,21 @@ const navigationItems: NavigationItem[] = [
   { label: '设置', path: '/settings', icon: Settings },
 ]
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      staleTime: 30_000,
-    },
-  },
-})
-
 export function App() {
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        refetchOnWindowFocus: false,
+        staleTime: 30_000,
+      },
+    },
+  }))
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <ApplicationShell />
+        <AuthGate>
+          <ApplicationShell />
+        </AuthGate>
       </BrowserRouter>
     </QueryClientProvider>
   )

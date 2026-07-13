@@ -909,9 +909,11 @@ components:
     SetupStatus:
       type: object
       additionalProperties: false
-      required: [initialized]
+      required: [initialized, storageReady, tmdbConfigured]
       properties:
         initialized: { type: boolean }
+        storageReady: { type: boolean }
+        tmdbConfigured: { type: boolean }
     CredentialsRequest:
       type: object
       additionalProperties: false

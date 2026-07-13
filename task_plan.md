@@ -40,7 +40,8 @@
 - [x] Task 20：Plex 播放历史 Provider
 - [x] Task 21：候选匹配、冲突解决与同步界面
 - [x] Task 22：OpenAPI 合约与完整 HTTP 安全测试
-- [ ] Task 23-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
+- [x] Task 23：E2E、无障碍与视觉回归
+- [ ] Task 24-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 
 ## 已确认约束
 
@@ -112,3 +113,11 @@
 | Task 22 恢复替换数据库后旧连接无法写入幂等完成结果 | 1 | 恢复端点在新数据库重开后通过专用 finalize 路径提交响应缓存，并保留原 request ID |
 | Task 22 标签写入未参与 ETag 乐观并发控制 | 1 | 先加陈旧写入红测，再在事务中校验 `If-Match`、递增记录版本并返回新 ETag |
 | Task 22 全仓 race 下调度器故障恢复测试偶发超过 1 秒等待窗 | 1 | 定向 race 连续 20 次确认无数据竞争，将测试等待窗调整为 3 秒后重跑全仓门禁 |
+| Task 23 首次 E2E 按预期找不到封闭初始化与登录界面 | 1 | 先保留页面缺失红测，再实现 AuthGate、存储/TMDB 布尔状态、管理员初始化和会话登录 |
+| Task 23 浅色主色链接在次级表面仅有 4.27:1 对比度 | 1 | axe 红测定位后降低主色明度，完整 WCAG 2.0/2.1/2.2 A/AA 扫描归零 |
+| Task 23 合成导入夹具使用 version 0 导致逐条失败但 HTTP 仍为 200 | 1 | 改为合法 version 1，并强制断言导入 2 条且 failures 为空，避免静默空影库 |
+| Task 23 重复提交“看过”不会新增不可变重复观看事件 | 1 | 增加组件/E2E 红测和显式“再看一次”动作，复用受 CSRF 与幂等保护的事件端点 |
+| Task 23 视觉快照 1% 容差接受了旧的空影库基线 | 1 | 增加“2 部影视”结构断言，强制重录真实海报网格，并使用 OS 无关快照路径 |
+| Task 23 E2E 紧邻重跑时 Playwright 子服务尚未完全释放端口 | 1 | runner 等待前后端端口拒绝连接后再清理数据并退出，独立复审连续两次 9/9 |
+| Task 23 工作树 gitleaks 把长合成 password 字面量判为 generic-api-key | 1 | 不加 allowlist，改为运行时拼接短公开测试片段，工作树与历史扫描均为零匹配 |
+| Task 23 in-app browser 标签列表与当前任务会话错配 | 2 | 按 browser 技能读取诊断并停止跨后端重试；保留真实 Chromium E2E、axe 与像素快照证据 |

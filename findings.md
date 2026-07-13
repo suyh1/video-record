@@ -399,3 +399,16 @@
 - 标签属于可编辑记录聚合的一部分；只给状态更新做 ETag 会留下丢失更新窗口。标签修改必须校验同一个 record version 并在事务中递增版本。
 - API 文档中的 CSRF 不能只依赖全局文字说明；每个受保护写 operation 都需要显式 `X-CSRF-Token` header 参数，文件上传还必须声明真实 multipart 与下载 media type。
 - 应用级 404/405 也属于 API 合约，应返回 `application/problem+json` 与稳定 code/requestId，而不是路由器默认纯文本。
+
+## Task 23：E2E、无障碍与视觉回归
+
+- 设计要求的封闭初始化必须在前端成为真正的路由门禁，不能依赖运维人员手调 API；setup status 可公开健康布尔值，但不得回传配置值、路径或凭据。
+- TanStack Query 的当前用户缓存若保持默认 `staleTime=0`，登录成功写入用户后会立即再次请求并造成界面闪回；短时新鲜窗口避免无意义重复认证，同时后续页面查询仍受真实 cookie 保护。
+- “看过”状态更新与“重复观看”不是同一语义。重复观看必须是显式动作并写入不可变事件端点，不能靠重复保存 aggregate state 推断。
+- 部分成功导入的 HTTP 200 不能作为种子成功证据；E2E 夹具必须同时断言 importedRecords 与逐条 failures，否则媒体存在但个人状态缺失会让影库静默为空。
+- axe 规则选择应同时包含 `wcag2a/wcag2aa/wcag21a/wcag21aa/wcag22aa`；只选 2.0 与 2.2 tags 会漏掉 2.1 normative rules。
+- 破坏性恢复不能与后续旅程共享顺序依赖。将 recovery project 依赖主 chromium 项目使它最后运行，并用“快照后新增成员、恢复后精确名单回滚”证明恢复不是成功空响应。
+- 视觉回归必须同时有结构断言与像素断言；仅使用全页像素比例可能让低对比度的空状态与海报占位差异落在容差内。结构断言负责内容，快照负责布局与渲染。
+- Playwright 默认快照名含 host OS，Darwin 基线无法供 Linux CI 使用；自定义 `snapshotPathTemplate` 去除 OS 后缀，并保留适合跨平台字体渲染的 1% 容差。
+- CLI 退出不一定意味着 Playwright 启动的 Go/Vite 子进程已释放监听端口；runner 应等待端口拒绝连接再删除 SQLite 数据目录，以支持连续运行和 CI 重试。
+- in-app browser 当前返回的 selected tab 不属于任务 session，且 tab list/get 解析不一致；browser 技能禁止改用无关后端绕过，会话级实机验证应明确记录为工具限制而非伪称通过。

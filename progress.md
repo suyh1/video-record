@@ -39,7 +39,7 @@
 
 ## 当前状态
 
-设计与实施计划均已完成，正在 `main` 按实施计划执行；Task 22 已完成，下一步从 Task 23 继续。
+设计与实施计划均已完成，正在 `main` 按实施计划执行；Task 23 已完成，下一步从 Task 24 继续。
 
 ## 实施记录
 
@@ -305,3 +305,18 @@
 - 二次代码审查确认没有剩余 Critical/Important 问题；调度器 race 测试的偶发 1 秒等待超时经定向 race 连续 20 次排除数据竞争后调整为 3 秒。
 - 最终全仓 `go test ./... -race -count=1`、`go vet ./...`、`internal/records` 85.0% 覆盖率、前端 15 文件 30 测试/typecheck/API check/build、npm 高危审计、`git diff --check` 与工作树/历史 gitleaks 均通过。
 - 未创建 `.tmdb-token`，未使用真实 TMDB 或媒体服务器凭据；OpenAPI、测试和生成代码均不包含令牌值。
+
+### Task 23：E2E、无障碍与视觉回归
+
+- 已先写 Playwright 完整旅程并取得“缺少首次初始化页”的预期红灯，再实现封闭初始化/登录 AuthGate；公开 setup status 只返回 initialized/storageReady/tmdbConfigured 布尔值，不返回 TMDB 令牌或环境变量。
+- 首位管理员创建后立即关闭初始化入口并自动登录；无会话时进入登录页，用户名在失败后保留，CSRF token 只保存在当前标签的 sessionStorage。
+- 已先取得组件/E2E 重复观看红灯，再增加显式“再看一次”按钮，通过既有受 Origin、CSRF、Idempotency-Key 保护的不可变事件端点写入，并只刷新观看历史。
+- Playwright 使用纯合成管理员、两条影视、三集剧集、成员与同步候选；外部 TMDB/Provider 请求被本地 mock，trace/video 不含真实凭据。
+- 9 项 E2E 覆盖初始化、登录、搜索记录、重复观看、剧集推进/撤销、家庭共同观看、同步候选、JSON 导出和真实系统备份恢复；恢复项最后独立执行，在快照后创建成员并验证恢复精确回滚成员名单。
+- axe 覆盖 setup、login、首页、影库、日历、统计、设置、同步候选和剧集详情，选择 WCAG 2.0/2.1 A+AA 与 2.2 AA 全部 normative rules；阻断级违规为 0。
+- 键盘验收覆盖认证表单焦点、跳到主要内容、五项主导航顺序/激活和搜索对话框打开/关闭；同时验证 200% zoom 无横向溢出和 reduced-motion transition 接近零。
+- 浅色主色经 axe 从 4.27:1 修正到 AA；视觉基线覆盖 `375x812`、`768x1024`、`1440x900` 的亮暗主题与真实双列/海报网格，文件名不含主机 OS 后缀。
+- E2E runner 每轮使用独立 SQLite 目录，等待 Go/Vite 端口完全释放后清理；审查者在最终树上连续两次独立运行均为 9/9，且没有剩余 Critical/Important 问题。
+- 最终全仓 race/vet、前端 16 文件 33 测试/typecheck/API check/build、9 项 E2E、npm 高危审计、`git diff --check` 与工作树/历史 gitleaks 均通过。
+- `impeccable` 约束了产品型认证页、对比度和稳定控件；in-app browser 因任务标签会话错配无法导航，按 browser 技能停止重试，真实 Chromium E2E 与六张人工检查的快照完成替代验证。
+- 未创建 `.tmdb-token`，未使用真实 TMDB、媒体服务器或用户凭据；所有密码、token、事件和影视数据都是明确合成值。

@@ -85,6 +85,7 @@ export function MediaDetailsPage() {
           now={new Date()}
           participants={participants.data ?? []}
           onSaved={savedRecord}
+          onRewatched={() => void queryClient.invalidateQueries({ queryKey: ['watch-events', mediaId] })}
         />
       </section>
 

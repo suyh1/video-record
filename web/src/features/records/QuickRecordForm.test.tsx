@@ -134,4 +134,42 @@ describe('QuickRecordForm', () => {
 
     await waitFor(() => expect(requestBody).toMatchObject({ participantIds: ['member-1'] }))
   })
+
+  it('creates an explicit immutable rewatch event for a completed record', async () => {
+    const completedRecord = {
+      ...initialRecord,
+      status: 'completed' as const,
+      watchedAt: '2026-07-12T12:00:00Z',
+      viewingMethod: '家庭电视',
+      version: 3,
+    }
+    let requestBody: unknown
+    server.use(http.post('*/api/v1/records/media-1/events', async ({ request }) => {
+      expect(request.headers.get('X-CSRF-Token')).toBe('csrf-test-token')
+      expect(request.headers.get('Idempotency-Key')).toBeTruthy()
+      requestBody = await request.json()
+      return HttpResponse.json({
+        id: 'rewatch-1', mediaId: 'media-1', watchedAt: '2026-07-13T12:00:00Z',
+        viewingMethod: '家庭电视', source: 'manual', completion: 100,
+      }, { status: 201 })
+    }))
+    const onRewatched = vi.fn()
+    const user = userEvent.setup()
+    renderWithQueryClient(
+      <QuickRecordForm
+        record={completedRecord}
+        now={new Date('2026-07-13T09:00:00Z')}
+        onSaved={() => undefined}
+        onRewatched={onRewatched}
+      />,
+    )
+
+    await user.clear(screen.getByLabelText('观看日期'))
+    await user.type(screen.getByLabelText('观看日期'), '2026-07-13')
+    await user.click(screen.getByRole('button', { name: '再看一次' }))
+
+    await waitFor(() => expect(onRewatched).toHaveBeenCalledOnce())
+    expect(requestBody).toEqual({ watchedAt: '2026-07-13T12:00:00.000Z', viewingMethod: '家庭电视' })
+    expect(screen.getByRole('status')).toHaveTextContent('重复观看已记录')
+  })
 })

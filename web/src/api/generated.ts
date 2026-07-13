@@ -821,6 +821,8 @@ export interface components {
         };
         SetupStatus: {
             initialized: boolean;
+            storageReady: boolean;
+            tmdbConfigured: boolean;
         };
         CredentialsRequest: {
             username: string;

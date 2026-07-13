@@ -1,23 +1,25 @@
 import { useMutation } from '@tanstack/react-query'
-import { Bookmark, Check, ChevronDown, ChevronUp, CircleStop, LoaderCircle, Play } from 'lucide-react'
+import { Bookmark, Check, ChevronDown, ChevronUp, CircleStop, LoaderCircle, Play, Repeat2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 
-import { APIError, updateRecord, type UpdateRecordPayload } from '../../api/client'
-import type { HouseholdMember, RecordState, RecordStatus } from '../../api/types'
+import { APIError, createRewatch, updateRecord, type UpdateRecordPayload } from '../../api/client'
+import type { HouseholdMember, RecordState, RecordStatus, WatchEvent } from '../../api/types'
 
 type QuickRecordFormProps = {
   record: RecordState
   now: Date
   participants?: HouseholdMember[]
   onSaved: (record: RecordState) => void
+  onRewatched?: (event: WatchEvent) => void
 }
 
-export function QuickRecordForm({ record, now, participants = [], onSaved }: QuickRecordFormProps) {
+export function QuickRecordForm({ record, now, participants = [], onSaved, onRewatched }: QuickRecordFormProps) {
   const [expanded, setExpanded] = useState(Boolean(record.rating !== null || record.note || record.viewingMethod))
   const [message, setMessage] = useState<{ kind: 'error' | 'conflict'; text: string } | null>(null)
   const [conflictVersion, setConflictVersion] = useState<number | null>(null)
+  const [rewatchSaved, setRewatchSaved] = useState(false)
   const [savedChange, setSavedChange] = useState<{
     saved: RecordState
     previous: UpdateRecordPayload
@@ -39,6 +41,7 @@ export function QuickRecordForm({ record, now, participants = [], onSaved }: Qui
     onSuccess: (saved, variables) => {
       setMessage(null)
       setConflictVersion(null)
+      setRewatchSaved(false)
       if (variables.action === 'undo') {
         setSavedChange(null)
         form.reset(formValuesFromRecord(record))
@@ -59,6 +62,16 @@ export function QuickRecordForm({ record, now, participants = [], onSaved }: Qui
       }
       setMessage({ kind: 'error', text: '保存失败，请检查连接后重试。你的输入已保留。' })
     },
+  })
+  const rewatchMutation = useMutation({
+    mutationFn: (payload: { watchedAt: string; viewingMethod?: string }) => createRewatch(record.mediaId, payload),
+    onSuccess: (event) => {
+      setMessage(null)
+      setSavedChange(null)
+      setRewatchSaved(true)
+      onRewatched?.(event)
+    },
+    onError: () => setMessage({ kind: 'error', text: '重复观看记录失败，请检查连接后重试。' }),
   })
 
   useEffect(() => {
@@ -84,6 +97,19 @@ export function QuickRecordForm({ record, now, participants = [], onSaved }: Qui
       mutation.mutate({ payload: toPayload(parsed.data, expanded), version: conflictVersion, action: 'save' })
     }
   })
+
+  const recordRewatch = () => {
+    const watchedDate = form.getValues('watchedDate')
+    if (!watchedDate) {
+      form.setError('watchedDate', { message: '请选择观看日期' }, { shouldFocus: true })
+      return
+    }
+    const viewingMethod = form.getValues('viewingMethod').trim()
+    rewatchMutation.mutate({
+      watchedAt: `${watchedDate}T12:00:00.000Z`,
+      ...(viewingMethod ? { viewingMethod } : {}),
+    })
+  }
 
   const selectStatus = (nextStatus: RecordStatus) => {
     form.setValue('status', nextStatus, { shouldDirty: true })
@@ -190,8 +216,16 @@ export function QuickRecordForm({ record, now, participants = [], onSaved }: Qui
         </div>
       ) : null}
 
+      {rewatchSaved ? <div className="save-toast" role="status"><span>重复观看已记录</span></div> : null}
+
       <div className="form-actions">
-        <button className="primary-button" type="submit" disabled={mutation.isPending || status === 'none'}>
+        {record.status === 'completed' && status === 'completed' ? (
+          <button className="rewatch-button" type="button" disabled={mutation.isPending || rewatchMutation.isPending} onClick={recordRewatch}>
+            {rewatchMutation.isPending ? <LoaderCircle className="loading-icon" aria-hidden="true" size={16} /> : <Repeat2 aria-hidden="true" size={16} />}
+            {rewatchMutation.isPending ? '正在记录' : '再看一次'}
+          </button>
+        ) : null}
+        <button className="primary-button" type="submit" disabled={mutation.isPending || rewatchMutation.isPending || status === 'none'}>
           {mutation.isPending ? (
             <>
               <LoaderCircle className="loading-icon" aria-hidden="true" size={16} />

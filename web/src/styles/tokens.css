@@ -6,7 +6,7 @@
   --ink: oklch(0.2 0.015 230);
   --muted: oklch(0.48 0.02 230);
   --border: oklch(0.88 0.008 230);
-  --primary: oklch(0.54 0.15 230);
+  --primary: oklch(0.5 0.15 230);
   --primary-hover: oklch(0.48 0.15 230);
   --on-primary: oklch(1 0 0);
   --accent: oklch(0.34 0.11 25);

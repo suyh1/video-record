@@ -8,6 +8,7 @@
     "api:check": "node scripts/check-generated-api.mjs",
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
+    "e2e": "node scripts/run-e2e.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest"
   },
@@ -22,6 +23,8 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
+    "@playwright/test": "1.61.1",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.1",

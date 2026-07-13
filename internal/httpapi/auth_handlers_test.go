@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"video-record/internal/auth"
+	"video-record/internal/integrations/tmdb"
 	"video-record/internal/storage"
 )
 
@@ -20,7 +21,7 @@ func TestInitializeClosesSetupAfterFirstAdministrator(t *testing.T) {
 
 	status := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/setup/status", nil, nil)
 	require.Equal(t, http.StatusOK, status.Code)
-	require.JSONEq(t, `{"initialized":false}`, status.Body.String())
+	require.JSONEq(t, `{"initialized":false,"storageReady":true,"tmdbConfigured":false}`, status.Body.String())
 
 	created := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/setup/admin", map[string]string{
 		"username": "owner",
@@ -35,6 +36,24 @@ func TestInitializeClosesSetupAfterFirstAdministrator(t *testing.T) {
 	}, map[string]string{"Origin": "http://example.test"})
 	require.Equal(t, http.StatusConflict, closed.Code)
 	require.Contains(t, closed.Body.String(), `"code":"initialization_closed"`)
+}
+
+func TestSetupStatusReportsConfiguredTMDBWithoutExposingCredentials(t *testing.T) {
+	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "video-record.db"))
+	require.NoError(t, err)
+	require.NoError(t, storage.Migrate(context.Background(), db))
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	service := auth.NewService(auth.NewRepository(db), auth.ServiceOptions{})
+	router := NewRouter(Dependencies{
+		Storage: db,
+		Auth:    service,
+		TMDB:    tmdb.NewClient(tmdb.ClientOptions{Token: "synthetic-test-token"}),
+	})
+
+	status := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/setup/status", nil, nil)
+	require.Equal(t, http.StatusOK, status.Code)
+	require.JSONEq(t, `{"initialized":false,"storageReady":true,"tmdbConfigured":true}`, status.Body.String())
+	require.NotContains(t, status.Body.String(), "synthetic-test-token")
 }
 
 func TestLoginSetsOpaqueSessionCookieWithConditionalSecurity(t *testing.T) {

@@ -121,6 +121,17 @@ export type CurrentUser = {
   role: 'admin' | 'member'
 }
 
+export type SetupStatus = {
+  initialized: boolean
+  storageReady: boolean
+  tmdbConfigured: boolean
+}
+
+export type LoginResponse = {
+  user: CurrentUser
+  csrfToken: string
+}
+
 export type HouseholdMember = CurrentUser & {
   active: boolean
   createdAt?: string

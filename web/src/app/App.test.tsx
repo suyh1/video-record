@@ -1,15 +1,22 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { server } from '../test/server'
 import { App } from './App'
 
 describe('App', () => {
-  it('provides the primary navigation and global search', () => {
+  beforeEach(() => {
+    server.use(
+      http.get('*/api/v1/setup/status', () => HttpResponse.json({ initialized: true, storageReady: true, tmdbConfigured: false })),
+      http.get('*/api/v1/auth/me', () => HttpResponse.json({ id: 'admin-1', username: 'owner', role: 'admin' })),
+    )
+  })
+
+  it('provides the primary navigation and global search', async () => {
     render(<App />)
 
-    expect(screen.getByRole('navigation', { name: '主导航' })).toBeVisible()
+    expect(await screen.findByRole('navigation', { name: '主导航' })).toBeVisible()
     expect(screen.getByRole('searchbox', { name: '搜索影视' })).toBeVisible()
   })
 
@@ -23,15 +30,15 @@ describe('App', () => {
 
     render(<App />)
 
-    expect(screen.getByText('This product uses the TMDB API but is not endorsed or certified by TMDB.')).toBeVisible()
+    expect(await screen.findByText('This product uses the TMDB API but is not endorsed or certified by TMDB.')).toBeVisible()
     await waitFor(() => expect(currentUserRequest).toHaveBeenCalledOnce())
     window.history.pushState({}, '', '/')
   })
 
-  it('opens the search dialog when the top searchbox is clicked', () => {
+  it('opens the search dialog when the top searchbox is clicked', async () => {
     render(<App />)
 
-    fireEvent.click(screen.getByRole('searchbox', { name: '搜索影视' }))
+    fireEvent.click(await screen.findByRole('searchbox', { name: '搜索影视' }))
 
     expect(screen.getByRole('dialog', { name: '搜索影视' })).toBeVisible()
   })
