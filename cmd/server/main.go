@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"video-record/internal/assets"
 	"video-record/internal/auth"
 	"video-record/internal/config"
 	"video-record/internal/household"
@@ -29,6 +30,12 @@ type syncRuntime struct {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "healthcheck" {
+		if err := healthcheck(context.Background(), os.Getenv("APP_PORT"), &http.Client{Timeout: 3 * time.Second}); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	appContext, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	bootstrapLogger := httpapi.NewLogger(os.Getenv("APP_ENV"), os.Stdout)
@@ -87,21 +94,22 @@ func main() {
 		}
 	}()
 
+	apiHandler := httpapi.NewRouter(httpapi.Dependencies{
+		Logger:       logger,
+		Storage:      db,
+		Auth:         authService,
+		CookieSecure: cfg.CookieSecure,
+		TMDB:         tmdbClient,
+		Media:        mediaService,
+		Records:      recordService,
+		Stats:        statsService,
+		Household:    householdService,
+		Backup:       backupManager,
+		Sync:         syncRuntime.candidates,
+	})
 	server := &http.Server{
-		Addr: fmt.Sprintf(":%d", cfg.Port),
-		Handler: httpapi.NewRouter(httpapi.Dependencies{
-			Logger:       logger,
-			Storage:      db,
-			Auth:         authService,
-			CookieSecure: cfg.CookieSecure,
-			TMDB:         tmdbClient,
-			Media:        mediaService,
-			Records:      recordService,
-			Stats:        statsService,
-			Household:    householdService,
-			Backup:       backupManager,
-			Sync:         syncRuntime.candidates,
-		}),
+		Addr:              fmt.Sprintf(":%d", cfg.Port),
+		Handler:           assets.NewHandler(apiHandler),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,

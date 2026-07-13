@@ -42,7 +42,7 @@
 - [x] Task 22：OpenAPI 合约与完整 HTTP 安全测试
 - [x] Task 23：E2E、无障碍与视觉回归
 - [x] Task 24：性能与故障恢复基线
-- [ ] Task 25：生产 Docker 镜像与 Compose
+- [x] Task 25：生产 Docker 镜像与 Compose
 - [ ] Task 26：CI、双架构发布与供应链元数据
 - [ ] Task 27：运维文档与 v1 发布门禁
 
@@ -127,3 +127,9 @@
 | Task 24 性能与恢复脚本首次运行缺少 `internal/testutil` 非测试实现 | 1 | RED 阶段预期失败；保留证据并按真实迁移约束实现最小 `Seed` API |
 | Task 24 首次完整性能基线在日历请求返回 `500 internal_error` | 1 | 不重复盲跑；沿 HTTP、records 与 SQLite 数据格式边界定位根因后补回归测试 |
 | Task 24 独立审查发现恢复/同步门禁可被空结果或普通事务回滚绕过 | 1 | 暂停提交；用真实迁移原子边界、候选多表副作用、SIGKILL 临时快照清理、精确计数和同步期间 HTTP 采样加固 |
+| Task 25 首次新增容器冒烟脚本的补丁格式无效 | 1 | `apply_patch` 在写入前整体拒绝；补齐新增文件行前缀后重新应用，未产生部分文件 |
+| Task 25 Docker registry 元数据请求持续挂起 | 2 | Docker Hub 的 Go/Node 与 `mirror.gcr.io` 同时卡在 HEAD；不改版本，先验证本地 production 嵌入构建并等待 registry 通路恢复 |
+| Task 25 首轮容器冒烟无法解析初始化 CSRF token | 1 | 容器和请求已成功；核对认证响应 DTO 与 Node stdin/argv 解析边界后修正脚本 |
+| Task 25 初始镜像的 Go 1.26.0 标准库存在 12 个 High CVE | 1 | Scout 显示修复上限为 1.26.4；仅升级 Docker 编译器补丁版本并重建复扫，保持 Go 1.26 语言/模块契约 |
+| Task 25 独立审查发现固定用户与 image history 检查可假通过 | 1 | 先新增失败策略测试，再严格要求 `65532:65532` 并覆盖通用 token/secret/password/credential/key、Bearer、JWT 与运行时密钥形态 |
+| Task 25 Docker Scout 默认镜像解析无输出挂起 | 2 | 默认插件继承 `credsStore: desktop`；改为直接调用 Scout 插件、使用空 `DOCKER_CONFIG` 与 `local://`，本地镜像扫描在约 2 秒内完成 |

@@ -39,7 +39,7 @@
 
 ## 当前状态
 
-设计与实施计划均已完成，正在 `main` 按实施计划执行；Task 24 已完成，下一步从 Task 25 继续。
+设计与实施计划均已完成，正在 `main` 按实施计划执行；Task 25 已完成，下一步从 Task 26 继续。
 
 ## 实施记录
 
@@ -336,3 +336,15 @@
 - 独立复审最初发现 5 个 Important 与 2 个 Minor，全部按上述真实流水线、精确后置条件、启动清理、子进程 cleanup 和种子回滚测试关闭；复审确认无剩余 Critical/Important。
 - 最终全仓 `go test ./... -race -count=1`、`go vet ./...`、前端 16 文件 33 测试/typecheck/API check/build、9 项 E2E 和高危依赖审计通过。
 - 未创建 `.tmdb-token`，未访问真实 TMDB 或媒体服务器；测试凭据均为运行时合成值，未进入日志、数据库备份或构建产物。
+
+### Task 25：生产 Docker 镜像与 Compose
+
+- 已先建立会因镜像不存在而失败的容器烟测，并实现 Node/Go 多阶段构建、production 前端嵌入、静态 Go 二进制、distroless nonroot 运行时、二进制健康检查和单服务 Compose。
+- 镜像与 Compose 固定 `65532:65532`、只暴露 8080、只允许 `/data` 可写，并启用只读根、drop ALL capabilities 与 no-new-privileges；`APP_ENCRYPTION_KEY` 必需，TMDB token 只保留空的服务端环境变量入口。
+- 完整烟测真实执行初始化、登录、写入、删除并重建容器后的持久化、时区数据、备份下载、状态变更和恢复回滚；重建后的 `local/video-record:test` 镜像为 `sha256:9c97ac12b67f...`、`linux/arm64`、5,821,658 字节。
+- 初始 Go 1.26.0 镜像被 Scout 检出 12 个 High；升级容器编译器到 1.26.4 后，最终镜像 17 个包、`0C/0H/0M/0L`。默认 Scout 解析因 Docker Desktop 凭据助手挂起，直接使用空 `DOCKER_CONFIG` 的插件和 `local://` 后完成扫描。
+- 独立审查发现固定用户与 history 凭据检查有两个 Important 假阴性；新增策略红测后只接受 `65532:65532`，并拒绝通用 token/secret/password/credential/key、Bearer、JWT 和运行时密钥形态。
+- 审查的 Minor 指出健康路径尾斜杠会命中 SPA；定向测试先得到 `200` 红灯，再让 `/healthz/`、`/readyz/` 委派 API，修复后返回真实后端结果。
+- 最终全仓 `go test ./... -race -count=1`、`go vet ./...`、前端 16 文件 33 测试、typecheck/API check/build、9 项 E2E、npm 高危审计、Compose config、策略测试、容器烟测与 `git diff --check` 全部通过。
+- 工作树、27 个提交、OCI 元数据、14 个镜像层/964 个文件和二进制 strings 的 gitleaks 扫描均无匹配；独立复审确认无剩余 Critical/Important。
+- 当前本机只验收 arm64；amd64 与双平台 manifest 明确留给 Task 26 的 Buildx/QEMU CI，不创建或推送镜像标签。

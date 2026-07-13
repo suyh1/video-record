@@ -426,3 +426,14 @@
 - 恢复父测试必须在子进程启动后立即注册 Kill/Wait cleanup，否则等待 ready 超时会遗留阻塞进程。
 - 普通写入、迁移、同步和备份四个中断点都在重启后重新执行迁移、readiness 与 `PRAGMA integrity_check`；未提交探针消失且原有合成数据精确保留。
 - 独立复审在初版门禁发现 5 个 Important 与 2 个 Minor；修正后审查者独立运行性能/恢复各三轮和定向 race，确认全部关闭且无剩余 Critical/Important。
+
+## Task 25：生产 Docker 镜像与 Compose
+
+- 生产镜像采用 Node 24.13.0 构建 Vite、Go 1.26.4 关闭 CGO 构建带 `production` tag 的静态二进制，最终运行在 distroless static Debian 12 nonroot；前端资源嵌入 Go 二进制，不需要单独 Web 服务。
+- 最终镜像只声明 `8080/tcp`、`/data` volume、`65532:65532` 用户和 `/video-record healthcheck`；Compose 只有一个应用服务与一个命名卷，并启用只读根、drop ALL capabilities、no-new-privileges 和必需的 `APP_ENCRYPTION_KEY`。
+- 容器烟测真实覆盖初始化、登录、自定义影视、个人记录、强制删除并重建容器后的持久化、`Asia/Shanghai` 时区查询、Online Backup 下载、数据变更和原子恢复回滚。
+- 独立审查发现原用户检查会放过 `root:65532`/`0:65532`，history 扫描只识别两个变量名；先新增失败策略测试，再严格限定 `65532:65532` 并覆盖通用凭据变量、Bearer、JWT 和运行时密钥。
+- 资产 handler 原先会把 `/healthz/` 与 `/readyz/` 当成 SPA fallback 返回 `200`；定向红测复现后将健康路径前缀交回 API，避免错误探针路径被静态页面掩盖。
+- 初始 Go 1.26.0 编译镜像由 Docker Scout 检出 12 个 High；仅把容器编译器补丁升级到 1.26.4 后，最终镜像 `sha256:9c97ac12b67f...` 为 `linux/arm64`、约 5.82 MB、17 个包，扫描结果 `0C/0H/0M/0L`。
+- 本机 Docker 配置的 `credsStore: desktop` 会让匿名 registry 元数据和 Scout 默认解析挂起；构建使用空 `DOCKER_CONFIG` 的本地缓存路径，Scout 直接调用插件并指定空配置与 `local://` 后稳定完成。Task 26 仍需在 CI 用 Buildx/QEMU 验证 amd64/arm64。
+- 工作树、27 个提交、OCI 元数据、14 个运行时层/964 个文件和二进制 strings 均经 gitleaks 扫描无匹配；独立审查确认无剩余 Critical/Important。

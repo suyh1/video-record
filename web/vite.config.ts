@@ -7,6 +7,10 @@ export default defineConfig(({ mode }) => {
   const apiTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8080'
   return {
     plugins: [react()],
+    build: {
+      outDir: env.VITE_EMBED_OUT_DIR || 'dist',
+      emptyOutDir: true,
+    },
     server: {
       proxy: {
         '/api': {

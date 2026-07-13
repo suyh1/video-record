@@ -13,5 +13,6 @@
 /coverage.out
 web/node_modules/
 web/dist/
+internal/assets/dist/
 web/playwright-report/
 web/test-results/
