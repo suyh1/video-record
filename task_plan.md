@@ -20,8 +20,9 @@
 
 - [x] Task 1：仓库工具链与最小服务器
 - [x] Task 2：配置、日志与请求 ID
-- [ ] Task 3：SQLite 连接与嵌入式迁移
-- [ ] Task 4-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
+- [x] Task 3：SQLite 连接与嵌入式迁移
+- [ ] Task 4：用户、密码、会话与封闭初始化
+- [ ] Task 5-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 
 ## 已确认约束
 

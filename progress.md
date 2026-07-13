@@ -62,3 +62,13 @@
 - 服务入口已使用环境配置端口和安全 logger，`.env.example` 继续只包含空值或合成值。
 - 定向验证 `go test ./internal/config ./internal/httpapi -race` 通过。
 - 完整验证 `go test ./... -race`、`go vet ./...`、`git diff --check` 与通用 JWT 形态扫描通过。
+
+### Task 3：SQLite 连接与嵌入式迁移
+
+- 已先写真实临时 SQLite 测试，确认 `Open`、`Migrate` 和迁移校验错误缺失后再实现。
+- 已添加 modernc SQLite、单写/有界多读连接池、外键、WAL、5 秒 busy timeout 和 `0700` 数据目录创建。
+- 已嵌入 `0001_core.sql`，迁移使用单项事务并保存版本、名称、SHA-256 和应用时间；重复执行幂等，已应用内容变化会失败。
+- 已先写 `/readyz` 测试，覆盖无存储、未迁移、已迁移和已关闭四种状态，再实现只暴露通用错误的 readiness。
+- 服务启动现在先打开 `/data/video-record.db` 并执行迁移，迁移失败时不会监听业务端口。
+- 定向验证 `go test ./internal/storage ./internal/httpapi -race` 通过。
+- 完整验证 `go test ./... -race -count=1`、`go vet ./...`、`git diff --check` 与通用 JWT 形态扫描通过。

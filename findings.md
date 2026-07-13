@@ -17,6 +17,10 @@
 - `APP_ENCRYPTION_KEY` 当前契约为 Base64 编码的 32 字节值；格式错误只返回稳定错误，不包含原始输入。
 - 请求日志只记录 URL path，不记录 query、header 或 body；`slog` handler 额外按敏感属性名和已知秘密值统一脱敏。
 - panic 恢复不记录 panic 值或堆栈，只返回带稳定 `internal_error` 与 `requestId` 的 RFC 9457 Problem Details。
+- Task 3 使用 modernc SQLite `v1.53.0`，保持 `CGO_ENABLED=0` 路径；写池固定 1 个连接，读池固定 4 个并启用 `query_only`。
+- SQLite 连接统一启用 `foreign_keys`、WAL 和 5 秒 `busy_timeout`；应用只以 `0700` 创建缺失的数据目录，不修改已有挂载目录权限。
+- 嵌入迁移按版本排序、单项事务执行，并记录名称与 SHA-256；已应用版本的内容或名称发生变化时启动被拒绝。
+- `/healthz` 只表示进程存活；`/readyz` 只有在数据库已迁移且写事务可建立时通过，内部 SQLite 错误不会暴露给客户端。
 
 ## `invoice-manage` 工程参照
 

@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"video-record/internal/config"
 	"video-record/internal/httpapi"
+	"video-record/internal/storage"
 )
 
 func main() {
@@ -26,9 +29,24 @@ func main() {
 		cfg.TMDBReadAccessToken,
 		os.Getenv("APP_ENCRYPTION_KEY"),
 	)
+	db, err := storage.Open(context.Background(), filepath.Join(cfg.DataDir, "video-record.db"))
+	if err != nil {
+		logger.Error("storage unavailable", slog.Any("error", err))
+		os.Exit(1)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			logger.Error("storage close failed", slog.Any("error", err))
+		}
+	}()
+	if err := storage.Migrate(context.Background(), db); err != nil {
+		logger.Error("database migration failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
-		Handler:           httpapi.NewRouter(httpapi.Dependencies{Logger: logger}),
+		Handler:           httpapi.NewRouter(httpapi.Dependencies{Logger: logger, Storage: db}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,

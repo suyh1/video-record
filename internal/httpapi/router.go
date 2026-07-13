@@ -5,10 +5,13 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
+	"video-record/internal/storage"
 )
 
 type Dependencies struct {
-	Logger *slog.Logger
+	Logger  *slog.Logger
+	Storage *storage.DB
 }
 
 func NewRouter(dependencies Dependencies) http.Handler {
@@ -17,5 +20,6 @@ func NewRouter(dependencies Dependencies) http.Handler {
 	router.Use(RequestLogger(dependencies.Logger))
 	router.Use(Recoverer(dependencies.Logger))
 	router.Get("/healthz", healthz)
+	router.Get("/readyz", readyz(dependencies.Storage))
 	return router
 }
