@@ -72,3 +72,14 @@
 - 服务启动现在先打开 `/data/video-record.db` 并执行迁移，迁移失败时不会监听业务端口。
 - 定向验证 `go test ./internal/storage ./internal/httpapi -race` 通过。
 - 完整验证 `go test ./... -race -count=1`、`go vet ./...`、`git diff --check` 与通用 JWT 形态扫描通过。
+
+### Task 4：用户、密码、会话与封闭初始化
+
+- 已先写 Argon2id 格式、正确/错误密码和畸形哈希测试，再实现固定参数、随机 salt 与常量时间验证。
+- 已先写真实 SQLite 服务测试，覆盖首位管理员、初始化关闭、会话哈希、登录轮换、失败限流、过期、撤销和 last-seen 节流。
+- 已添加 `0002_auth.sql` 以及用户、会话和登录失败桶仓储；会话/CSRF 明文不入库，登录桶不保存原始用户名/IP 组合。
+- 已先写 HTTP 测试，再实现 setup status/admin、login/logout/me 五个端点、条件 Secure Cookie、同源 Origin 和 CSRF 防护。
+- 第二次初始化返回 `409 initialization_closed`；无效会话和凭据使用稳定 Problem Details 代码，错误响应不包含内部存储信息。
+- 服务启动已装配 SQLite 认证仓储，未开放自行注册入口。
+- 定向验证 `go test ./internal/auth ./internal/httpapi -race` 通过。
+- 完整验证 `go test ./... -race -count=1`、`go vet ./...`、`git diff --check` 与通用 JWT 形态扫描通过。

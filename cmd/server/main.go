@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"video-record/internal/auth"
 	"video-record/internal/config"
 	"video-record/internal/httpapi"
 	"video-record/internal/storage"
@@ -43,10 +44,16 @@ func main() {
 		logger.Error("database migration failed", slog.Any("error", err))
 		os.Exit(1)
 	}
+	authService := auth.NewService(auth.NewRepository(db), auth.ServiceOptions{})
 
 	server := &http.Server{
-		Addr:              fmt.Sprintf(":%d", cfg.Port),
-		Handler:           httpapi.NewRouter(httpapi.Dependencies{Logger: logger, Storage: db}),
+		Addr: fmt.Sprintf(":%d", cfg.Port),
+		Handler: httpapi.NewRouter(httpapi.Dependencies{
+			Logger:       logger,
+			Storage:      db,
+			Auth:         authService,
+			CookieSecure: cfg.CookieSecure,
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
