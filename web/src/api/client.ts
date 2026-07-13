@@ -1,6 +1,7 @@
 import type {
   CalendarFilter,
   CalendarResponse,
+  BackupArtifact,
   CurrentUser,
   HouseholdMember,
   ImportReport,
@@ -12,6 +13,7 @@ import type {
   SeriesProgress,
   StatsSummary,
   SearchResultsResponse,
+  RestoreResult,
   TMDBSearchResponse,
   WatchEvent,
 } from './types'
@@ -162,6 +164,28 @@ export function importData(file: File) {
   })
 }
 
+export function getBackups(signal?: AbortSignal) {
+  return requestJSON<BackupArtifact[]>('/api/v1/backups', signal ? { signal } : undefined)
+}
+
+export function createBackup() {
+  return protectedWrite<BackupArtifact>('/api/v1/backups', {})
+}
+
+export function restoreBackup(file: File) {
+  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+  const body = new FormData()
+  body.set('file', file)
+  return requestJSON<RestoreResult>('/api/v1/restore', {
+    method: 'POST',
+    headers: {
+      'Idempotency-Key': createIdempotencyKey(),
+      'X-CSRF-Token': csrfToken,
+    },
+    body,
+  })
+}
+
 export type UpdateEpisodeProgressPayload = {
   action: 'single' | 'range' | 'season' | 'next' | 'undo'
   expectedVersion: number
@@ -205,6 +229,10 @@ function createIdempotencyKey() {
 }
 
 function householdWrite<T>(path: string, body: unknown) {
+  return protectedWrite<T>(path, body)
+}
+
+function protectedWrite<T>(path: string, body: unknown) {
   const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
   return requestJSON<T>(path, {
     method: 'POST',

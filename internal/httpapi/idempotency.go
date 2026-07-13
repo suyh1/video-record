@@ -43,16 +43,6 @@ func newIdempotencyMiddleware(db *storage.DB) *idempotencyMiddleware {
 
 func (middleware *idempotencyMiddleware) Handle(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		identity, ok := IdentityFromContext(r.Context())
-		if !ok {
-			writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
-			return
-		}
-		key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
-		if key == "" || len(key) > 128 {
-			writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_idempotency_key")
-			return
-		}
 		body, err := io.ReadAll(io.LimitReader(r.Body, maxIdempotencyBody+1))
 		if err != nil || len(body) > maxIdempotencyBody {
 			writeProblem(w, r, http.StatusRequestEntityTooLarge, "Content Too Large", "request_too_large")
@@ -60,37 +50,81 @@ func (middleware *idempotencyMiddleware) Handle(next http.Handler) http.Handler 
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		hash := sha256.Sum256(body)
-		requestHash := hex.EncodeToString(hash[:])
+		middleware.handleHash(w, r, hex.EncodeToString(hash[:]), next)
+	})
+}
 
-		middleware.mu.Lock()
-		defer middleware.mu.Unlock()
-		stored, found, err := middleware.find(r.Context(), identity.User.ID, key)
-		if err != nil {
-			writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
+func (middleware *idempotencyMiddleware) handleHash(
+	w http.ResponseWriter,
+	r *http.Request,
+	requestHash string,
+	next http.Handler,
+) {
+	middleware.handleHashWithPersistence(w, r, requestHash, next, true)
+}
+
+func (middleware *idempotencyMiddleware) handleHashBestEffort(
+	w http.ResponseWriter,
+	r *http.Request,
+	requestHash string,
+	next http.Handler,
+) {
+	middleware.handleHashWithPersistence(w, r, requestHash, next, false)
+}
+
+func (middleware *idempotencyMiddleware) handleHashWithPersistence(
+	w http.ResponseWriter,
+	r *http.Request,
+	requestHash string,
+	next http.Handler,
+	persistenceRequired bool,
+) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	key, ok := idempotencyKey(r)
+	if !ok {
+		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_idempotency_key")
+		return
+	}
+
+	middleware.mu.Lock()
+	defer middleware.mu.Unlock()
+	stored, found, err := middleware.find(r.Context(), identity.User.ID, key)
+	if err != nil {
+		writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
+		return
+	}
+	if found {
+		if stored.Method != r.Method || stored.Path != r.URL.Path || stored.RequestHash != requestHash {
+			writeProblem(w, r, http.StatusConflict, "Conflict", "idempotency_key_conflict")
 			return
 		}
-		if found {
-			if stored.Method != r.Method || stored.Path != r.URL.Path || stored.RequestHash != requestHash {
-				writeProblem(w, r, http.StatusConflict, "Conflict", "idempotency_key_conflict")
-				return
-			}
-			writeStoredResponse(w, stored, true)
-			return
-		}
+		writeStoredResponse(w, stored, true)
+		return
+	}
 
-		capture := newCapturedResponse()
-		next.ServeHTTP(capture, r)
-		response := capture.stored(r.Method, r.URL.Path, requestHash)
-		if response.Status < http.StatusInternalServerError {
-			if err := middleware.save(r.Context(), identity.User.ID, key, response); err != nil {
+	capture := newCapturedResponse()
+	next.ServeHTTP(capture, r)
+	response := capture.stored(r.Method, r.URL.Path, requestHash)
+	if response.Status < http.StatusInternalServerError {
+		if err := middleware.save(r.Context(), identity.User.ID, key, response); err != nil {
+			if persistenceRequired {
 				writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
 				return
 			}
 		}
-		copyHeader(w.Header(), capture.header)
-		w.WriteHeader(response.Status)
-		_, _ = w.Write(response.Body)
-	})
+	}
+	copyHeader(w.Header(), capture.header)
+	w.WriteHeader(response.Status)
+	_, _ = w.Write(response.Body)
+}
+
+func idempotencyKey(r *http.Request) (string, bool) {
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	return key, key != "" && len(key) <= 128
 }
 
 func (middleware *idempotencyMiddleware) find(

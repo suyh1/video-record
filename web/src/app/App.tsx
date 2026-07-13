@@ -22,6 +22,7 @@ import { MediaDetailsPage } from '../features/media/MediaDetailsPage'
 import { SearchDialog } from '../features/search/SearchDialog'
 import { TmdbAttribution } from '../features/settings/TmdbStatus'
 import { DataTransfer } from '../features/settings/DataTransfer'
+import { BackupRestore } from '../features/settings/BackupRestore'
 import { StatsPage } from '../features/stats/StatsPage'
 
 type NavigationItem = {
@@ -252,6 +253,7 @@ function SettingsPage() {
       </section>
       <MemberSettings />
       <DataTransfer />
+      <BackupRestore />
     </div>
   )
 }

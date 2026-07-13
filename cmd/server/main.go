@@ -59,6 +59,10 @@ func main() {
 	recordService := records.NewService(records.NewRepository(db))
 	statsService := statsdomain.NewService(statsdomain.NewRepository(db))
 	householdService := household.NewService(household.NewRepository(db))
+	backupManager := storage.NewBackupManager(db, storage.BackupOptions{
+		BackupsDir:             filepath.Join(cfg.DataDir, "backups"),
+		EncryptionKeyAvailable: len(cfg.EncryptionKey) > 0,
+	})
 
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.Port),
@@ -72,6 +76,7 @@ func main() {
 			Records:      recordService,
 			Stats:        statsService,
 			Household:    householdService,
+			Backup:       backupManager,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

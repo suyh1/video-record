@@ -25,6 +25,7 @@ type Dependencies struct {
 	Records      *records.Service
 	Stats        *statsdomain.Service
 	Household    *household.Service
+	Backup       *storage.BackupManager
 }
 
 func NewRouter(dependencies Dependencies) http.Handler {
@@ -37,6 +38,9 @@ func NewRouter(dependencies Dependencies) http.Handler {
 	if dependencies.Auth != nil {
 		handlers := authHandlers{service: dependencies.Auth, cookieSecure: dependencies.CookieSecure}
 		router.Route("/api/v1", func(api chi.Router) {
+			if dependencies.Storage != nil {
+				api.Use(MaintenanceMode(dependencies.Storage))
+			}
 			api.Get("/setup/status", handlers.setupStatus)
 			api.With(RequireSameOrigin).Post("/setup/admin", handlers.initialize)
 			api.With(RequireSameOrigin).Post("/auth/login", handlers.login)
@@ -44,6 +48,15 @@ func NewRouter(dependencies Dependencies) http.Handler {
 				protected.Use(Authenticate(dependencies.Auth))
 				protected.Get("/auth/me", handlers.me)
 				protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post("/auth/logout", handlers.logout)
+				if dependencies.Backup != nil && dependencies.Storage != nil {
+					idempotency := newIdempotencyMiddleware(dependencies.Storage)
+					backupAPI := backupHandlers{manager: dependencies.Backup, idempotency: idempotency}
+					protected.Get("/backups", backupAPI.list)
+					protected.Get("/backups/{filename}", backupAPI.download)
+					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth), idempotency.Handle).
+						Post("/backups", backupAPI.create)
+					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post("/restore", backupAPI.restore)
+				}
 				if dependencies.Records != nil {
 					recordAPI := recordHandlers{service: dependencies.Records}
 					protected.Get("/calendar", recordAPI.calendar)

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"video-record/internal/storage"
 )
 
 const RequestIDHeader = "X-Request-ID"
@@ -83,6 +85,27 @@ func Recoverer(logger *slog.Logger) func(http.Handler) http.Handler {
 				)
 				writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
 			}()
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func MaintenanceMode(db *storage.DB) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost && r.URL.Path == "/api/v1/restore" {
+				if db.IsMaintenance() {
+					writeProblem(w, r, http.StatusServiceUnavailable, "Service Unavailable", "maintenance_mode")
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+			if !db.BeginRequest() {
+				writeProblem(w, r, http.StatusServiceUnavailable, "Service Unavailable", "maintenance_mode")
+				return
+			}
+			defer db.EndRequest()
 			next.ServeHTTP(w, r)
 		})
 	}

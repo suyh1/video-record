@@ -34,6 +34,26 @@ func TestOpenCreatesPrivateDataDirectory(t *testing.T) {
 	require.Equal(t, os.FileMode(0o700), info.Mode().Perm())
 }
 
+func TestReadyRequiresAppliedMigrationsAndWritableStorage(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "video-record.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	_, err = db.Writer().ExecContext(ctx, `
+		CREATE TABLE schema_migrations (
+			version INTEGER PRIMARY KEY,
+			applied_at INTEGER NOT NULL
+		)
+	`)
+	require.NoError(t, err)
+	require.ErrorIs(t, db.Ready(ctx), ErrNotMigrated)
+	_, err = db.Writer().ExecContext(ctx, "INSERT INTO schema_migrations (version, applied_at) VALUES (1, 0)")
+	require.NoError(t, err)
+	require.NoError(t, db.Ready(ctx))
+	require.NoError(t, db.Writer().Close())
+	require.Error(t, db.Ready(ctx))
+}
+
 func requirePragmaValue(t *testing.T, db *sql.DB, pragma, expected string) {
 	t.Helper()
 	var value string

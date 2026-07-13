@@ -135,6 +135,26 @@ export type ImportReport = {
   }>
 }
 
+export type BackupManifest = {
+  formatVersion: number
+  schemaVersion: number
+  createdAt: string
+  databaseSha256: string
+  databaseBytes: number
+  requiresEncryptionKey: boolean
+}
+
+export type BackupArtifact = {
+  filename: string
+  bytes: number
+  manifest: BackupManifest
+}
+
+export type RestoreResult = {
+  preRestoreBackup: string
+  warnings: string[]
+}
+
 export type LibraryResponse = {
   items: MediaSearchResult[]
   nextCursor: string | null
