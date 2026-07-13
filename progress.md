@@ -145,3 +145,17 @@
 - `internal/records` 覆盖率为 85.7%。
 - 定向验证 `go test ./internal/records ./internal/httpapi -race -count=1` 通过：`records` 16.057s，`httpapi` 33.365s。
 - 完整验证 `go test ./... -race -count=1`、`go vet ./...`、前端 typecheck/test/build、`npm audit`、`git diff --check` 和工作树/历史 gitleaks 扫描通过。
+
+### Task 10：搜索、详情、影库与快速记录界面
+
+- 已按 `impeccable` 产品界面约束复用现有 OKLCH 令牌、固定字号/间距/圆角与响应式壳，没有引入第二套视觉系统。
+- 已先写搜索测试并确认组件缺失，再建立最小 dialog/searchbox 取得结果缺失红灯；实现 300ms 防抖、本地先显、TMDB 后合并与明确类型/年份/原名/状态标签。
+- 已先写快速记录测试并取得保存、日期、渐进字段、失败保留和冲突重试红灯；实现 RHF + Zod 草稿、默认今天、网络错误保留、ETag 重试和普通状态 10 秒撤销。
+- 已先写详情/影库测试并确认占位页缺少数据；实现个人记录优先详情、观看时间线、状态筛选、2:3 海报网格、skeleton、错误和可执行空状态。
+- 前端缺失的本地搜索、影库列表和记录读取 API 已先用真实 SQLite HTTP 测试取得 `405` 红灯，再补最小 records 查询和 camelCase DTO。
+- completed 写入现在把观看方式传给同一事务创建的观看事件；当前记录读取投影最近事件时间和方式。
+- 新增 catalog 后领域覆盖率为 77.9%；补齐当前用户隔离、状态筛选、搜索状态投影、通配符转义和输入校验后达到 86.2%。
+- Vite 开发代理支持 `VITE_API_PROXY_TARGET`；浏览器验证时发现 Origin/Host 不一致导致同源保护 `403`，修正代理头后使用纯合成数据完成真实 API 验证。
+- 浏览器检查覆盖 `1440x900`、`768x1024`、`375x812`：无横向溢出、无固定区重叠、搜索焦点正确、本地结果可用、控制台无警告/错误。
+- 临时浏览器种子页已在验证后删除，未进入 Git；未使用或创建 TMDB 令牌文件。
+- 全仓 Go race/vet、`internal/records` 86.2% 覆盖率、前端 typecheck/6 文件 13 测试/build、npm audit、补丁和 secret scan 全部通过。

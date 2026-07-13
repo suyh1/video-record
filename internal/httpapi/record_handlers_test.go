@@ -101,6 +101,48 @@ func TestRecordHandlerClearsExplicitNullRatingAndNote(t *testing.T) {
 	require.Contains(t, cleared.Body.String(), `"note":null`)
 }
 
+func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
+	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
+	headers := map[string]string{
+		"Cookie": cookie.String(), "Origin": "http://example.test", "X-CSRF-Token": csrfToken,
+		"If-Match": `"0"`,
+	}
+	updated := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID, map[string]any{
+		"status": "completed", "rating": 8.7, "note": "保留笔记",
+		"watchedAt": "2026-07-13T20:30:00Z", "viewingMethod": "家庭投影",
+	}, headers)
+	require.Equal(t, http.StatusOK, updated.Code)
+
+	read := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/records/"+mediaID, nil, map[string]string{
+		"Cookie": cookie.String(),
+	})
+	require.Equal(t, http.StatusOK, read.Code)
+	require.Contains(t, read.Body.String(), `"status":"completed"`)
+	require.Contains(t, read.Body.String(), `"watchedAt":"2026-07-13T20:30:00Z"`)
+	require.Contains(t, read.Body.String(), `"viewingMethod":"家庭投影"`)
+
+	library := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/library?status=completed", nil, map[string]string{
+		"Cookie": cookie.String(),
+	})
+	require.Equal(t, http.StatusOK, library.Code)
+	require.Contains(t, library.Body.String(), mediaID)
+	require.Contains(t, library.Body.String(), `"title":"测试电影"`)
+	require.Contains(t, library.Body.String(), `"status":"completed"`)
+
+	search := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/media/search?q=测试", nil, map[string]string{
+		"Cookie": cookie.String(),
+	})
+	require.Equal(t, http.StatusOK, search.Code)
+	require.Contains(t, search.Body.String(), mediaID)
+	require.Contains(t, search.Body.String(), `"source":"local"`)
+
+	events := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/records/"+mediaID+"/events", nil, map[string]string{
+		"Cookie": cookie.String(),
+	})
+	require.Equal(t, http.StatusOK, events.Code)
+	require.Contains(t, events.Body.String(), `"viewingMethod":"家庭投影"`)
+}
+
 func newRecordsTestRouter(t *testing.T) (http.Handler, *http.Cookie, string, string, *records.Service, *storage.DB) {
 	t.Helper()
 	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "video-record.db"))

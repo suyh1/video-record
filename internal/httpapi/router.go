@@ -43,6 +43,9 @@ func NewRouter(dependencies Dependencies) http.Handler {
 				if dependencies.Records != nil {
 					recordAPI := recordHandlers{service: dependencies.Records}
 					protected.Get("/collections", recordAPI.collections)
+					protected.Get("/library", recordAPI.library)
+					protected.Get("/media/search", recordAPI.localSearch)
+					protected.Get("/records/{mediaID}", recordAPI.getRecord)
 					protected.Get("/records/{mediaID}/events", recordAPI.watchEvents)
 					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Put(
 						"/records/{mediaID}", recordAPI.updateState,

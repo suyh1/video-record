@@ -10,9 +10,14 @@ import {
   Settings,
   type LucideIcon,
 } from 'lucide-react'
-import { type FormEvent, useRef } from 'react'
-import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
+import { type FormEvent, useRef, useState } from 'react'
+import { BrowserRouter, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
 
+import { createMediaFromTMDB } from '../api/client'
+import type { MediaSearchResult } from '../api/types'
+import { LibraryPage } from '../features/library/LibraryPage'
+import { MediaDetailsPage } from '../features/media/MediaDetailsPage'
+import { SearchDialog } from '../features/search/SearchDialog'
 import { TmdbAttribution } from '../features/settings/TmdbStatus'
 
 type NavigationItem = {
@@ -50,13 +55,27 @@ export function App() {
 
 function ApplicationShell() {
   const searchInput = useRef<HTMLInputElement>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const navigate = useNavigate()
 
   const focusSearch = () => {
-    searchInput.current?.focus()
+    setSearchOpen(true)
   }
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setSearchOpen(true)
+  }
+
+  const selectSearchResult = async (item: MediaSearchResult) => {
+    if (item.source === 'local') {
+      setSearchOpen(false)
+      navigate(`/media/${item.id}`)
+      return
+    }
+    const media = await createMediaFromTMDB(item)
+    setSearchOpen(false)
+    navigate(`/media/${media.id}`)
   }
 
   return (
@@ -77,9 +96,17 @@ function ApplicationShell() {
           </div>
           <form className="global-search" role="search" onSubmit={submitSearch}>
             <Search aria-hidden="true" size={18} strokeWidth={1.8} />
-            <input ref={searchInput} type="search" aria-label="搜索影视" placeholder="搜索电影或剧集" />
+            <input
+              ref={searchInput}
+              type="search"
+              aria-label="搜索影视"
+              placeholder="搜索电影或剧集"
+              readOnly
+              onFocus={() => setSearchOpen(true)}
+              onClick={() => setSearchOpen(true)}
+            />
           </form>
-          <button className="record-button" type="button">
+          <button className="record-button" type="button" onClick={() => setSearchOpen(true)}>
             <Plus aria-hidden="true" size={18} strokeWidth={2} />
             <span>记录</span>
           </button>
@@ -88,7 +115,8 @@ function ApplicationShell() {
         <main id="main-content" className="main-content" tabIndex={-1}>
           <Routes>
             <Route path="/" element={<HomePage />} />
-            <Route path="/library" element={<PlaceholderPage title="影库" />} />
+            <Route path="/library" element={<LibraryPage onSearch={() => setSearchOpen(true)} />} />
+            <Route path="/media/:mediaId" element={<MediaDetailsPage />} />
             <Route path="/calendar" element={<PlaceholderPage title="日历" />} />
             <Route path="/stats" element={<PlaceholderPage title="统计" />} />
             <Route path="/settings" element={<SettingsPage />} />
@@ -97,6 +125,7 @@ function ApplicationShell() {
       </div>
 
       <MobileNavigation onSearch={focusSearch} />
+      <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} onSelect={selectSearchResult} />
     </div>
   )
 }

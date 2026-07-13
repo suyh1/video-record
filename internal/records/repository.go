@@ -20,6 +20,8 @@ type Repository interface {
 	CreateWatchEvent(context.Context, WatchEvent) error
 	WatchEvents(context.Context, string, string) ([]WatchEvent, error)
 	DeleteWatchEvent(context.Context, string, string) error
+	Library(context.Context, string, Status) ([]CatalogItem, error)
+	SearchMedia(context.Context, string, string) ([]CatalogItem, error)
 	SetTags(context.Context, string, string, []string) error
 	Tags(context.Context, string, string) ([]string, error)
 	CreateCollection(context.Context, string, string) (Collection, error)
@@ -297,6 +299,67 @@ func nullableNullString(value sql.NullString) any {
 		return nil
 	}
 	return value.String
+}
+
+func (repository *SQLiteRepository) Library(ctx context.Context, userID string, status Status) ([]CatalogItem, error) {
+	query := `
+		SELECT media.id, media.media_type,
+		       COALESCE(media.custom_title, media.external_title), media.original_title,
+		       SUBSTR(COALESCE(NULLIF(media.release_date, ''), media.custom_year, ''), 1, 4),
+		       media.poster_path, state.status
+		FROM user_media_states state
+		JOIN media_items media ON media.id = state.media_id
+		WHERE state.user_id = ?`
+	arguments := []any{userID}
+	if status != "" && status != StatusNone {
+		query += " AND state.status = ?"
+		arguments = append(arguments, status)
+	}
+	query += " ORDER BY state.updated_at DESC, media.id LIMIT 100"
+	return repository.catalogItems(ctx, query, arguments...)
+}
+
+func (repository *SQLiteRepository) SearchMedia(ctx context.Context, userID, query string) ([]CatalogItem, error) {
+	pattern := "%" + escapeLike(query) + "%"
+	return repository.catalogItems(ctx, `
+		SELECT media.id, media.media_type,
+		       COALESCE(media.custom_title, media.external_title), media.original_title,
+		       SUBSTR(COALESCE(NULLIF(media.release_date, ''), media.custom_year, ''), 1, 4),
+		       media.poster_path, COALESCE(state.status, 'none')
+		FROM media_items media
+		LEFT JOIN user_media_states state ON state.media_id = media.id AND state.user_id = ?
+		WHERE COALESCE(media.custom_title, media.external_title) LIKE ? ESCAPE '\'
+		   OR media.original_title LIKE ? ESCAPE '\'
+		ORDER BY CASE WHEN COALESCE(media.custom_title, media.external_title) = ? THEN 0 ELSE 1 END,
+		         media.updated_at DESC, media.id
+		LIMIT 20
+	`, userID, pattern, pattern, query)
+}
+
+func (repository *SQLiteRepository) catalogItems(ctx context.Context, query string, arguments ...any) ([]CatalogItem, error) {
+	rows, err := repository.db.Reader().QueryContext(ctx, query, arguments...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	items := make([]CatalogItem, 0)
+	for rows.Next() {
+		var item CatalogItem
+		if err := rows.Scan(
+			&item.ID, &item.MediaType, &item.Title, &item.OriginalTitle,
+			&item.Year, &item.PosterPath, &item.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func escapeLike(value string) string {
+	value = strings.ReplaceAll(value, "\\", "\\\\")
+	value = strings.ReplaceAll(value, "%", "\\%")
+	return strings.ReplaceAll(value, "_", "\\_")
 }
 
 func (repository *SQLiteRepository) SetTags(ctx context.Context, userID, mediaID string, names []string) error {

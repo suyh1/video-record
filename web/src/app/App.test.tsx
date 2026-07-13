@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { App } from './App'
@@ -18,5 +18,13 @@ describe('App', () => {
 
     expect(screen.getByText('This product uses the TMDB API but is not endorsed or certified by TMDB.')).toBeVisible()
     window.history.pushState({}, '', '/')
+  })
+
+  it('opens the search dialog when the top searchbox is clicked', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('searchbox', { name: '搜索影视' }))
+
+    expect(screen.getByRole('dialog', { name: '搜索影视' })).toBeVisible()
   })
 })

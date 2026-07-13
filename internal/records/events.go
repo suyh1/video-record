@@ -28,7 +28,8 @@ type WatchEvent struct {
 
 type RecordStatusInput struct {
 	UpdateStateInput
-	WatchedAt time.Time
+	WatchedAt     time.Time
+	ViewingMethod string
 }
 
 type CreateWatchEventInput struct {
@@ -56,7 +57,7 @@ func (service *Service) RecordStatus(ctx context.Context, input RecordStatusInpu
 	}
 	event, err := newWatchEvent(CreateWatchEventInput{
 		UserID: input.UserID, MediaID: input.MediaID, WatchedAt: input.WatchedAt,
-		Source: input.Source, Completion: 100,
+		ViewingMethod: input.ViewingMethod, Source: input.Source, Completion: 100,
 	})
 	if err != nil {
 		return update.current, nil, err

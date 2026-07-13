@@ -19,20 +19,23 @@ type recordHandlers struct {
 }
 
 type updateRecordRequest struct {
-	Status    records.Status
-	Rating    *float64
-	RatingSet bool
-	Note      *string
-	NoteSet   bool
-	WatchedAt time.Time
+	Status        records.Status
+	Rating        *float64
+	RatingSet     bool
+	Note          *string
+	NoteSet       bool
+	WatchedAt     time.Time
+	ViewingMethod string
 }
 
 type recordResponse struct {
-	MediaID string         `json:"mediaId"`
-	Status  records.Status `json:"status"`
-	Rating  *float64       `json:"rating"`
-	Note    *string        `json:"note"`
-	Version int            `json:"version"`
+	MediaID       string         `json:"mediaId"`
+	Status        records.Status `json:"status"`
+	Rating        *float64       `json:"rating"`
+	Note          *string        `json:"note"`
+	WatchedAt     *time.Time     `json:"watchedAt"`
+	ViewingMethod *string        `json:"viewingMethod"`
+	Version       int            `json:"version"`
 }
 
 type tagsRequest struct {
@@ -102,22 +105,25 @@ func (handlers recordHandlers) updateState(w http.ResponseWriter, r *http.Reques
 			Note: request.Note, NoteSet: request.NoteSet,
 			Source: records.SourceManual, ExpectedVersion: expectedVersion,
 		},
-		WatchedAt: request.WatchedAt,
+		WatchedAt:     request.WatchedAt,
+		ViewingMethod: request.ViewingMethod,
 	})
 	if err != nil {
 		writeRecordError(w, r, err, state.Version)
 		return
 	}
 	w.Header().Set("ETag", quotedVersion(state.Version))
-	writeJSON(w, http.StatusOK, newRecordResponse(state))
+	latest := handlers.latestWatchEvent(r, state.MediaID)
+	writeJSON(w, http.StatusOK, newRecordResponse(state, latest))
 }
 
 func decodeUpdateRecordRequest(r *http.Request) (updateRecordRequest, error) {
 	var raw struct {
-		Status    records.Status  `json:"status"`
-		Rating    json.RawMessage `json:"rating"`
-		Note      json.RawMessage `json:"note"`
-		WatchedAt *time.Time      `json:"watchedAt"`
+		Status        records.Status  `json:"status"`
+		Rating        json.RawMessage `json:"rating"`
+		Note          json.RawMessage `json:"note"`
+		WatchedAt     *time.Time      `json:"watchedAt"`
+		ViewingMethod string          `json:"viewingMethod"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 		return updateRecordRequest{}, err
@@ -126,6 +132,7 @@ func decodeUpdateRecordRequest(r *http.Request) (updateRecordRequest, error) {
 	if raw.WatchedAt != nil {
 		request.WatchedAt = raw.WatchedAt.UTC()
 	}
+	request.ViewingMethod = strings.TrimSpace(raw.ViewingMethod)
 	if raw.Rating != nil {
 		request.RatingSet = true
 		if string(raw.Rating) != "null" {
@@ -143,6 +150,51 @@ func decodeUpdateRecordRequest(r *http.Request) (updateRecordRequest, error) {
 		}
 	}
 	return request, nil
+}
+
+func (handlers recordHandlers) getRecord(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	mediaID := chi.URLParam(r, "mediaID")
+	state, _, err := handlers.service.State(r.Context(), identity.User.ID, mediaID)
+	if err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	w.Header().Set("ETag", quotedVersion(state.Version))
+	writeJSON(w, http.StatusOK, newRecordResponse(state, handlers.latestWatchEvent(r, mediaID)))
+}
+
+func (handlers recordHandlers) library(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	status := records.Status(strings.TrimSpace(r.URL.Query().Get("status")))
+	items, err := handlers.service.Library(r.Context(), identity.User.ID, status)
+	if err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": newCatalogResponses(items), "nextCursor": nil})
+}
+
+func (handlers recordHandlers) localSearch(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	items, err := handlers.service.SearchMedia(r.Context(), identity.User.ID, r.URL.Query().Get("q"))
+	if err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": newCatalogResponses(items)})
 }
 
 func (handlers recordHandlers) createWatchEvent(w http.ResponseWriter, r *http.Request) {
@@ -275,15 +327,62 @@ func (handlers recordHandlers) collections(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, response)
 }
 
-func newRecordResponse(state records.State) recordResponse {
+func newRecordResponse(state records.State, event *records.WatchEvent) recordResponse {
 	response := recordResponse{
 		MediaID: state.MediaID, Status: state.Status, Note: state.Note, Version: state.Version,
+		WatchedAt: state.CompletedAt,
 	}
 	if state.Rating != nil {
 		value := records.RatingToTen(*state.Rating)
 		response.Rating = &value
 	}
+	if event != nil {
+		response.WatchedAt = &event.WatchedAt
+		if event.ViewingMethod != "" {
+			value := event.ViewingMethod
+			response.ViewingMethod = &value
+		}
+	}
 	return response
+}
+
+type catalogItemResponse struct {
+	ID            string         `json:"id"`
+	Source        string         `json:"source"`
+	MediaType     string         `json:"mediaType"`
+	Title         string         `json:"title"`
+	OriginalTitle string         `json:"originalTitle"`
+	Year          string         `json:"year"`
+	PosterPath    *string        `json:"posterPath"`
+	Status        records.Status `json:"status"`
+}
+
+func newCatalogResponses(items []records.CatalogItem) []catalogItemResponse {
+	response := make([]catalogItemResponse, 0, len(items))
+	for _, item := range items {
+		var posterPath *string
+		if item.PosterPath != "" {
+			value := item.PosterPath
+			posterPath = &value
+		}
+		response = append(response, catalogItemResponse{
+			ID: item.ID, Source: "local", MediaType: item.MediaType, Title: item.Title,
+			OriginalTitle: item.OriginalTitle, Year: item.Year, PosterPath: posterPath, Status: item.Status,
+		})
+	}
+	return response
+}
+
+func (handlers recordHandlers) latestWatchEvent(r *http.Request, mediaID string) *records.WatchEvent {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		return nil
+	}
+	events, err := handlers.service.WatchEvents(r.Context(), identity.User.ID, mediaID)
+	if err != nil || len(events) == 0 {
+		return nil
+	}
+	return &events[len(events)-1]
 }
 
 func newCollectionResponse(collection records.Collection) collectionResponse {

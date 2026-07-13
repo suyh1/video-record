@@ -27,7 +27,8 @@
 - [x] Task 7：本地影视目录与外部身份
 - [x] Task 8：个人状态、评分、标签与片单
 - [x] Task 9：不可变观看事件与幂等
-- [ ] Task 10-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
+- [x] Task 10：搜索、详情、影库与快速记录界面
+- [ ] Task 11-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 
 ## 已确认约束
 
@@ -61,3 +62,9 @@
 | Task 8 片单跨用户增项被错误当作幂等成功 | 1 | 重复检查看到了所有者已有条目；改为事务入口先按 `collection_id + user_id` 验证所有权，再执行位置与插入逻辑 |
 | Task 8 初次领域覆盖率仅 75.4% | 1 | 补齐显式 null、字段省略、无操作版本、输入校验和私有片单回归测试后达到 85.5% |
 | Task 9 过期幂等夹具把 TEXT 写入 STRICT BLOB 列 | 1 | 根因是 SQL 文本字面量类型错误；改为绑定 `[]byte` 后重跑同一过期清理测试 |
+| Task 10 快速记录按钮残留多余 JSX 终止符 | 1 | 骨架 map 结束符在改写 ternary 后残留；删除单个多余 `)}` 并重跑 typecheck/定向测试 |
+| Task 10 搜索 signal 与评分标签未满足 strict/a11y 测试 | 1 | 仅在 signal 存在时构造 RequestInit，并为带 `/10` 后缀的评分输入添加显式可访问名称 |
+| Task 10 Vite 代理转发的 Origin 与目标 Host 不一致 | 1 | 开发代理将 Host/Origin 同时规范到 API target；生产同源请求路径不受影响 |
+| Task 10 新增 catalog 后领域覆盖率降至 77.9% | 1 | 增加真实 SQLite 的用户隔离、状态筛选、搜索状态投影和 LIKE 转义测试后达到 86.2% |
+| Task 10 顶栏搜索只依赖 focus 时浏览器点击未稳定打开 | 1 | 先加入失败点击回归测试，再补显式 `onClick`，与键盘 focus 路径并存 |
+| Task 10 并行 Go race 只返回 records 包状态 | 1 | 未据此宣称通过；改为单独运行并轮询到全部包 exit 0 |
