@@ -42,6 +42,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 				protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post("/auth/logout", handlers.logout)
 				if dependencies.Records != nil {
 					recordAPI := recordHandlers{service: dependencies.Records}
+					protected.Get("/calendar", recordAPI.calendar)
 					protected.Get("/collections", recordAPI.collections)
 					protected.Get("/library", recordAPI.library)
 					protected.Get("/media/search", recordAPI.localSearch)

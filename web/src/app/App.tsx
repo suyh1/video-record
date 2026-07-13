@@ -15,6 +15,7 @@ import { BrowserRouter, NavLink, Route, Routes, useNavigate } from 'react-router
 
 import { createMediaFromTMDB } from '../api/client'
 import type { MediaSearchResult } from '../api/types'
+import { CalendarPage } from '../features/calendar/CalendarPage'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { MediaDetailsPage } from '../features/media/MediaDetailsPage'
 import { SearchDialog } from '../features/search/SearchDialog'
@@ -117,7 +118,7 @@ function ApplicationShell() {
             <Route path="/" element={<HomePage />} />
             <Route path="/library" element={<LibraryPage onSearch={() => setSearchOpen(true)} />} />
             <Route path="/media/:mediaId" element={<MediaDetailsPage />} />
-            <Route path="/calendar" element={<PlaceholderPage title="日历" />} />
+            <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/stats" element={<PlaceholderPage title="统计" />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>

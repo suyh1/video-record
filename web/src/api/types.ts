@@ -72,6 +72,31 @@ export type SeriesProgress = {
   episodes: EpisodeProgressItem[]
 }
 
+export type CalendarFilter = 'all' | 'completed' | 'in_progress'
+
+export type CalendarEvent = {
+  id: string
+  mediaId: string
+  mediaType: MediaType
+  title: string
+  episodeId: string | null
+  seasonNumber: number | null
+  episodeNumber: number | null
+  absoluteNumber: number | null
+  watchedAt: string
+  localDate: string
+  viewingMethod: string | null
+  participants: string[]
+  status: RecordStatus
+}
+
+export type CalendarResponse = {
+  year: number
+  month: number
+  timezone: string
+  events: CalendarEvent[]
+}
+
 export type LibraryResponse = {
   items: MediaSearchResult[]
   nextCursor: string | null

@@ -22,6 +22,7 @@ type Repository interface {
 	DeleteWatchEvent(context.Context, string, string) error
 	Library(context.Context, string, Status) ([]CatalogItem, error)
 	SearchMedia(context.Context, string, string) ([]CatalogItem, error)
+	CalendarEvents(context.Context, string, time.Time, time.Time, CalendarFilter) ([]CalendarEvent, error)
 	Episodes(context.Context, string, string) (SeriesProgress, error)
 	ApplyEpisodeProgress(context.Context, EpisodeProgressInput, []string, bool) (bool, error)
 	SetTags(context.Context, string, string, []string) error

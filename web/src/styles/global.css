@@ -224,6 +224,264 @@ body {
   }
 }
 
+.calendar-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.calendar-page-header h1 {
+  margin: 0;
+  font-size: var(--text-2xl);
+  line-height: 1.25;
+}
+
+.calendar-month-actions,
+.calendar-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.calendar-month-actions button,
+.calendar-filters button {
+  display: inline-grid;
+  min-width: 40px;
+  min-height: 40px;
+  place-items: center;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+}
+
+.calendar-filters {
+  margin-bottom: var(--space-4);
+}
+
+.calendar-filters button[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: var(--surface);
+  color: var(--primary);
+  font-weight: 650;
+}
+
+.calendar-month-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.calendar-month-grid th {
+  height: 40px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 550;
+  text-align: right;
+}
+
+.calendar-month-grid td {
+  height: 120px;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.calendar-month-grid td.outside-month {
+  background: var(--surface);
+}
+
+.calendar-day-number {
+  display: block;
+  margin-bottom: var(--space-1);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.calendar-month-grid ol,
+.calendar-agenda,
+.agenda-events {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.calendar-month-grid li + li {
+  margin-top: var(--space-1);
+}
+
+.calendar-month-grid a {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  text-decoration: none;
+}
+
+.calendar-month-grid a:hover {
+  background: var(--surface-strong);
+}
+
+.calendar-month-grid a span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-month-grid a small {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-agenda {
+  display: none;
+}
+
+.calendar-error {
+  display: flex;
+  min-height: 160px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  color: var(--error);
+}
+
+.calendar-error button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--error);
+  font-weight: 650;
+}
+
+.calendar-skeleton-header {
+  width: 240px;
+  height: 40px;
+  margin-bottom: var(--space-4);
+}
+
+.calendar-skeleton-body {
+  width: 100%;
+  height: 640px;
+}
+
+.calendar-empty {
+  margin-top: var(--space-4);
+}
+
+@media (max-width: 767px) {
+  .calendar-page-header {
+    align-items: flex-start;
+  }
+
+  .calendar-error {
+    flex-direction: column;
+    padding: var(--space-6);
+    text-align: center;
+  }
+
+  .calendar-page-header h1 {
+    font-size: var(--text-xl);
+  }
+
+  .calendar-month-actions button {
+    padding: 0 var(--space-2);
+  }
+
+  .calendar-filters {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .calendar-filters button {
+    min-width: 0;
+    padding: 0 var(--space-2);
+  }
+
+  .calendar-month-grid {
+    display: none;
+  }
+
+  .calendar-agenda {
+    display: grid;
+    gap: var(--space-8);
+  }
+
+  .agenda-day-heading {
+    display: flex;
+    min-height: 40px;
+    align-items: center;
+    gap: var(--space-2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .agenda-day-heading h2 {
+    margin: 0;
+    font-size: var(--text-md);
+  }
+
+  .agenda-day-heading span {
+    margin-left: auto;
+    color: var(--muted);
+  }
+
+  .agenda-events > li {
+    display: grid;
+    min-height: 72px;
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: var(--space-3);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .agenda-events time {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .agenda-events > li > div {
+    display: grid;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  .agenda-events a {
+    font-weight: 650;
+    text-decoration: none;
+  }
+
+  .agenda-events span {
+    color: var(--muted);
+    font-size: var(--text-xs);
+  }
+
+  .agenda-participants {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .calendar-skeleton-body {
+    height: 440px;
+  }
+}
+
 button,
 input,
 textarea {

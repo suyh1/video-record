@@ -435,6 +435,8 @@ func writeRecordError(w http.ResponseWriter, r *http.Request, err error, version
 		writeProblem(w, r, http.StatusNotFound, "Not Found", "episode_not_found")
 	case errors.Is(err, records.ErrInvalidEpisodeProgress):
 		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_episode_progress")
+	case errors.Is(err, records.ErrInvalidCalendarQuery):
+		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_calendar_query")
 	default:
 		writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
 	}

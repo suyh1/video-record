@@ -1,4 +1,6 @@
 import type {
+  CalendarFilter,
+  CalendarResponse,
   LibraryResponse,
   MediaDetails,
   MediaSearchResult,
@@ -105,6 +107,11 @@ export function getEpisodeProgress(mediaID: string, signal?: AbortSignal) {
     `/api/v1/records/${encodeURIComponent(mediaID)}/progress`,
     signal ? { signal } : undefined,
   )
+}
+
+export function getCalendar(month: string, timezone: string, filter: CalendarFilter, signal?: AbortSignal) {
+  const query = new URLSearchParams({ month, timezone, filter })
+  return requestJSON<CalendarResponse>(`/api/v1/calendar?${query.toString()}`, signal ? { signal } : undefined)
 }
 
 export type UpdateEpisodeProgressPayload = {
