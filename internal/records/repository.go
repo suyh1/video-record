@@ -22,6 +22,8 @@ type Repository interface {
 	DeleteWatchEvent(context.Context, string, string) error
 	Library(context.Context, string, Status) ([]CatalogItem, error)
 	SearchMedia(context.Context, string, string) ([]CatalogItem, error)
+	Episodes(context.Context, string, string) (SeriesProgress, error)
+	ApplyEpisodeProgress(context.Context, EpisodeProgressInput, []string, bool) (bool, error)
 	SetTags(context.Context, string, string, []string) error
 	Tags(context.Context, string, string) ([]string, error)
 	CreateCollection(context.Context, string, string) (Collection, error)
@@ -228,9 +230,10 @@ func (repository *SQLiteRepository) DeleteWatchEvent(ctx context.Context, userID
 	}
 	defer func() { _ = tx.Rollback() }()
 	var mediaID string
+	var episodeID sql.NullString
 	err = tx.QueryRowContext(ctx, `
-		SELECT media_id FROM watch_events WHERE id = ? AND created_by_user_id = ?
-	`, eventID, userID).Scan(&mediaID)
+		SELECT media_id, episode_id FROM watch_events WHERE id = ? AND created_by_user_id = ?
+	`, eventID, userID).Scan(&mediaID, &episodeID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrWatchEventNotFound
 	}
@@ -242,6 +245,11 @@ func (repository *SQLiteRepository) DeleteWatchEvent(ctx context.Context, userID
 	}
 	if err := recomputeWatchDates(ctx, tx, userID, mediaID); err != nil {
 		return err
+	}
+	if episodeID.Valid {
+		if err := reprojectSeriesStateAfterEventDeletion(ctx, tx, userID, mediaID); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

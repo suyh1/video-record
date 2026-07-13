@@ -50,6 +50,28 @@ export type WatchEvent = {
   note?: string
 }
 
+export type EpisodeProgressItem = {
+  id: string
+  seasonId: string
+  seasonNumber: number
+  episodeNumber: number
+  absoluteNumber: number
+  name: string
+  watched: boolean
+  watchedAt: string | null
+}
+
+export type SeriesProgress = {
+  mediaId: string
+  status: RecordStatus
+  version: number
+  watchedEpisodes: number
+  totalEpisodes: number
+  lastWatched: EpisodeProgressItem | null
+  nextEpisode: EpisodeProgressItem | null
+  episodes: EpisodeProgressItem[]
+}
+
 export type LibraryResponse = {
   items: MediaSearchResult[]
   nextCursor: string | null

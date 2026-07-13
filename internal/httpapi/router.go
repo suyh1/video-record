@@ -47,6 +47,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protected.Get("/media/search", recordAPI.localSearch)
 					protected.Get("/records/{mediaID}", recordAPI.getRecord)
 					protected.Get("/records/{mediaID}/events", recordAPI.watchEvents)
+					protected.Get("/records/{mediaID}/progress", recordAPI.episodeProgress)
 					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Put(
 						"/records/{mediaID}", recordAPI.updateState,
 					)
@@ -66,6 +67,11 @@ func NewRouter(dependencies Dependencies) http.Handler {
 							RequireCSRF(dependencies.Auth),
 							idempotency.Handle,
 						).Post("/records/{mediaID}/events", recordAPI.createWatchEvent)
+						protected.With(
+							RequireSameOrigin,
+							RequireCSRF(dependencies.Auth),
+							idempotency.Handle,
+						).Post("/records/{mediaID}/progress", recordAPI.updateEpisodeProgress)
 					}
 					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Delete(
 						"/records/{mediaID}/events/{eventID}", recordAPI.deleteWatchEvent,

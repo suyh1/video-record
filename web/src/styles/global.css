@@ -21,6 +21,209 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+.episode-progress-heading {
+  align-items: center;
+}
+
+.episode-next-button,
+.episode-complete-label,
+.episode-progress-toast button,
+.episode-season-heading button,
+.episode-range-controls button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-weight: 650;
+}
+
+.episode-next-button {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.episode-progress-error {
+  color: var(--error);
+}
+
+.episode-progress-toast {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.episode-progress-toast button {
+  min-height: 36px;
+  padding: 0 var(--space-2);
+  background: var(--bg);
+}
+
+.episode-range-controls {
+  margin-bottom: var(--space-6);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.episode-range-controls summary {
+  min-height: 44px;
+  padding: var(--space-3) 0;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.episode-range-controls > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+  padding: 0 0 var(--space-4);
+}
+
+.episode-range-controls label {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.episode-range-controls select {
+  min-width: 136px;
+  min-height: 40px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+
+.episode-seasons {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.episode-season-heading {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.episode-season-heading h3 {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.episode-list {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+}
+
+.episode-list li {
+  border-bottom: 1px solid var(--border);
+}
+
+.episode-list li button {
+  display: grid;
+  width: 100%;
+  min-height: 52px;
+  grid-template-columns: 20px 72px 92px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.episode-list li button:hover {
+  background: var(--surface);
+}
+
+.episode-list li.watched button {
+  color: var(--muted);
+}
+
+.episode-code,
+.episode-absolute {
+  font-variant-numeric: tabular-nums;
+}
+
+.episode-absolute {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.episode-list strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.episode-progress-title-skeleton {
+  width: 180px;
+  height: 28px;
+  margin-bottom: var(--space-4);
+}
+
+.episode-progress-list-skeleton {
+  width: 100%;
+  height: 156px;
+}
+
+@media (max-width: 767px) {
+  .episode-progress-heading,
+  .episode-progress-toast {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .episode-next-button,
+  .episode-progress-toast button {
+    width: 100%;
+  }
+
+  .episode-range-controls > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .episode-range-controls button {
+    grid-column: 1 / -1;
+  }
+
+  .episode-range-controls select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .episode-list li button {
+    grid-template-columns: 20px 64px minmax(0, 1fr);
+  }
+
+  .episode-absolute {
+    display: none;
+  }
+}
+
 button,
 input,
 textarea {

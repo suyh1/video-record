@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom'
 
 import { getMedia, getRecord, getWatchEvents } from '../../api/client'
 import type { MediaSearchResult, RecordState } from '../../api/types'
+import { EpisodeProgress } from '../episodes/EpisodeProgress'
 import { QuickRecordForm } from '../records/QuickRecordForm'
 import { MediaPoster } from './MediaPoster'
 
@@ -100,6 +101,8 @@ export function MediaDetailsPage() {
           <p className="quiet-empty">还没有观看事件</p>
         )}
       </section>
+
+      {media.data.mediaType === 'tv' ? <EpisodeProgress mediaId={mediaId} /> : null}
 
       <section className="details-section" aria-labelledby="overview-heading">
         <h2 id="overview-heading">简介</h2>

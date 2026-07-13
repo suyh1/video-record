@@ -4,6 +4,7 @@ import type {
   MediaSearchResult,
   RecordState,
   RecordStatus,
+  SeriesProgress,
   SearchResultsResponse,
   TMDBSearchResponse,
   WatchEvent,
@@ -99,6 +100,35 @@ export function getWatchEvents(mediaID: string, signal?: AbortSignal) {
   return requestJSON<WatchEvent[]>(`/api/v1/records/${encodeURIComponent(mediaID)}/events`, signal ? { signal } : undefined)
 }
 
+export function getEpisodeProgress(mediaID: string, signal?: AbortSignal) {
+  return requestJSON<SeriesProgress>(
+    `/api/v1/records/${encodeURIComponent(mediaID)}/progress`,
+    signal ? { signal } : undefined,
+  )
+}
+
+export type UpdateEpisodeProgressPayload = {
+  action: 'single' | 'range' | 'season' | 'next' | 'undo'
+  expectedVersion: number
+  episodeId?: string
+  throughEpisodeId?: string
+  seasonId?: string
+  watchedAt?: string
+}
+
+export function updateEpisodeProgress(mediaID: string, payload: UpdateEpisodeProgressPayload) {
+  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+  return requestJSON<SeriesProgress>(`/api/v1/records/${encodeURIComponent(mediaID)}/progress`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': createIdempotencyKey(),
+      'X-CSRF-Token': csrfToken,
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
 export function getLibrary(status: RecordStatus | 'all', signal?: AbortSignal) {
   const query = status === 'all' ? '' : `?status=${status}`
   return requestJSON<LibraryResponse>(`/api/v1/library${query}`, signal ? { signal } : undefined)
@@ -111,4 +141,10 @@ export async function createMediaFromTMDB(item: MediaSearchResult): Promise<Medi
     method: 'POST',
     headers: { 'X-CSRF-Token': csrfToken },
   })
+}
+
+function createIdempotencyKey() {
+  return typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
