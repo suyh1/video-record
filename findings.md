@@ -37,6 +37,11 @@
 - TMDB 设置状态只读且不提供令牌输入；当前 Settings 路由始终显示官方英文归属声明和 `https://www.themoviedb.org/` 外链。
 - 本机未安装全局 gitleaks；使用声明模块路径 `github.com/zricethezav/gitleaks/v8@v8.30.1` 扫描 8 个提交和约 329.56 KB，结果为零泄漏。
 - Task 6 无需真实上游数据即可完成合约验证，因此未创建 `.tmdb-token`，未在命令、日志、截图、缓存或提交中使用个人令牌。
+- Task 7 将本地 UUID 保存在 `media_items`，外部身份独立保存在 `media_external_ids`，唯一键固定为 `(source, source_id, media_type)`；业务外键不使用 TMDB ID。
+- `media_items` 将外部快照与可空自定义标题/简介分列保存；刷新只更新外部列，有自定义值时读取始终优先返回用户字段。
+- 自定义条目关联 TMDB 与身份冲突检查在单写事务内完成；同一外部身份已属于其他条目时返回稳定冲突，不修改任何一方。
+- `0004_media.sql` 同时建立季、集、类型与演职员规范化快照表，为 Task 11 的剧集进度和后续统计保留稳定本地外键。
+- 媒体写 API 不接受客户端提交的外部快照，而是根据 TMDB 类型/ID 由服务端重新获取并转换，防止伪造可信元数据。
 
 ## `invoice-manage` 工程参照
 

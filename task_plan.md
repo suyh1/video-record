@@ -24,8 +24,9 @@
 - [x] Task 4：用户、密码、会话与封闭初始化
 - [x] Task 5：前端基础与设计令牌
 - [x] Task 6：TMDB 客户端、归属说明与安全缓存
-- [ ] Task 7：本地影视目录与外部身份
-- [ ] Task 8-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
+- [x] Task 7：本地影视目录与外部身份
+- [ ] Task 8：个人状态、评分、标签与片单
+- [ ] Task 9-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 
 ## 已确认约束
 

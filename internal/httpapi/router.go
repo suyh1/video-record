@@ -8,6 +8,7 @@ import (
 
 	"video-record/internal/auth"
 	"video-record/internal/integrations/tmdb"
+	"video-record/internal/media"
 	"video-record/internal/storage"
 )
 
@@ -17,6 +18,7 @@ type Dependencies struct {
 	Auth         *auth.Service
 	CookieSecure bool
 	TMDB         *tmdb.Client
+	Media        *media.Service
 }
 
 func NewRouter(dependencies Dependencies) http.Handler {
@@ -44,6 +46,19 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protected.Get("/tmdb/tv/{id}", tmdbAPI.tv)
 					protected.Get("/tmdb/tv/{id}/season/{season}", tmdbAPI.season)
 					protected.Get("/tmdb/tv/{id}/season/{season}/episode/{episode}", tmdbAPI.episode)
+				}
+				if dependencies.Media != nil && dependencies.TMDB != nil {
+					mediaAPI := mediaHandlers{service: dependencies.Media, tmdb: dependencies.TMDB}
+					protected.Get("/media/{id}", mediaAPI.get)
+					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post(
+						"/media/tmdb/{mediaType}/{externalID}", mediaAPI.createFromTMDB,
+					)
+					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post(
+						"/media/custom", mediaAPI.createCustom,
+					)
+					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post(
+						"/media/{id}/tmdb/{mediaType}/{externalID}", mediaAPI.linkTMDB,
+					)
 				}
 			})
 		})

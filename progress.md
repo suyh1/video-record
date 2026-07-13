@@ -97,6 +97,17 @@
 - gitleaks `v8.30.1` 扫描 8 个提交、约 329.56 KB，结果为 `no leaks found`。
 - 浏览器实测 Settings 归属声明可见、无横向溢出、无控制台警告或错误。
 
+### Task 7：本地影视目录与外部身份
+
+- 已先写真实 SQLite 领域测试，覆盖本地 UUID、外部身份唯一性、电影/剧集类型区分、自定义字段保护和身份占用冲突。
+- 已添加 `0004_media.sql`，包含本地影视、外部身份、季、集、类型和演职员快照表；所有后续业务关系使用本地 UUID。
+- 外部刷新只更新外部标题、原名、日期、简介和图片路径，自定义标题/简介通过可空覆盖列保持最高优先级。
+- 自定义条目创建、TMDB 关联和身份冲突检查均在 SQLite 单写事务边界内完成。
+- 已先写 HTTP 红灯，再实现受会话/Origin/CSRF 保护的 TMDB 创建刷新、自定义创建、关联和本地读取端点。
+- HTTP 层只接受 TMDB 类型/ID，外部快照由服务端客户端获取并转为受控 DTO，前端不能伪造外部字段。
+- 定向测试 `go test ./internal/media ./internal/httpapi -run 'Test(Media|Upsert|External|Link)' -v` 通过。
+- 全仓 Go race/vet、前端 typecheck/test/build、补丁与凭据扫描通过；gitleaks 扫描 9 个提交、约 368.48 KB，零泄漏。
+
 ### Task 4：用户、密码、会话与封闭初始化
 
 - 已先写 Argon2id 格式、正确/错误密码和畸形哈希测试，再实现固定参数、随机 salt 与常量时间验证。

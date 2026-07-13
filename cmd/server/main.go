@@ -14,6 +14,7 @@ import (
 	"video-record/internal/config"
 	"video-record/internal/httpapi"
 	"video-record/internal/integrations/tmdb"
+	"video-record/internal/media"
 	"video-record/internal/storage"
 )
 
@@ -51,6 +52,7 @@ func main() {
 		Cache:  tmdb.NewCache(db, nil),
 		Logger: logger,
 	})
+	mediaService := media.NewService(media.NewRepository(db))
 
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.Port),
@@ -60,6 +62,7 @@ func main() {
 			Auth:         authService,
 			CookieSecure: cfg.CookieSecure,
 			TMDB:         tmdbClient,
+			Media:        mediaService,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
