@@ -342,3 +342,14 @@
 - 成功运行只持久化受控数值摘要和新游标；失败运行保存稳定错误码且不推进游标，不保存原始上游错误文本。
 - Provider 运行失败使用稳定外层错误并继续下一轮轮询；数据库/租约等调度持久化错误仍为终止性错误。`Start` 在 goroutine 中运行，不阻塞 HTTP 调用方。
 - Task 17 不伪造尚未实现的具体 Provider runner；生产 Provider 注册与调度装配将在 Jellyfin/Emby/Plex 实现后按后续任务接入。
+
+## Task 18：Jellyfin 播放历史 Provider
+
+- Jellyfin 核心 OpenAPI 不提供事件级播放历史；标准 UserData 只能表示条目当前/最近状态，无法可靠恢复重复播放。Task 18 因此使用官方 Playback Reporting 插件的管理员端点，并保留标准 `/Items/{id}` 作为元数据补全边界。
+- 插件历史端点为 `/user_usage_stats/{userId}/{date}/GetItems`；查询类型必须使用数据库中的真实 enum 值 `Movie,Episode`。响应的稳定 `RowId` 作为分页/增量游标与重复播放事件身份。
+- 插件响应只返回 `h:mm tt`，日期来自请求路径；适配器把二者组合为 UTC 事件时间，同时兼容完整 RFC3339 录制夹具。当前默认 `timezoneOffset=0`，与项目容器的 UTC 运行基线一致。
+- 每个历史页按 `RowId` 升序、使用 `date|rowId` 游标；支持 `Since/Until` UTC 日期范围、默认 100/最大 200 条，并缓存同页重复条目的 Item 详情请求。
+- 标准 `/Items/{id}` 的类型化响应只保留本地需要的 ProviderIds、标题、年份、季集和 runtime；电影/单集映射到统一 `ItemIdentity`，未知字段不会进入后续同步候选。
+- 删除用户在认证检查中映射为稳定认证错误；401/403、429/Retry-After、5xx、超时、畸形/null JSON、非法 RowId、负 runtime、类型或条目不匹配均有显式边界。
+- 上游正文和令牌不进入 Provider 错误；共享 conformance suite 验证认证、分页稳定性、取消、重试分类和脱敏。
+- 全仓 race 暴露调度取消期间 SQLite 可能返回 `ErrTxDone`/`interrupted`；调度器现以父 context 为正常关停真值，不把取消竞争误报为持久化故障。

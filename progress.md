@@ -245,3 +245,15 @@
 - Task 17 定向 race 通过；覆盖率为 `internal/integrations 91.7%`、`internal/sync 87.1%`，均高于关键领域包 85% 基线。
 - 全仓 `go test ./... -race -count=1` 与 `go vet ./...` 通过；前端 12 个测试文件 24 项测试、typecheck、build 和高危依赖审计通过。
 - 未创建 `.tmdb-token`，未使用真实 TMDB 或媒体服务器凭据；所有测试数据均为显式合成值。
+
+### Task 18：Jellyfin 播放历史 Provider
+
+- 已先写 Jellyfin 合成 Provider 测试并确认客户端缺失，再实现认证检查、Playback Reporting 分页历史和标准 Item 元数据映射。
+- 共享 conformance suite 覆盖认证、稳定分页、取消、错误脱敏与重试；额外覆盖电影、单集、同一电影重复播放、删除用户、日期范围、超时、429、5xx、畸形/null 响应和非法映射。
+- 核对官方 Jellyfin OpenAPI 与 Playback Reporting 插件源码后，确认核心 API 不具备重复播放事件历史；实现使用真实 `/user_usage_stats/{userId}/{date}/GetItems`，filter 为 `Movie,Episode`，时间形状为 `h:mm tt`。
+- 插件 `RowId` 生成稳定 `jellyfin:{rowId}` 事件 ID，持久游标为 `date|rowId`；同一页重复条目复用 Item 详情，类型化响应不会保存未知上游字段。
+- 安全边界拒绝 null 历史、负 runtime、非法 RowId、类型/条目不匹配和 malformed cursor；请求只通过 `X-Emby-Token` 发送合成测试令牌，不使用 query token。
+- 包级 `go test ./internal/integrations/jellyfin ./internal/integrations -race -count=1` 通过，`internal/integrations/jellyfin` 精确语句覆盖率为 93.1%。
+- 首次全仓 race 发现调度器取消竞争可能返回 SQLite 底层错误；已让父 context 优先决定关停结果，定向 race 连续 20 次和最终全仓 race 均通过。
+- 最终 `go test ./... -race -count=1`、`go vet ./...`、前端 typecheck、12 个测试文件 24 项测试、build 与高危依赖审计通过。
+- 未创建 `.tmdb-token`，未接触真实 Jellyfin/TMDB 凭据；全部 JSON 夹具均为合成数据。

@@ -35,7 +35,8 @@
 - [x] Task 15：JSON/CSV 安全导入导出
 - [x] Task 16：一致性备份与原子恢复
 - [x] Task 17：Provider 契约、加密账户与持久化调度器
-- [ ] Task 18-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
+- [x] Task 18：Jellyfin 播放历史 Provider
+- [ ] Task 19-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 
 ## 已确认约束
 
@@ -96,3 +97,6 @@
 | Task 17 游标结果参数与 SQL Result 局部变量同名导致编译失败 | 1 | 保留领域参数名，将数据库执行结果改为 `execResult` 后重跑定向测试 |
 | Task 17 篡改密文测试用 BLOB 拼接产生 STRICT TEXT 类型错误 | 1 | 读取真实字节后在 Go 中篡改，并以 `[]byte` 参数写回 BLOB 列 |
 | Task 17 正式迁移创建 `external_accounts` 后旧备份测试重复建表 | 1 | 删除占位表夹具，改为向正式 STRICT 表插入满足外键的合成用户和账户 |
+| Task 18 新增 HTTP 测试 handler 混用命名与匿名参数导致编译失败 | 1 | 将未使用请求参数显式命名为 `_` 后重跑同一红测 |
+| Task 18 初版按插件注释使用 `movies,series` 且假定返回完整时间 | 2 | 核对插件实现后改用真实 `Movie,Episode`，并将日期路径与 `h:mm tt` 组合为 UTC 时间 |
+| Task 18 全仓 race 发现取消期间 SQLite 错误覆盖正常关停结果 | 1 | `RunDue` 返回后优先检查父 context，定向 race 连续 20 次通过后重跑全仓 |

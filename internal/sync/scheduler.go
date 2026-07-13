@@ -127,10 +127,15 @@ func (scheduler *Scheduler) Start(ctx context.Context) <-chan error {
 		ticker := time.NewTicker(scheduler.pollInterval)
 		defer ticker.Stop()
 		for {
-			if _, err := scheduler.RunDue(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			_, runErr := scheduler.RunDue(ctx)
+			if ctx.Err() != nil {
+				done <- ctx.Err()
+				return
+			}
+			if runErr != nil && !errors.Is(runErr, context.Canceled) {
 				var dueErr *runDueError
-				if !errors.As(err, &dueErr) || dueErr.fatal() {
-					done <- err
+				if !errors.As(runErr, &dueErr) || dueErr.fatal() {
+					done <- runErr
 					return
 				}
 			}

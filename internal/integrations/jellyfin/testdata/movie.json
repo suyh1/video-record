@@ -1,0 +1,12 @@
+{
+  "Id": "movie-1",
+  "Name": "Arrival",
+  "OriginalTitle": "Arrival",
+  "Type": "Movie",
+  "ProductionYear": 2016,
+  "RunTimeTicks": 69600000000,
+  "ProviderIds": {
+    "Tmdb": "329865",
+    "Imdb": "tt2543164"
+  }
+}

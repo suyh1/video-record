@@ -1,0 +1,15 @@
+{
+  "Id": "episode-1",
+  "Name": "Third Episode",
+  "OriginalTitle": "Third Episode",
+  "SeriesName": "Synthetic Series",
+  "Type": "Episode",
+  "ProductionYear": 2026,
+  "ParentIndexNumber": 2,
+  "IndexNumber": 3,
+  "RunTimeTicks": 36000000000,
+  "ProviderIds": {
+    "Tmdb": "10003",
+    "Tvdb": "66732"
+  }
+}
