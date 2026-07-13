@@ -48,6 +48,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					recordAPI := recordHandlers{service: dependencies.Records}
 					protected.Get("/calendar", recordAPI.calendar)
 					protected.Get("/collections", recordAPI.collections)
+					protected.Get("/data/export", recordAPI.exportData)
 					protected.Get("/library", recordAPI.library)
 					protected.Get("/media/search", recordAPI.localSearch)
 					protected.Get("/records/{mediaID}", recordAPI.getRecord)
@@ -67,6 +68,11 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					)
 					if dependencies.Storage != nil {
 						idempotency := newIdempotencyMiddleware(dependencies.Storage)
+						protected.With(
+							RequireSameOrigin,
+							RequireCSRF(dependencies.Auth),
+							idempotency.Handle,
+						).Post("/data/import", recordAPI.importData)
 						protected.With(
 							RequireSameOrigin,
 							RequireCSRF(dependencies.Auth),

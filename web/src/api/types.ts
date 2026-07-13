@@ -126,6 +126,15 @@ export type HouseholdMember = CurrentUser & {
   createdAt?: string
 }
 
+export type ImportReport = {
+  importedRecords: number
+  importedCollections: number
+  failures: Array<{
+    recordId: string
+    code: string
+  }>
+}
+
 export type LibraryResponse = {
   items: MediaSearchResult[]
   nextCursor: string | null

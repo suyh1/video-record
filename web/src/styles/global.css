@@ -229,6 +229,87 @@ body {
   border-top: 1px solid var(--border);
 }
 
+.data-transfer {
+  padding: var(--space-6) 0;
+  border-top: 1px solid var(--border);
+}
+
+.data-transfer-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.data-transfer-heading h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.export-actions a,
+.import-form button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.import-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.import-form label {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.import-form input {
+  min-width: 0;
+  min-height: 44px;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+}
+
+.data-transfer-error {
+  color: var(--error);
+}
+
+.import-report {
+  margin-top: var(--space-4);
+  color: var(--success);
+}
+
+.import-report p,
+.import-report ul {
+  margin: 0;
+}
+
+.import-report ul {
+  margin-top: var(--space-2);
+  padding-left: var(--space-6);
+  color: var(--error);
+}
+
 .household-settings-heading {
   display: flex;
   align-items: flex-start;
@@ -411,6 +492,19 @@ body {
 }
 
 @media (max-width: 767px) {
+  .data-transfer-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .import-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .import-form button {
+    width: 100%;
+  }
+
   .member-create-form {
     grid-template-columns: 1fr;
   }

@@ -21,6 +21,7 @@ import { LibraryPage } from '../features/library/LibraryPage'
 import { MediaDetailsPage } from '../features/media/MediaDetailsPage'
 import { SearchDialog } from '../features/search/SearchDialog'
 import { TmdbAttribution } from '../features/settings/TmdbStatus'
+import { DataTransfer } from '../features/settings/DataTransfer'
 import { StatsPage } from '../features/stats/StatsPage'
 
 type NavigationItem = {
@@ -250,6 +251,7 @@ function SettingsPage() {
         <TmdbAttribution />
       </section>
       <MemberSettings />
+      <DataTransfer />
     </div>
   )
 }

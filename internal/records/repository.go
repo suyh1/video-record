@@ -30,6 +30,8 @@ type Repository interface {
 	CreateCollection(context.Context, string, string) (Collection, error)
 	AddCollectionItem(context.Context, string, string, string) error
 	Collections(context.Context, string) ([]Collection, error)
+	ExportDocument(context.Context, string) (exportDocument, error)
+	ImportDocument(context.Context, string, exportDocument) (ImportReport, error)
 }
 
 type SQLiteRepository struct {

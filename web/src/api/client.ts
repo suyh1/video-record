@@ -3,6 +3,7 @@ import type {
   CalendarResponse,
   CurrentUser,
   HouseholdMember,
+  ImportReport,
   LibraryResponse,
   MediaDetails,
   MediaSearchResult,
@@ -145,6 +146,20 @@ export function resetHouseholdMemberPassword(memberID: string, password: string)
 
 export function deactivateHouseholdMember(memberID: string) {
   return householdWrite<void>(`/api/v1/household/members/${encodeURIComponent(memberID)}/deactivate`, {})
+}
+
+export function importData(file: File) {
+  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+  const body = new FormData()
+  body.set('file', file)
+  return requestJSON<ImportReport>('/api/v1/data/import', {
+    method: 'POST',
+    headers: {
+      'Idempotency-Key': createIdempotencyKey(),
+      'X-CSRF-Token': csrfToken,
+    },
+    body,
+  })
 }
 
 export type UpdateEpisodeProgressPayload = {
