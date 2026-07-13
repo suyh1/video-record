@@ -51,3 +51,14 @@
 - `.env.example` 只有空值或合成值；`.gitignore` 覆盖本地环境、数据、构建、覆盖率和 Playwright 产物，并预留忽略 `.tmdb-token`。
 - 定向测试 `go test ./internal/httpapi -run TestHealthz -v` 通过。
 - 完整验证 `go test ./...`、`go vet ./...` 与 `git diff --check` 通过。
+
+### Task 2：配置、日志与请求 ID
+
+- 已先写配置测试，确认因 `Load` 和稳定错误缺失而失败，再实现默认值、环境覆盖、生产 Secure Cookie 和 32 字节 Base64 加密密钥校验。
+- 已先写中间件测试，确认请求 ID、日志工厂、请求日志和恢复器缺失，再实现对应能力。
+- 请求 ID 现在同时进入上下文、`X-Request-ID` 响应头、结构化日志和 Problem Details。
+- 生产环境使用 JSON `slog`，本地使用文本 `slog`；Authorization、Cookie、已知 TMDB/媒体令牌及敏感属性会被替换为 `[REDACTED]`。
+- panic 恢复返回通用 `500`，不输出 panic 内容、堆栈或秘密值；请求日志不记录查询参数。
+- 服务入口已使用环境配置端口和安全 logger，`.env.example` 继续只包含空值或合成值。
+- 定向验证 `go test ./internal/config ./internal/httpapi -race` 通过。
+- 完整验证 `go test ./... -race`、`go vet ./...`、`git diff --check` 与通用 JWT 形态扫描通过。

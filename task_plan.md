@@ -19,7 +19,7 @@
 ## 实施进度
 
 - [x] Task 1：仓库工具链与最小服务器
-- [ ] Task 2：配置、日志与请求 ID
+- [x] Task 2：配置、日志与请求 ID
 - [ ] Task 3：SQLite 连接与嵌入式迁移
 - [ ] Task 4-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 

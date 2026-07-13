@@ -13,6 +13,10 @@
 - 本机工具链为 Go `1.26.0`（`darwin/arm64`）和 Node.js `24.13.0`，满足 Task 1 的版本要求。
 - Task 1 使用 Chi v5 提供最小路由，健康端点仅返回进程存活状态；存储就绪检查留给 Task 3。
 - 本机 TMDB 凭据文件名预留为被 Git 忽略的 `.tmdb-token`，在 Task 6 需要真实上游验证前不创建，也不进入命令、日志或提交。
+- Task 2 配置直接读取进程环境，不加载 `.env`；生产环境默认 Secure Cookie，开发环境默认关闭，并允许显式布尔覆盖。
+- `APP_ENCRYPTION_KEY` 当前契约为 Base64 编码的 32 字节值；格式错误只返回稳定错误，不包含原始输入。
+- 请求日志只记录 URL path，不记录 query、header 或 body；`slog` handler 额外按敏感属性名和已知秘密值统一脱敏。
+- panic 恢复不记录 panic 值或堆栈，只返回带稳定 `internal_error` 与 `requestId` 的 RFC 9457 Problem Details。
 
 ## `invoice-manage` 工程参照
 
