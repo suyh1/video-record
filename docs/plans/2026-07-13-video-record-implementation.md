@@ -48,7 +48,8 @@ func TestHealthz(t *testing.T) {
 
 **Step 2: Run the test and verify failure**
 
-Run: `go test ./internal/httpapi -run TestHealthz -v`  
+Run: `go test ./internal/httpapi -run TestHealthz -v`
+
 Expected: FAIL because `NewRouter` does not exist.
 
 **Step 3: Implement the minimal server**
@@ -61,10 +62,12 @@ Expected: FAIL because `NewRouter` does not exist.
 
 **Step 4: Verify**
 
-Run: `go test ./...`  
+Run: `go test ./...`
+
 Expected: PASS.
 
-Run: `go vet ./...`  
+Run: `go vet ./...`
+
 Expected: no findings.
 
 **Step 5: Commit**
@@ -89,7 +92,8 @@ Test that defaults produce port `8080`, data directory `/data`, a development-sa
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/config ./internal/httpapi -v`  
+Run: `go test ./internal/config ./internal/httpapi -v`
+
 Expected: FAIL because configuration and middleware are missing.
 
 **Step 3: Implement**
@@ -101,7 +105,8 @@ Expected: FAIL because configuration and middleware are missing.
 
 **Step 4: Verify**
 
-Run: `go test ./internal/config ./internal/httpapi -race`  
+Run: `go test ./internal/config ./internal/httpapi -race`
+
 Expected: PASS and no races.
 
 **Step 5: Commit**
@@ -127,7 +132,8 @@ Test that a temporary database enables `foreign_keys`, `journal_mode=WAL`, and `
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/storage ./internal/httpapi -run 'Test(Open|Migrate|Ready)' -v`  
+Run: `go test ./internal/storage ./internal/httpapi -run 'Test(Open|Migrate|Ready)' -v`
+
 Expected: FAIL because storage is absent.
 
 **Step 3: Implement**
@@ -140,7 +146,8 @@ Expected: FAIL because storage is absent.
 
 **Step 4: Verify**
 
-Run: `go test ./internal/storage ./internal/httpapi -race`  
+Run: `go test ./internal/storage ./internal/httpapi -race`
+
 Expected: PASS.
 
 **Step 5: Commit**
@@ -176,7 +183,8 @@ Cover:
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/auth ./internal/httpapi -run 'Test(Initialize|Login|CSRF|Session)' -v`  
+Run: `go test ./internal/auth ./internal/httpapi -run 'Test(Initialize|Login|CSRF|Session)' -v`
+
 Expected: FAIL.
 
 **Step 3: Implement**
@@ -188,7 +196,8 @@ Expected: FAIL.
 
 **Step 4: Verify**
 
-Run: `go test ./internal/auth ./internal/httpapi -race`  
+Run: `go test ./internal/auth ./internal/httpapi -race`
+
 Expected: PASS.
 
 **Step 5: Commit**
@@ -223,7 +232,8 @@ expect(screen.getByRole('searchbox', { name: '搜索影视' })).toBeVisible()
 
 **Step 2: Verify failure**
 
-Run: `npm --prefix web test -- --run src/app/App.test.tsx`  
+Run: `npm --prefix web test -- --run src/app/App.test.tsx`
+
 Expected: FAIL because the app shell does not exist.
 
 **Step 3: Implement**
@@ -235,9 +245,12 @@ Expected: FAIL because the app shell does not exist.
 
 **Step 4: Verify**
 
-Run: `npm --prefix web run typecheck`  
-Run: `npm --prefix web test -- --run`  
-Run: `npm --prefix web run build`  
+Run: `npm --prefix web run typecheck`
+
+Run: `npm --prefix web test -- --run`
+
+Run: `npm --prefix web run build`
+
 Expected: each command PASS.
 
 **Step 5: Commit**
@@ -267,7 +280,8 @@ Use `httptest.Server` to verify Bearer auth is sent upstream but absent from err
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/integrations/tmdb ./internal/httpapi -v`  
+Run: `go test ./internal/integrations/tmdb ./internal/httpapi -v`
+
 Expected: FAIL.
 
 **Step 3: Implement**
@@ -280,10 +294,12 @@ Expected: FAIL.
 
 **Step 4: Verify**
 
-Run: `go test ./internal/integrations/tmdb ./internal/httpapi -race`  
+Run: `go test ./internal/integrations/tmdb ./internal/httpapi -race`
+
 Expected: PASS.
 
-Run: `gitleaks git --redact --no-banner`  
+Run: `gitleaks git --redact --no-banner`
+
 Expected: no leaks found.
 
 **Step 5: Commit**
@@ -310,7 +326,8 @@ Test local UUID identity, uniqueness of `(source, source_id, media_type)`, merge
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/media -v`  
+Run: `go test ./internal/media -v`
+
 Expected: FAIL.
 
 **Step 3: Implement**
@@ -321,7 +338,8 @@ Expected: FAIL.
 
 **Step 4: Verify**
 
-Run: `go test ./internal/media ./internal/storage -race`  
+Run: `go test ./internal/media ./internal/storage -race`
+
 Expected: PASS.
 
 **Step 5: Commit**
@@ -348,7 +366,8 @@ Cover all five states, rating conversion to `0–100`, private tags/collections,
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/records -run 'Test(State|Rating|Priority|Version)' -v`  
+Run: `go test ./internal/records -run 'Test(State|Rating|Priority|Version)' -v`
+
 Expected: FAIL.
 
 **Step 3: Implement**
@@ -359,7 +378,8 @@ Expected: FAIL.
 
 **Step 4: Verify**
 
-Run: `go test ./internal/records ./internal/httpapi -race`  
+Run: `go test ./internal/records ./internal/httpapi -race`
+
 Expected: PASS.
 
 **Step 5: Commit**
@@ -385,7 +405,8 @@ Test that completed and rewatch create distinct events, wishlist creates none, d
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/records ./internal/httpapi -run 'Test(Event|Idempotency|Rewatch)' -v`  
+Run: `go test ./internal/records ./internal/httpapi -run 'Test(Event|Idempotency|Rewatch)' -v`
+
 Expected: FAIL.
 
 **Step 3: Implement**
@@ -396,7 +417,8 @@ Expected: FAIL.
 
 **Step 4: Verify**
 
-Run: `go test ./internal/records ./internal/httpapi -race`  
+Run: `go test ./internal/records ./internal/httpapi -race`
+
 Expected: PASS.
 
 **Step 5: Commit**
@@ -424,7 +446,8 @@ Cover 300ms debounce, local-first results, media type/year/original title/status
 
 **Step 2: Verify failure**
 
-Run: `npm --prefix web test -- --run src/features`  
+Run: `npm --prefix web test -- --run src/features`
+
 Expected: FAIL.
 
 **Step 3: Implement**
@@ -436,9 +459,12 @@ Expected: FAIL.
 
 **Step 4: Verify**
 
-Run: `npm --prefix web run typecheck`  
-Run: `npm --prefix web test -- --run`  
-Run: `npm --prefix web run build`  
+Run: `npm --prefix web run typecheck`
+
+Run: `npm --prefix web test -- --run`
+
+Run: `npm --prefix web run build`
+
 Expected: each command PASS.
 
 **Step 5: Commit**
@@ -466,10 +492,12 @@ Cover single episode, contiguous range, whole season, next episode, undo, `S02E0
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/records -run TestEpisode -v`  
+Run: `go test ./internal/records -run TestEpisode -v`
+
 Expected: FAIL.
 
-Run: `npm --prefix web test -- --run EpisodeProgress`  
+Run: `npm --prefix web test -- --run EpisodeProgress`
+
 Expected: FAIL.
 
 **Step 3: Implement**
@@ -478,8 +506,10 @@ Add `episode_progress` and batch APIs with one transaction and one idempotency k
 
 **Step 4: Verify**
 
-Run: `go test ./internal/records ./internal/httpapi -race`  
-Run: `npm --prefix web test -- --run EpisodeProgress`  
+Run: `go test ./internal/records ./internal/httpapi -race`
+
+Run: `npm --prefix web test -- --run EpisodeProgress`
+
 Expected: both commands PASS.
 
 **Step 5: Commit**
@@ -506,13 +536,16 @@ Test timezone boundaries, repeated watches on one day, shared participants, desk
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/records -run TestCalendar -v`  
+Run: `go test ./internal/records -run TestCalendar -v`
+
 Expected: FAIL.
 
 **Step 3: Implement and verify**
 
-Run: `go test ./internal/records ./internal/httpapi -race`  
-Run: `npm --prefix web test -- --run Calendar`  
+Run: `go test ./internal/records ./internal/httpapi -race`
+
+Run: `npm --prefix web test -- --run Calendar`
+
 Expected: PASS.
 
 **Step 4: Commit**
@@ -538,13 +571,16 @@ Cover monthly/yearly counts, genres, ratings, duration, tags, viewing methods, r
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/stats -v`  
+Run: `go test ./internal/stats -v`
+
 Expected: FAIL.
 
 **Step 3: Implement and verify**
 
-Run: `go test ./internal/stats ./internal/httpapi -race`  
-Run: `npm --prefix web test -- --run Stats`  
+Run: `go test ./internal/stats ./internal/httpapi -race`
+
+Run: `npm --prefix web test -- --run Stats`
+
 Expected: PASS.
 
 **Step 4: Commit**
@@ -572,13 +608,16 @@ Prove that administrators cannot read private notes, users cannot mutate another
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/household ./internal/httpapi -run TestPolicy -v`  
+Run: `go test ./internal/household ./internal/httpapi -run TestPolicy -v`
+
 Expected: FAIL.
 
 **Step 3: Implement and verify**
 
-Run: `go test ./internal/household ./internal/httpapi -race`  
-Run: `npm --prefix web test -- --run MemberSettings`  
+Run: `go test ./internal/household ./internal/httpapi -race`
+
+Run: `npm --prefix web test -- --run MemberSettings`
+
 Expected: PASS.
 
 **Step 4: Commit**
@@ -604,12 +643,14 @@ Test JSON round-trip equality, CSV formula injection neutralization, size limits
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/records -run 'Test(Import|Export)' -v`  
+Run: `go test ./internal/records -run 'Test(Import|Export)' -v`
+
 Expected: FAIL.
 
 **Step 3: Implement and verify**
 
-Run: `go test ./internal/records ./internal/httpapi -race`  
+Run: `go test ./internal/records ./internal/httpapi -race`
+
 Expected: PASS.
 
 **Step 4: Commit**
@@ -635,7 +676,8 @@ Cover Online Backup consistency during writes, manifest/checksum verification, v
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/storage -run 'Test(Backup|Restore)' -v`  
+Run: `go test ./internal/storage -run 'Test(Backup|Restore)' -v`
+
 Expected: FAIL.
 
 **Step 3: Implement**
@@ -646,7 +688,8 @@ Expected: FAIL.
 
 **Step 4: Verify**
 
-Run: `go test ./internal/storage ./internal/httpapi -race`  
+Run: `go test ./internal/storage ./internal/httpapi -race`
+
 Expected: PASS.
 
 **Step 5: Commit**
@@ -676,7 +719,8 @@ Define one conformance suite for authentication check, paginated history, stable
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/integrations ./internal/sync -v`  
+Run: `go test ./internal/integrations ./internal/sync -v`
+
 Expected: FAIL.
 
 **Step 3: Implement**
@@ -687,7 +731,8 @@ Expected: FAIL.
 
 **Step 4: Verify**
 
-Run: `go test ./internal/integrations ./internal/sync -race`  
+Run: `go test ./internal/integrations ./internal/sync -race`
+
 Expected: PASS.
 
 **Step 5: Commit**
@@ -711,12 +756,14 @@ Use synthetic fixtures for movies, episodes, repeat plays, pagination, deleted u
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/integrations/jellyfin -v`  
+Run: `go test ./internal/integrations/jellyfin -v`
+
 Expected: FAIL.
 
 **Step 3: Implement and verify**
 
-Run: `go test ./internal/integrations/jellyfin ./internal/integrations -race`  
+Run: `go test ./internal/integrations/jellyfin ./internal/integrations -race`
+
 Expected: PASS.
 
 **Step 4: Commit**
@@ -736,7 +783,8 @@ git commit -m "feat: add jellyfin history provider"
 
 Repeat Task 18's redaction, pagination, event-ID, mapping, error-classification, and Provider conformance steps using Emby-specific synthetic responses.
 
-Run: `go test ./internal/integrations/emby ./internal/integrations -race`  
+Run: `go test ./internal/integrations/emby ./internal/integrations -race`
+
 Expected: PASS.
 
 Commit:
@@ -756,7 +804,8 @@ git commit -m "feat: add emby history provider"
 
 Repeat the shared Provider conformance workflow, including Plex XML/JSON parsing boundaries, stable rating keys, pagination, redaction, cancellation, and duplicate event prevention.
 
-Run: `go test ./internal/integrations/plex ./internal/integrations -race`  
+Run: `go test ./internal/integrations/plex ./internal/integrations -race`
+
 Expected: PASS.
 
 Commit:
@@ -783,7 +832,8 @@ Cover exact external ID, TMDB ID, title/year ambiguity, movie/TV mismatch, confl
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/sync -run 'Test(Match|Candidate|Conflict)' -v`  
+Run: `go test ./internal/sync -run 'Test(Match|Candidate|Conflict)' -v`
+
 Expected: FAIL.
 
 **Step 3: Implement**
@@ -794,8 +844,10 @@ Expected: FAIL.
 
 **Step 4: Verify**
 
-Run: `go test ./internal/sync ./internal/httpapi -race`  
-Run: `npm --prefix web test -- --run Sync`  
+Run: `go test ./internal/sync ./internal/httpapi -race`
+
+Run: `npm --prefix web test -- --run Sync`
+
 Expected: PASS.
 
 **Step 5: Commit**
@@ -822,7 +874,8 @@ Validate every registered `/api/v1` route against OpenAPI; assert RFC 9457 media
 
 **Step 2: Verify failure**
 
-Run: `go test ./internal/httpapi -run 'Test(Contract|Security)' -v`  
+Run: `go test ./internal/httpapi -run 'Test(Contract|Security)' -v`
+
 Expected: FAIL until the specification and route behavior agree.
 
 **Step 3: Implement and verify**
@@ -830,9 +883,12 @@ Expected: FAIL until the specification and route behavior agree.
 - Generate TypeScript types with `openapi-typescript`.
 - Add CI check that regenerated output is clean.
 
-Run: `go test ./internal/httpapi -race`  
-Run: `npm --prefix web run api:check`  
-Run: `npm --prefix web run typecheck`  
+Run: `go test ./internal/httpapi -race`
+
+Run: `npm --prefix web run api:check`
+
+Run: `npm --prefix web run typecheck`
+
 Expected: both commands PASS.
 
 **Step 4: Commit**
@@ -861,7 +917,8 @@ Cover the complete approved journeys and run axe after each major page. Capture 
 
 **Step 2: Verify failure**
 
-Run: `npm --prefix web run e2e`  
+Run: `npm --prefix web run e2e`
+
 Expected: FAIL until all routes and test harness hooks exist.
 
 **Step 3: Implement test harness and fix product defects**
@@ -870,7 +927,8 @@ Use seeded synthetic data and mock external services. Never store real credentia
 
 **Step 4: Verify**
 
-Run: `npm --prefix web run e2e`  
+Run: `npm --prefix web run e2e`
+
 Expected: PASS with zero blocking WCAG 2.2 AA findings.
 
 **Step 5: Commit**
@@ -894,8 +952,10 @@ Seed 10,000 media items, 50,000 events, and five users. Fail when local API p95 
 
 **Step 2: Run and record baseline failures**
 
-Run: `./scripts/perf-smoke.sh`  
-Run: `./scripts/recovery-smoke.sh`  
+Run: `./scripts/perf-smoke.sh`
+
+Run: `./scripts/recovery-smoke.sh`
+
 Expected: threshold or missing-harness failures before tuning.
 
 **Step 3: Optimize only measured bottlenecks**
@@ -904,7 +964,8 @@ Add indexes/query changes with regression tests. Do not add Redis or PostgreSQL.
 
 **Step 4: Verify**
 
-Run both scripts three times.  
+Run both scripts three times.
+
 Expected: all thresholds pass and recovery preserves consistent data.
 
 **Step 5: Commit**
@@ -932,7 +993,8 @@ The script must assert: non-root UID, read-only root filesystem, only `/data` wr
 
 **Step 2: Verify failure**
 
-Run: `./scripts/container-smoke.sh local/video-record:test`  
+Run: `./scripts/container-smoke.sh local/video-record:test`
+
 Expected: FAIL because the image is absent.
 
 **Step 3: Implement**
@@ -945,8 +1007,10 @@ Expected: FAIL because the image is absent.
 
 **Step 4: Verify**
 
-Run: `docker build -t local/video-record:test .`  
-Run: `./scripts/container-smoke.sh local/video-record:test`  
+Run: `docker build -t local/video-record:test .`
+
+Run: `./scripts/container-smoke.sh local/video-record:test`
+
 Expected: PASS.
 
 **Step 5: Commit**
@@ -979,8 +1043,9 @@ CI must run Go format/test/race/vet, frontend lint/typecheck/test/build, migrati
 
 **Step 3: Validate workflow syntax locally**
 
-Run: `git diff --check`  
-Run: `./scripts/verify-manifest.sh local-or-test-reference` when a test registry reference is available.  
+Run: `git diff --check`
+
+Run: `./scripts/verify-manifest.sh local-or-test-reference` when a test registry reference is available.
 Expected: workflow parses and manifest verifier rejects single-platform images.
 
 **Step 4: Commit**

@@ -1,9 +1,13 @@
 # video-record 产品与技术设计规范
 
-> 状态：已确认  
-> 日期：2026-07-13  
-> 适用版本：`v1.0.0` 及其实施过程  
-> 仓库：`/Users/subeipo/Documents/code/video-record`  
+> 状态：已确认
+>
+> 日期：2026-07-13
+>
+> 适用版本：`v1.0.0` 及其实施过程
+>
+> 仓库：`/Users/subeipo/Documents/code/video-record`
+>
 > 分支策略：仅使用 `main`
 
 ## 1. 文档约束
