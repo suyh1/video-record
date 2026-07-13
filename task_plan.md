@@ -25,7 +25,7 @@
 - [x] Task 5：前端基础与设计令牌
 - [x] Task 6：TMDB 客户端、归属说明与安全缓存
 - [x] Task 7：本地影视目录与外部身份
-- [ ] Task 8：个人状态、评分、标签与片单
+- [x] Task 8：个人状态、评分、标签与片单
 - [ ] Task 9-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 
 ## 已确认约束
@@ -57,3 +57,5 @@
 | Task 5 首次 typecheck/build 缺少 CSS 与 Vitest 配置类型 | 1 | `types` 显式列表排除了 `vite/client`，且 `defineConfig` 来源错误；分别补入 Vite 客户端类型并改用 `vitest/config` 后逐项复验 |
 | Task 6 格式化命令误把 SQL 传给 `gofmt` | 1 | 实现测试已通过；改为只格式化 `internal/integrations/tmdb/*.go`，SQL 由迁移测试和补丁检查验证 |
 | Task 6 首次 `go run` gitleaks 使用了仓库路径而非声明模块路径 | 1 | v8.30.1 的 module 仍声明为 `github.com/zricethezav/gitleaks/v8`；核对该路径版本后用声明路径重跑扫描 |
+| Task 8 片单跨用户增项被错误当作幂等成功 | 1 | 重复检查看到了所有者已有条目；改为事务入口先按 `collection_id + user_id` 验证所有权，再执行位置与插入逻辑 |
+| Task 8 初次领域覆盖率仅 75.4% | 1 | 补齐显式 null、字段省略、无操作版本、输入校验和私有片单回归测试后达到 85.5% |

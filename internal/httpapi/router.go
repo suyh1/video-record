@@ -9,6 +9,7 @@ import (
 	"video-record/internal/auth"
 	"video-record/internal/integrations/tmdb"
 	"video-record/internal/media"
+	"video-record/internal/records"
 	"video-record/internal/storage"
 )
 
@@ -19,6 +20,7 @@ type Dependencies struct {
 	CookieSecure bool
 	TMDB         *tmdb.Client
 	Media        *media.Service
+	Records      *records.Service
 }
 
 func NewRouter(dependencies Dependencies) http.Handler {
@@ -38,6 +40,22 @@ func NewRouter(dependencies Dependencies) http.Handler {
 				protected.Use(Authenticate(dependencies.Auth))
 				protected.Get("/auth/me", handlers.me)
 				protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post("/auth/logout", handlers.logout)
+				if dependencies.Records != nil {
+					recordAPI := recordHandlers{service: dependencies.Records}
+					protected.Get("/collections", recordAPI.collections)
+					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Put(
+						"/records/{mediaID}", recordAPI.updateState,
+					)
+					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Put(
+						"/records/{mediaID}/tags", recordAPI.setTags,
+					)
+					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post(
+						"/collections", recordAPI.createCollection,
+					)
+					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post(
+						"/collections/{collectionID}/items", recordAPI.addCollectionItem,
+					)
+				}
 				if dependencies.TMDB != nil {
 					tmdbAPI := tmdbHandlers{client: dependencies.TMDB}
 					protected.Get("/tmdb/status", tmdbAPI.status)

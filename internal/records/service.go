@@ -1,0 +1,157 @@
+package records
+
+import (
+	"context"
+	"errors"
+	"strings"
+)
+
+var (
+	ErrCollectionNotFound = errors.New("collection not found")
+	ErrInvalidRecord      = errors.New("invalid record")
+	ErrVersionConflict    = errors.New("record version conflict")
+)
+
+type State struct {
+	UserID       string
+	MediaID      string
+	Status       Status
+	Rating       *int
+	Note         *string
+	Version      int
+	StatusSource Source
+	RatingSource Source
+	NoteSource   Source
+}
+
+type UpdateStateInput struct {
+	UserID          string
+	MediaID         string
+	Status          Status
+	Rating          *int
+	RatingSet       bool
+	Note            *string
+	NoteSet         bool
+	Source          Source
+	ExpectedVersion int
+}
+
+type Collection struct {
+	ID     string
+	UserID string
+	Name   string
+	Items  []string
+}
+
+type Service struct {
+	repository Repository
+}
+
+func NewService(repository Repository) *Service {
+	return &Service{repository: repository}
+}
+
+func (service *Service) UpdateState(ctx context.Context, input UpdateStateInput) (State, error) {
+	if input.UserID == "" || input.MediaID == "" || ValidateStatus(input.Status) != nil || sourcePriority(input.Source) == 0 {
+		return State{}, ErrInvalidRecord
+	}
+	ratingProvided := input.RatingSet || input.Rating != nil
+	noteProvided := input.NoteSet || input.Note != nil
+	if ratingProvided && input.Rating != nil && (*input.Rating < 0 || *input.Rating > 100) {
+		return State{}, ErrInvalidRating
+	}
+	current, exists, err := service.repository.FindState(ctx, input.UserID, input.MediaID)
+	if err != nil {
+		return State{}, err
+	}
+	if input.ExpectedVersion != current.Version {
+		return current, ErrVersionConflict
+	}
+
+	next := current
+	changed := false
+	if !exists || CanOverwrite(input.Source, current.StatusSource) {
+		changed = changed || next.Status != input.Status || next.StatusSource != input.Source
+		next.Status, next.StatusSource = input.Status, input.Source
+	}
+	if ratingProvided && (!exists || CanOverwrite(input.Source, current.RatingSource)) {
+		changed = changed || !equalIntPointers(next.Rating, input.Rating) || next.RatingSource != input.Source
+		next.Rating = cloneIntPointer(input.Rating)
+		next.RatingSource = input.Source
+	}
+	if noteProvided && (!exists || CanOverwrite(input.Source, current.NoteSource)) {
+		changed = changed || !equalStringPointers(next.Note, input.Note) || next.NoteSource != input.Source
+		next.Note = cloneStringPointer(input.Note)
+		next.NoteSource = input.Source
+	}
+	if !changed {
+		return current, nil
+	}
+	next.UserID, next.MediaID = input.UserID, input.MediaID
+	next.Version = current.Version + 1
+	if !exists {
+		if err := service.repository.InsertState(ctx, next); err != nil {
+			return State{}, err
+		}
+		return next, nil
+	}
+	updated, err := service.repository.UpdateState(ctx, next, current.Version)
+	if err != nil {
+		return State{}, err
+	}
+	if !updated {
+		return current, ErrVersionConflict
+	}
+	return next, nil
+}
+
+func (service *Service) SetTags(ctx context.Context, userID, mediaID string, names []string) error {
+	if userID == "" || mediaID == "" {
+		return ErrInvalidRecord
+	}
+	return service.repository.SetTags(ctx, userID, mediaID, names)
+}
+
+func (service *Service) Tags(ctx context.Context, userID, mediaID string) ([]string, error) {
+	return service.repository.Tags(ctx, userID, mediaID)
+}
+
+func (service *Service) CreateCollection(ctx context.Context, userID, name string) (Collection, error) {
+	name = strings.TrimSpace(name)
+	if userID == "" || name == "" {
+		return Collection{}, ErrInvalidRecord
+	}
+	return service.repository.CreateCollection(ctx, userID, name)
+}
+
+func (service *Service) AddCollectionItem(ctx context.Context, userID, collectionID, mediaID string) error {
+	return service.repository.AddCollectionItem(ctx, userID, collectionID, mediaID)
+}
+
+func (service *Service) Collections(ctx context.Context, userID string) ([]Collection, error) {
+	return service.repository.Collections(ctx, userID)
+}
+
+func equalIntPointers(left, right *int) bool {
+	return left == nil && right == nil || left != nil && right != nil && *left == *right
+}
+
+func equalStringPointers(left, right *string) bool {
+	return left == nil && right == nil || left != nil && right != nil && *left == *right
+}
+
+func cloneIntPointer(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func cloneStringPointer(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}

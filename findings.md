@@ -42,6 +42,12 @@
 - 自定义条目关联 TMDB 与身份冲突检查在单写事务内完成；同一外部身份已属于其他条目时返回稳定冲突，不修改任何一方。
 - `0004_media.sql` 同时建立季、集、类型与演职员规范化快照表，为 Task 11 的剧集进度和后续统计保留稳定本地外键。
 - 媒体写 API 不接受客户端提交的外部快照，而是根据 TMDB 类型/ID 由服务端重新获取并转换，防止伪造可信元数据。
+- Task 8 将个人状态限制为 `none/wishlist/watching/completed/dropped`，评分统一保存为 `0-100` 整数，状态、评分和笔记分别记录来源优先级。
+- 个人状态使用单调递增版本和 `If-Match`/`ETag`；过期版本返回稳定的 `version_conflict` Problem Details，并附当前 ETag。
+- 评分和笔记区分“请求中省略”与“显式 null”：省略时保留原值，显式 null 时清空并递增版本。
+- 标签、片单和片单条目始终从认证会话取得用户 ID；片单增项先验证 `collection_id + user_id` 所有权，跨用户访问表现为不存在。
+- 片单 HTTP 响应使用专用 camelCase DTO，且不返回领域结构中的 `UserID`。
+- `internal/records` 任务级语句覆盖率为 85.5%，达到关键领域包基线。
 
 ## `invoice-manage` 工程参照
 

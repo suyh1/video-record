@@ -118,3 +118,16 @@
 - 服务启动已装配 SQLite 认证仓储，未开放自行注册入口。
 - 定向验证 `go test ./internal/auth ./internal/httpapi -race` 通过。
 - 完整验证 `go test ./... -race -count=1`、`go vet ./...`、`git diff --check` 与通用 JWT 形态扫描通过。
+
+### Task 8：个人状态、评分、标签与片单
+
+- 已先写五态、十分制到 `0-100` 整数、字段来源优先级、乐观版本、私人标签和私人片单领域测试，并在实现前取得缺失类型/行为红灯。
+- 已添加 `0005_user_records.sql`，包含个人状态、私有标签关联、私有片单和有序片单条目；所有关系使用本地用户和影视 UUID。
+- 已实现状态、评分和笔记的逐字段来源优先级；低优先级输入不能覆盖手工值，相同输入不无意义递增版本。
+- 片单跨用户增项测试最初暴露重复项检查绕过所有权的问题；根因是先检查了条目而非片单所有者，现已在事务入口按当前用户验证所有权。
+- HTTP 红灯最初因记录依赖缺失无法编译；只补依赖边界后确认路由返回 `404`，再实现会话用户隔离、CSRF、`If-Match`/`ETag` 和稳定冲突响应。
+- 新增显式 null 回归测试并观察版本未递增的失败，再实现评分/笔记“省略保留、null 清空”的契约。
+- 新增片单响应契约测试并观察大写领域字段泄露的失败，再改为不含用户 ID 的 camelCase DTO。
+- `internal/records` 覆盖率从 75.4% 提升到 85.5%，覆盖 nullable 更新、字段省略、无操作版本、输入校验和所有权边界。
+- 定向验证 `go test ./internal/records ./internal/httpapi -race -count=1` 通过。
+- 完整验证 `go test ./... -race -count=1`、`go vet ./...`、前端 typecheck/test/build、`npm audit` 与 `git diff --check` 通过。
