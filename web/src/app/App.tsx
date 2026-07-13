@@ -13,6 +13,8 @@ import {
 import { type FormEvent, useRef } from 'react'
 import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom'
 
+import { TmdbAttribution } from '../features/settings/TmdbStatus'
+
 type NavigationItem = {
   label: string
   path: string
@@ -89,7 +91,7 @@ function ApplicationShell() {
             <Route path="/library" element={<PlaceholderPage title="影库" />} />
             <Route path="/calendar" element={<PlaceholderPage title="日历" />} />
             <Route path="/stats" element={<PlaceholderPage title="统计" />} />
-            <Route path="/settings" element={<PlaceholderPage title="设置" />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>
       </div>
@@ -200,6 +202,21 @@ function PlaceholderPage({ title }: { title: string }) {
         <p className="page-kicker">video-record</p>
         <h1>{title}</h1>
       </header>
+    </div>
+  )
+}
+
+function SettingsPage() {
+  return (
+    <div className="page">
+      <header className="page-heading">
+        <p className="page-kicker">video-record</p>
+        <h1>设置</h1>
+      </header>
+      <section className="integration-status" aria-labelledby="metadata-heading">
+        <h2 id="metadata-heading">元数据</h2>
+        <TmdbAttribution />
+      </section>
     </div>
   )
 }

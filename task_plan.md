@@ -23,8 +23,9 @@
 - [x] Task 3：SQLite 连接与嵌入式迁移
 - [x] Task 4：用户、密码、会话与封闭初始化
 - [x] Task 5：前端基础与设计令牌
-- [ ] Task 6：TMDB 客户端、归属说明与安全缓存
-- [ ] Task 7-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
+- [x] Task 6：TMDB 客户端、归属说明与安全缓存
+- [ ] Task 7：本地影视目录与外部身份
+- [ ] Task 8-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 
 ## 已确认约束
 
@@ -53,3 +54,5 @@
 | Task 1 健康测试被缺失的 Testify 及传递依赖 `go.sum` 条目阻断 | 2 | 顶层模块下载不足，改用 `go get -t video-record/internal/httpapi` 解析完整测试依赖图，再重跑以取得有效红灯 |
 | Task 5 首次 npm 安装发生 Vite peer dependency 冲突 | 1 | `@vitejs/plugin-react 6.0.3` 仅支持 Vite 8；固定为明确支持 Vite 7 的 `5.2.0` 后重跑原安装命令 |
 | Task 5 首次 typecheck/build 缺少 CSS 与 Vitest 配置类型 | 1 | `types` 显式列表排除了 `vite/client`，且 `defineConfig` 来源错误；分别补入 Vite 客户端类型并改用 `vitest/config` 后逐项复验 |
+| Task 6 格式化命令误把 SQL 传给 `gofmt` | 1 | 实现测试已通过；改为只格式化 `internal/integrations/tmdb/*.go`，SQL 由迁移测试和补丁检查验证 |
+| Task 6 首次 `go run` gitleaks 使用了仓库路径而非声明模块路径 | 1 | v8.30.1 的 module 仍声明为 `github.com/zricethezav/gitleaks/v8`；核对该路径版本后用声明路径重跑扫描 |

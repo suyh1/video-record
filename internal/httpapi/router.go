@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"video-record/internal/auth"
+	"video-record/internal/integrations/tmdb"
 	"video-record/internal/storage"
 )
 
@@ -15,6 +16,7 @@ type Dependencies struct {
 	Storage      *storage.DB
 	Auth         *auth.Service
 	CookieSecure bool
+	TMDB         *tmdb.Client
 }
 
 func NewRouter(dependencies Dependencies) http.Handler {
@@ -34,6 +36,15 @@ func NewRouter(dependencies Dependencies) http.Handler {
 				protected.Use(Authenticate(dependencies.Auth))
 				protected.Get("/auth/me", handlers.me)
 				protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post("/auth/logout", handlers.logout)
+				if dependencies.TMDB != nil {
+					tmdbAPI := tmdbHandlers{client: dependencies.TMDB}
+					protected.Get("/tmdb/status", tmdbAPI.status)
+					protected.Get("/tmdb/search", tmdbAPI.search)
+					protected.Get("/tmdb/movie/{id}", tmdbAPI.movie)
+					protected.Get("/tmdb/tv/{id}", tmdbAPI.tv)
+					protected.Get("/tmdb/tv/{id}/season/{season}", tmdbAPI.season)
+					protected.Get("/tmdb/tv/{id}/season/{season}/episode/{episode}", tmdbAPI.episode)
+				}
 			})
 		})
 	}

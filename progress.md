@@ -84,6 +84,19 @@
 - 定向测试 `npm --prefix web test -- --run src/app/App.test.tsx` 已按红绿顺序通过。
 - 完整验证前端 typecheck/test/build、npm audit、全仓 Go race/vet、`git diff --check`、OKLCH 色值检查与凭据扫描全部通过。
 
+### Task 6：TMDB 客户端、归属说明与安全缓存
+
+- 已先写伪上游适配器测试，覆盖 Bearer 认证、日志/错误脱敏、搜索 6 小时 TTL、详情 7 天 TTL、电影/剧集/季/集、429 Retry-After 和可缩短验证的默认 8 秒超时。
+- 已添加 `0003_tmdb_cache.sql`、SHA-256 缓存键和类型化缓存；缓存先于令牌检查，过期条目删除后再请求上游。
+- 安全审阅发现成功响应原始 JSON 可能携带未知敏感字段；已先写失败回归测试，再改为只缓存重新编码的类型化 DTO。
+- 已先写 HTTP 合约测试，再实现会话保护的状态、搜索、电影、剧集、季、集端点和 camelCase DTO；上游正文不进入响应。
+- 已先写 `TmdbStatus` 和 Settings 归属声明测试，再实现图标+文字状态、服务端环境变量说明与官方归属外链。
+- 生产启动已从 `TMDB_READ_ACCESS_TOKEN` 配置创建客户端，并复用脱敏 logger 与 SQLite 缓存；路由层不接触令牌字符串。
+- 定向 race 测试 `go test ./internal/integrations/tmdb ./internal/httpapi -race -count=1` 通过；全部 2 个前端测试文件、4 个测试通过。
+- 全仓 Go race/vet、前端 typecheck/test/build、npm audit、补丁和凭据扫描全部通过。
+- gitleaks `v8.30.1` 扫描 8 个提交、约 329.56 KB，结果为 `no leaks found`。
+- 浏览器实测 Settings 归属声明可见、无横向溢出、无控制台警告或错误。
+
 ### Task 4：用户、密码、会话与封闭初始化
 
 - 已先写 Argon2id 格式、正确/错误密码和畸形哈希测试，再实现固定参数、随机 salt 与常量时间验证。
