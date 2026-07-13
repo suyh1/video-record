@@ -15,7 +15,8 @@ import (
 )
 
 type recordHandlers struct {
-	service *records.Service
+	service     *records.Service
+	idempotency *idempotencyMiddleware
 }
 
 type updateRecordRequest struct {
@@ -261,15 +262,23 @@ func (handlers recordHandlers) setTags(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
 		return
 	}
+	expectedVersion, ok := parseIfMatch(w, r)
+	if !ok {
+		return
+	}
 	var request tagsRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_request")
 		return
 	}
-	if err := handlers.service.SetTags(r.Context(), identity.User.ID, chi.URLParam(r, "mediaID"), request.Tags); err != nil {
-		writeRecordError(w, r, err, 0)
+	state, err := handlers.service.SetTagsVersioned(
+		r.Context(), identity.User.ID, chi.URLParam(r, "mediaID"), request.Tags, expectedVersion,
+	)
+	if err != nil {
+		writeRecordError(w, r, err, state.Version)
 		return
 	}
+	w.Header().Set("ETag", quotedVersion(state.Version))
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -39,7 +39,7 @@
 
 ## 当前状态
 
-设计与实施计划均已完成，正在 `main` 按实施计划执行；Task 21 已完成，下一步从 Task 22 继续。
+设计与实施计划均已完成，正在 `main` 按实施计划执行；Task 22 已完成，下一步从 Task 23 继续。
 
 ## 实施记录
 
@@ -292,3 +292,16 @@
 - 真实 Go+Vite+SQLite 合成环境在 `1440x900`、`768x1024`、`375x812` 验证无横向溢出；自定义表单焦点正确，四种写入均使待核对数量递减，控制台无 warning/error，临时登录页、种子、数据库和服务已清理。
 - 最终全仓 `go test ./... -race -count=1`、`go vet ./...`、`internal/sync` 85.1% 覆盖率、前端 14 文件 29 测试/typecheck/build、npm 高危审计、`git diff --check` 与工作树/23 提交 gitleaks 均通过。
 - 未创建 `.tmdb-token`，未使用真实 TMDB 或媒体服务器凭据；浏览器与测试全部使用明确合成值。
+
+### Task 22：OpenAPI 合约与完整 HTTP 安全测试
+
+- 已先写路由/契约与安全红测，覆盖全部 `/api/v1` 操作、RFC 9457、404/405、游标、ETag、幂等重放/冲突/并发、CSRF、会话撤销、对象级授权和日志脱敏，再补齐实现。
+- `api/openapi.yaml` 现在提供 46 个具体 operation、请求/响应 schema、查询参数、真实文件媒体类型、ETag、`Idempotency-Key` 与 `X-CSRF-Token`；生成的 TypeScript 不再包含空 operations 或 `unknown` 占位。
+- 所有受保护写操作统一要求幂等键；SQLite 原子 reservation 在副作用前占位，相同用户/方法/路径/键的并发竞争只允许一个执行，未完成请求返回稳定 `idempotency_in_progress`。
+- 幂等缓存保存原始 request ID、状态、header 和非 null 空响应体；重放 Problem Details 保持最初 request ID，恢复数据库替换后使用新连接完成幂等提交。
+- 合法 10 MiB 导入绕过通用 1 MiB 请求缓存，在 handler 内流式计算文件名与内容哈希；备份恢复继续使用归档内容哈希，不缓存完整上传。
+- 标签更新纳入 `If-Match` 乐观并发控制：事务内校验版本、写入标签、递增 record version 并返回新 ETag，陈旧写入返回 `412 version_conflict`。
+- 前端记录更新与 TMDB 创建请求均发送随机幂等键；API 生成检查会在 OpenAPI 与提交的 `generated.ts` 不一致时失败。
+- 二次代码审查确认没有剩余 Critical/Important 问题；调度器 race 测试的偶发 1 秒等待超时经定向 race 连续 20 次排除数据竞争后调整为 3 秒。
+- 最终全仓 `go test ./... -race -count=1`、`go vet ./...`、`internal/records` 85.0% 覆盖率、前端 15 文件 30 测试/typecheck/API check/build、npm 高危审计、`git diff --check` 与工作树/历史 gitleaks 均通过。
+- 未创建 `.tmdb-token`，未使用真实 TMDB 或媒体服务器凭据；OpenAPI、测试和生成代码均不包含令牌值。

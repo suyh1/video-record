@@ -26,6 +26,7 @@ type Repository interface {
 	Episodes(context.Context, string, string) (SeriesProgress, error)
 	ApplyEpisodeProgress(context.Context, EpisodeProgressInput, []string, bool) (bool, error)
 	SetTags(context.Context, string, string, []string) error
+	SetTagsVersioned(context.Context, string, string, []string, int) (bool, error)
 	Tags(context.Context, string, string) ([]string, error)
 	CreateCollection(context.Context, string, string) (Collection, error)
 	AddCollectionItem(context.Context, string, string, string) error
@@ -383,6 +384,45 @@ func (repository *SQLiteRepository) SetTags(ctx context.Context, userID, mediaID
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := setTags(ctx, tx, userID, mediaID, names); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (repository *SQLiteRepository) SetTagsVersioned(
+	ctx context.Context,
+	userID, mediaID string,
+	names []string,
+	expectedVersion int,
+) (bool, error) {
+	tx, err := repository.db.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, `
+		UPDATE user_media_states
+		SET version = version + 1, updated_at = strftime('%s', 'now') * 1000
+		WHERE user_id = ? AND media_id = ? AND version = ?
+	`, userID, mediaID, expectedVersion)
+	if err != nil {
+		return false, err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil || updated != 1 {
+		return false, err
+	}
+	if err := setTags(ctx, tx, userID, mediaID, names); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func setTags(ctx context.Context, tx *sql.Tx, userID, mediaID string, names []string) error {
 	if _, err := tx.ExecContext(ctx, "DELETE FROM user_media_tags WHERE user_id = ? AND media_id = ?", userID, mediaID); err != nil {
 		return err
 	}
@@ -412,7 +452,7 @@ func (repository *SQLiteRepository) SetTags(ctx context.Context, userID, mediaID
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 func (repository *SQLiteRepository) Tags(ctx context.Context, userID, mediaID string) ([]string, error) {

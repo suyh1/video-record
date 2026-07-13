@@ -28,6 +28,7 @@ describe('QuickRecordForm', () => {
         attempts += 1
         expect(request.headers.get('If-Match')).toBe(attempts === 1 ? '"0"' : '"1"')
         expect(request.headers.get('X-CSRF-Token')).toBe('csrf-test-token')
+        expect(request.headers.get('Idempotency-Key')).toBeTruthy()
         requestBodies.push(await request.json())
         return HttpResponse.json(
           attempts === 1 ? { ...initialRecord, status: 'wishlist', version: 1 } : { ...initialRecord, version: 2 },

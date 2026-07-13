@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "api:generate": "npx --yes --package openapi-typescript@7.13.0 openapi-typescript ../api/openapi.yaml -o src/api/generated.ts",
+    "api:check": "node scripts/check-generated-api.mjs",
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",

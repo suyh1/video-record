@@ -14,7 +14,7 @@ func TestImportExportHandlersUseSafeDownloadsAndProtectedStreamingUploads(t *tes
 	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
 	headers := map[string]string{
 		"Cookie": cookie.String(), "Origin": "http://example.test",
-		"X-CSRF-Token": csrfToken, "If-Match": `"0"`,
+		"X-CSRF-Token": csrfToken, "Idempotency-Key": "prepare-export-record", "If-Match": `"0"`,
 	}
 	updated := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID, map[string]any{
 		"status": "wishlist", "note": "portable note",
@@ -34,6 +34,9 @@ func TestImportExportHandlersUseSafeDownloadsAndProtectedStreamingUploads(t *tes
 	require.Equal(t, http.StatusOK, imported.Code)
 	require.Contains(t, imported.Body.String(), `"importedRecords":1`)
 	require.Contains(t, imported.Body.String(), `"failures":[]`)
+	largeValidDocument := append(append([]byte(nil), exported.Body.Bytes()...), bytes.Repeat([]byte(" "), 2<<20)...)
+	largeImport := performMultipartImport(t, router, cookie, csrfToken, "records.json", largeValidDocument, "import-large")
+	require.Equal(t, http.StatusOK, largeImport.Code, largeImport.Body.String())
 
 	invalid := performMultipartImport(t, router, cookie, csrfToken, "records.json", []byte(`{"version":99}`), "import-2")
 	require.Equal(t, http.StatusBadRequest, invalid.Code)

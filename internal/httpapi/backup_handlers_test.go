@@ -74,6 +74,10 @@ func TestBackupHandlersRequireAdminAndRestoreUploadedSnapshot(t *testing.T) {
 		SELECT COUNT(*) FROM audit_events WHERE action = 'backup.restore'
 	`).Scan(&auditCount))
 	require.Equal(t, 1, auditCount)
+	replayedRestore := performMultipartRestore(t, router, cookie, csrfToken, artifact.Filename, downloaded.Body.Bytes())
+	require.Equal(t, http.StatusOK, replayedRestore.Code)
+	require.Equal(t, "true", replayedRestore.Header().Get("Idempotency-Replayed"))
+	require.Equal(t, restored.Body.String(), replayedRestore.Body.String())
 
 	require.NoError(t, db.BeginMaintenance(ctx))
 	maintenance := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/backups", nil, map[string]string{

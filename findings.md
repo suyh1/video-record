@@ -388,3 +388,14 @@
 - 设置页只显示紧凑账户状态与待核对入口，`/settings/sync` 使用非卡片列表展示图标+文字状态、匹配证据、单选候选和内联自定义表单；网络错误保留选择/输入，自定义展开后焦点进入标题。
 - 浏览器发现同名同年候选的两个 radio 名称相同；修复后标签始终含候选序号，并在规范化原名与显示标题不同时展示原名，读屏与键盘用户可区分。
 - `internal/sync` 最终语句覆盖率为 85.1%；真实浏览器在 `1440x900`、`768x1024`、`375x812` 无横向溢出，四种候选写入可用，控制台无 warning/error。
+
+## Task 22：OpenAPI 合约与完整 HTTP 安全测试
+
+- 路由与 OpenAPI 的可靠一致性检查需要比较已注册 method/path 集合，并强制每个 operation 有唯一 `operationId`、具体 schema 和实际响应媒体类型；仅检查 YAML 可解析不足以防止契约漂移。
+- 写操作幂等不能采用“先查询、执行副作用、再插入”模式；两个并发请求会同时越过查询。SQLite 唯一键必须在副作用前原子预留，并明确区分 pending、completed、payload mismatch 和过期记录。
+- 幂等重放的 Problem Details 必须保留第一次请求的 request ID，否则缓存正文与响应头会互相矛盾；空 `204` 响应也要保存非 null 空 BLOB，避免被误判为未完成。
+- 恢复端点会原子替换数据库，因而不能在旧连接上完成通用幂等记录；恢复成功后的 finalize 必须显式使用重开的数据库，同时失败路径仍按普通 reservation 释放或缓存。
+- 大文件上传不能套用通用 1 MiB 请求体缓存。导入可在 multipart handler 内按文件名和流式内容生成稳定哈希，恢复则按归档内容生成哈希，两者都保持原有大小和安全校验。
+- 标签属于可编辑记录聚合的一部分；只给状态更新做 ETag 会留下丢失更新窗口。标签修改必须校验同一个 record version 并在事务中递增版本。
+- API 文档中的 CSRF 不能只依赖全局文字说明；每个受保护写 operation 都需要显式 `X-CSRF-Token` header 参数，文件上传还必须声明真实 multipart 与下载 media type。
+- 应用级 404/405 也属于 API 合约，应返回 `application/problem+json` 与稳定 code/requestId，而不是路由器默认纯文本。

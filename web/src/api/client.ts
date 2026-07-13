@@ -93,6 +93,7 @@ export async function updateRecord(mediaID: string, version: number, payload: Up
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
+      'Idempotency-Key': createIdempotencyKey(),
       'If-Match': `"${version}"`,
       'X-CSRF-Token': csrfToken,
     },
@@ -260,7 +261,10 @@ export async function createMediaFromTMDB(item: MediaSearchResult): Promise<Medi
   const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
   return requestJSON<MediaDetails>(`/api/v1/media/tmdb/${item.mediaType}/${item.externalId}`, {
     method: 'POST',
-    headers: { 'X-CSRF-Token': csrfToken },
+    headers: {
+      'Idempotency-Key': createIdempotencyKey(),
+      'X-CSRF-Token': csrfToken,
+    },
   })
 }
 

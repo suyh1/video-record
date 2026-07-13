@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
@@ -40,6 +42,14 @@ func (handlers recordHandlers) importData(w http.ResponseWriter, r *http.Request
 		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
 		return
 	}
+	if handlers.idempotency == nil {
+		writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
+		return
+	}
+	if _, ok := idempotencyKey(r); !ok {
+		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_idempotency_key")
+		return
+	}
 	reader, err := r.MultipartReader()
 	if err != nil {
 		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_import")
@@ -73,7 +83,22 @@ func (handlers recordHandlers) importData(w http.ResponseWriter, r *http.Request
 		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_import")
 		return
 	}
-	report, err := handlers.service.ImportData(r.Context(), identity.User.ID, filename, data)
+	hash := sha256.New()
+	_, _ = hash.Write([]byte(filename))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write(data)
+	handlers.idempotency.handleHash(w, r, hex.EncodeToString(hash.Sum(nil)), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlers.importDataBytes(w, r, identity.User.ID, filename, data)
+	}))
+}
+
+func (handlers recordHandlers) importDataBytes(
+	w http.ResponseWriter,
+	r *http.Request,
+	userID, filename string,
+	data []byte,
+) {
+	report, err := handlers.service.ImportData(r.Context(), userID, filename, data)
 	if err != nil {
 		switch {
 		case errors.Is(err, records.ErrImportTooLarge):

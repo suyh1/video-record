@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"video-record/internal/storage"
@@ -24,7 +23,6 @@ const (
 type idempotencyMiddleware struct {
 	db  *storage.DB
 	now func() time.Time
-	mu  sync.Mutex
 }
 
 type storedHTTPResponse struct {
@@ -34,6 +32,7 @@ type storedHTTPResponse struct {
 	Status      int
 	ContentType string
 	ETag        string
+	RequestID   string
 	Body        []byte
 }
 
@@ -90,16 +89,30 @@ func (middleware *idempotencyMiddleware) handleHashWithPersistence(
 		return
 	}
 
-	middleware.mu.Lock()
-	defer middleware.mu.Unlock()
 	stored, found, err := middleware.find(r.Context(), identity.User.ID, key)
 	if err != nil {
 		writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
 		return
 	}
+	if !found {
+		err = middleware.reserve(
+			r.Context(), identity.User.ID, key, r.Method, r.URL.Path, requestHash, RequestIDFromContext(r.Context()),
+		)
+		if err != nil {
+			stored, found, err = middleware.find(r.Context(), identity.User.ID, key)
+			if err != nil || !found {
+				writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
+				return
+			}
+		}
+	}
 	if found {
 		if stored.Method != r.Method || stored.Path != r.URL.Path || stored.RequestHash != requestHash {
 			writeProblem(w, r, http.StatusConflict, "Conflict", "idempotency_key_conflict")
+			return
+		}
+		if stored.Status == 0 {
+			writeProblem(w, r, http.StatusConflict, "Conflict", "idempotency_in_progress")
 			return
 		}
 		writeStoredResponse(w, stored, true)
@@ -108,14 +121,20 @@ func (middleware *idempotencyMiddleware) handleHashWithPersistence(
 
 	capture := newCapturedResponse()
 	next.ServeHTTP(capture, r)
-	response := capture.stored(r.Method, r.URL.Path, requestHash)
+	response := capture.stored(r.Method, r.URL.Path, requestHash, RequestIDFromContext(r.Context()))
 	if response.Status < http.StatusInternalServerError {
-		if err := middleware.save(r.Context(), identity.User.ID, key, response); err != nil {
+		err := middleware.complete(r.Context(), identity.User.ID, key, response)
+		if err != nil && !persistenceRequired {
+			err = middleware.upsertCompleted(r.Context(), identity.User.ID, key, response)
+		}
+		if err != nil {
 			if persistenceRequired {
 				writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
 				return
 			}
 		}
+	} else {
+		_ = middleware.release(r.Context(), identity.User.ID, key, response)
 	}
 	copyHeader(w.Header(), capture.header)
 	w.WriteHeader(response.Status)
@@ -137,11 +156,11 @@ func (middleware *idempotencyMiddleware) find(
 	}
 	var response storedHTTPResponse
 	err := middleware.db.Reader().QueryRowContext(ctx, `
-		SELECT method, path, request_hash, status_code, content_type, etag, response_body
+		SELECT method, path, request_hash, status_code, content_type, etag, request_id, response_body
 		FROM idempotency_keys WHERE user_id = ? AND key = ?
 	`, userID, key).Scan(
 		&response.Method, &response.Path, &response.RequestHash, &response.Status,
-		&response.ContentType, &response.ETag, &response.Body,
+		&response.ContentType, &response.ETag, &response.RequestID, &response.Body,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return storedHTTPResponse{}, false, nil
@@ -149,19 +168,92 @@ func (middleware *idempotencyMiddleware) find(
 	return response, err == nil, err
 }
 
-func (middleware *idempotencyMiddleware) save(
+func (middleware *idempotencyMiddleware) reserve(
 	ctx context.Context,
-	userID, key string,
-	response storedHTTPResponse,
+	userID, key, method, path, requestHash, requestID string,
 ) error {
 	now := middleware.now().UTC()
 	_, err := middleware.db.Writer().ExecContext(ctx, `
 		INSERT INTO idempotency_keys (
 			user_id, key, method, path, request_hash, status_code,
-			content_type, etag, response_body, created_at, expires_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			content_type, etag, request_id, response_body, created_at, expires_at
+		) VALUES (?, ?, ?, ?, ?, 0, '', '', ?, ?, ?, ?)
+	`, userID, key, method, path, requestHash, requestID, []byte{}, now.UnixMilli(), now.Add(idempotencyTTL).UnixMilli())
+	return err
+}
+
+func (middleware *idempotencyMiddleware) complete(
+	ctx context.Context,
+	userID, key string,
+	response storedHTTPResponse,
+) error {
+	result, err := middleware.db.Writer().ExecContext(ctx, `
+		UPDATE idempotency_keys SET
+			status_code = ?, content_type = ?, etag = ?, response_body = ?
+		WHERE user_id = ? AND key = ? AND method = ? AND path = ?
+		  AND request_hash = ? AND status_code = 0
+	`, response.Status, response.ContentType, response.ETag, response.Body,
+		userID, key, response.Method, response.Path, response.RequestHash)
+	if err != nil {
+		return err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if updated != 1 {
+		return errors.New("idempotency reservation was not completed")
+	}
+	return nil
+}
+
+func (middleware *idempotencyMiddleware) upsertCompleted(
+	ctx context.Context,
+	userID, key string,
+	response storedHTTPResponse,
+) error {
+	now := middleware.now().UTC()
+	result, err := middleware.db.Writer().ExecContext(ctx, `
+		INSERT INTO idempotency_keys (
+			user_id, key, method, path, request_hash, status_code,
+			content_type, etag, request_id, response_body, created_at, expires_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(user_id, key) DO UPDATE SET
+			status_code = excluded.status_code,
+			content_type = excluded.content_type,
+			etag = excluded.etag,
+			request_id = excluded.request_id,
+			response_body = excluded.response_body
+		WHERE idempotency_keys.method = excluded.method
+		  AND idempotency_keys.path = excluded.path
+		  AND idempotency_keys.request_hash = excluded.request_hash
+		  AND idempotency_keys.status_code = 0
 	`, userID, key, response.Method, response.Path, response.RequestHash, response.Status,
-		response.ContentType, response.ETag, response.Body, now.UnixMilli(), now.Add(idempotencyTTL).UnixMilli())
+		response.ContentType, response.ETag, response.RequestID, response.Body,
+		now.UnixMilli(), now.Add(idempotencyTTL).UnixMilli())
+	if err != nil {
+		return err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if updated != 1 {
+		return errors.New("idempotency result was not persisted")
+	}
+	return nil
+}
+
+func (middleware *idempotencyMiddleware) release(
+	ctx context.Context,
+	userID, key string,
+	response storedHTTPResponse,
+) error {
+	_, err := middleware.db.Writer().ExecContext(ctx, `
+		DELETE FROM idempotency_keys
+		WHERE user_id = ? AND key = ? AND method = ? AND path = ?
+		  AND request_hash = ? AND status_code = 0
+	`, userID, key, response.Method, response.Path, response.RequestHash)
 	return err
 }
 
@@ -171,6 +263,9 @@ func writeStoredResponse(w http.ResponseWriter, response storedHTTPResponse, rep
 	}
 	if response.ETag != "" {
 		w.Header().Set("ETag", response.ETag)
+	}
+	if response.RequestID != "" {
+		w.Header().Set(RequestIDHeader, response.RequestID)
 	}
 	if replayed {
 		w.Header().Set("Idempotency-Replayed", "true")
@@ -206,7 +301,7 @@ func (response *capturedResponse) Write(body []byte) (int, error) {
 	return response.body.Write(body)
 }
 
-func (response *capturedResponse) stored(method, path, requestHash string) storedHTTPResponse {
+func (response *capturedResponse) stored(method, path, requestHash, requestID string) storedHTTPResponse {
 	status := response.status
 	if status == 0 {
 		status = http.StatusOK
@@ -214,7 +309,7 @@ func (response *capturedResponse) stored(method, path, requestHash string) store
 	return storedHTTPResponse{
 		Method: method, Path: path, RequestHash: requestHash, Status: status,
 		ContentType: response.header.Get("Content-Type"), ETag: response.header.Get("ETag"),
-		Body: append([]byte(nil), response.body.Bytes()...),
+		RequestID: requestID, Body: append([]byte{}, response.body.Bytes()...),
 	}
 }
 

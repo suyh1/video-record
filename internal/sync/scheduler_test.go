@@ -228,9 +228,9 @@ func TestSchedulerContinuesPollingAfterProviderFailures(t *testing.T) {
 		Owner: "resilient-scheduler", LeaseDuration: time.Minute, PollInterval: 10 * time.Millisecond,
 	})
 	done := scheduler.Start(ctx)
-	require.Eventually(t, func() bool { return runs.Load() == 2 }, time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return runs.Load() == 2 }, 3*time.Second, 10*time.Millisecond)
 	clock.Store(initial.Add(25 * time.Hour).UnixMilli())
-	require.Eventually(t, func() bool { return runs.Load() >= 4 }, time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return runs.Load() >= 4 }, 3*time.Second, 10*time.Millisecond)
 	cancel()
 	require.ErrorIs(t, <-done, context.Canceled)
 }

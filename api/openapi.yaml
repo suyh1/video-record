@@ -1,0 +1,1626 @@
+openapi: 3.1.0
+info:
+  title: video-record API
+  version: 1.0.0
+  description: Private movie and TV viewing diary API.
+servers:
+  - url: /
+security:
+  - sessionCookie: []
+
+paths:
+  /api/v1/setup/status:
+    get:
+      operationId: getSetupStatus
+      summary: Read closed-initialization status
+      security: []
+      responses:
+        '200':
+          description: Setup status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SetupStatus' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/setup/admin:
+    post:
+      operationId: initializeAdministrator
+      summary: Create the first administrator
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CredentialsRequest' }
+      responses:
+        '201':
+          description: Administrator created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      summary: Start an opaque database session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CredentialsRequest' }
+      responses:
+        '200':
+          description: Session created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/auth/me:
+    get:
+      operationId: getCurrentUser
+      summary: Read the current session user
+      responses:
+        '200':
+          description: Current user.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      summary: Revoke the current session
+      parameters:
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '204': { description: Session revoked. }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/backups:
+    get:
+      operationId: listBackups
+      summary: List consistent system backups
+      responses:
+        '200':
+          description: Backup artifacts.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupList' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      operationId: createBackup
+      summary: Create a consistent system backup
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyObject' }
+      responses:
+        '201':
+          description: Backup created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupArtifact' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/backups/{filename}:
+    parameters:
+      - name: filename
+        in: path
+        required: true
+        schema: { type: string, pattern: '^[^/]+\.vrbackup$' }
+    get:
+      operationId: downloadBackup
+      summary: Download a system backup
+      responses:
+        '200':
+          description: Backup archive.
+          content:
+            application/vnd.video-record.backup:
+              schema: { type: string, format: binary }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/restore:
+    post:
+      operationId: restoreBackup
+      summary: Atomically restore a system backup
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/FileUpload' }
+      responses:
+        '200':
+          description: Restore committed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RestoreResult' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/calendar:
+    get:
+      operationId: getCalendar
+      summary: Read the current user's viewing calendar
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema: { type: string, pattern: '^\d{4}-\d{2}$' }
+        - name: timezone
+          in: query
+          required: true
+          schema: { type: string }
+        - name: filter
+          in: query
+          required: false
+          schema: { type: string, enum: [all, completed, in_progress], default: all }
+      responses:
+        '200':
+          description: Calendar month.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CalendarResponse' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/collections:
+    get:
+      operationId: listCollections
+      summary: List private collections
+      responses:
+        '200':
+          description: Private collections.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CollectionList' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      operationId: createCollection
+      summary: Create a private collection
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCollectionRequest' }
+      responses:
+        '201':
+          description: Collection created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Collection' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/collections/{collectionID}/items:
+    parameters:
+      - name: collectionID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: addCollectionItem
+      summary: Add media to a private collection
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddCollectionItemRequest' }
+      responses:
+        '204': { description: Collection item added. }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/data/export:
+    get:
+      operationId: exportData
+      summary: Export current-user viewing data
+      parameters:
+        - name: format
+          in: query
+          required: true
+          schema: { type: string, enum: [json, csv] }
+      responses:
+        '200':
+          description: Export document.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportDocument' }
+            'text/csv; charset=utf-8':
+              schema: { type: string }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/data/import:
+    post:
+      operationId: importData
+      summary: Import validated current-user viewing data
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/FileUpload' }
+      responses:
+        '200':
+          description: Import report.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportReport' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/library:
+    get:
+      operationId: getLibrary
+      summary: List the current user's media library
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/RecordStatus' }
+      responses:
+        '200':
+          description: Cursor-shaped library page.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CursorPage' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/media/search:
+    get:
+      operationId: searchLocalMedia
+      summary: Search the local media catalog
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: Local search results.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CatalogSearchResponse' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/records/{mediaID}:
+    parameters:
+      - $ref: '#/components/parameters/MediaID'
+    get:
+      operationId: getRecord
+      summary: Read the current user's media record
+      responses:
+        '200':
+          description: Current media record.
+          headers:
+            ETag: { required: true, schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecordState' }
+        default: { $ref: '#/components/responses/Problem' }
+    put:
+      operationId: updateRecord
+      summary: Update a versioned current-user media record
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateRecordRequest' }
+      responses:
+        '200':
+          description: Updated media record.
+          headers:
+            ETag: { required: true, schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecordState' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/records/{mediaID}/tags:
+    parameters:
+      - $ref: '#/components/parameters/MediaID'
+    put:
+      operationId: setRecordTags
+      summary: Replace private tags for a media record
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TagsRequest' }
+      responses:
+        '204':
+          description: Tags replaced.
+          headers:
+            ETag: { required: true, schema: { type: string } }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/records/{mediaID}/events:
+    parameters:
+      - $ref: '#/components/parameters/MediaID'
+    get:
+      operationId: listWatchEvents
+      summary: List immutable watch events for a media record
+      responses:
+        '200':
+          description: Watch events.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WatchEventList' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      operationId: createWatchEvent
+      summary: Create an immutable rewatch event
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateWatchEventRequest' }
+      responses:
+        '201':
+          description: Watch event created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WatchEvent' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/records/{mediaID}/events/{eventID}:
+    parameters:
+      - $ref: '#/components/parameters/MediaID'
+      - name: eventID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      operationId: deleteWatchEvent
+      summary: Delete an owned watch event
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '204': { description: Watch event deleted. }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/records/{mediaID}/progress:
+    parameters:
+      - $ref: '#/components/parameters/MediaID'
+    get:
+      operationId: getEpisodeProgress
+      summary: Read episode progress for a series
+      responses:
+        '200':
+          description: Episode progress.
+          headers:
+            ETag: { required: true, schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EpisodeProgress' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      operationId: updateEpisodeProgress
+      summary: Apply an idempotent episode progress action
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateEpisodeProgressRequest' }
+      responses:
+        '200':
+          description: Updated episode progress.
+          headers:
+            ETag: { required: true, schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EpisodeProgress' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/stats:
+    get:
+      operationId: getStats
+      summary: Read private accessible viewing statistics
+      parameters:
+        - name: timezone
+          in: query
+          required: false
+          schema: { type: string, default: UTC }
+      responses:
+        '200':
+          description: Viewing statistics.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StatsSummary' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/sync/status:
+    get:
+      operationId: getSyncStatus
+      summary: Read current-user integration sync status
+      responses:
+        '200':
+          description: Sync status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncStatus' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/sync/candidates:
+    get:
+      operationId: listSyncCandidates
+      summary: List current-user sync candidates
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/SyncCandidateStatus' }
+      responses:
+        '200':
+          description: Sync candidates.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncCandidateList' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/sync/candidates/{candidateID}/confirm:
+    parameters:
+      - $ref: '#/components/parameters/CandidateID'
+    post:
+      operationId: confirmSyncCandidate
+      summary: Confirm a proposed sync match
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyObject' }
+      responses:
+        '200':
+          description: Confirmed candidate.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncCandidate' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/sync/candidates/{candidateID}/rematch:
+    parameters:
+      - $ref: '#/components/parameters/CandidateID'
+    post:
+      operationId: rematchSyncCandidate
+      summary: Rematch a sync candidate to another local item
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RematchCandidateRequest' }
+      responses:
+        '200':
+          description: Rematched candidate.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncCandidate' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/sync/candidates/{candidateID}/ignore:
+    parameters:
+      - $ref: '#/components/parameters/CandidateID'
+    post:
+      operationId: ignoreSyncCandidate
+      summary: Ignore a sync candidate
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyObject' }
+      responses:
+        '200':
+          description: Ignored candidate.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncCandidate' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/sync/candidates/{candidateID}/custom:
+    parameters:
+      - $ref: '#/components/parameters/CandidateID'
+    post:
+      operationId: createCustomSyncCandidate
+      summary: Create custom media for an unmatched sync candidate
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomMediaRequest' }
+      responses:
+        '200':
+          description: Confirmed custom candidate.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncCandidate' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/household/events:
+    get:
+      operationId: listSharedEvents
+      summary: List minimal shared household events
+      responses:
+        '200':
+          description: Shared events.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SharedEventList' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/household/members:
+    get:
+      operationId: listHouseholdMembers
+      summary: List household members
+      responses:
+        '200':
+          description: Household members.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MemberList' }
+        default: { $ref: '#/components/responses/Problem' }
+    post:
+      operationId: createHouseholdMember
+      summary: Create a household member
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMemberRequest' }
+      responses:
+        '201':
+          description: Household member created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Member' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/household/participants:
+    get:
+      operationId: listHouseholdParticipants
+      summary: List active co-viewing participants
+      responses:
+        '200':
+          description: Active participants.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MemberList' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/household/members/{memberID}/reset-password:
+    parameters:
+      - $ref: '#/components/parameters/MemberID'
+    post:
+      operationId: resetHouseholdMemberPassword
+      summary: Reset a household member password
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetPasswordRequest' }
+      responses:
+        '204': { description: Password reset and sessions revoked. }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/household/members/{memberID}/deactivate:
+    parameters:
+      - $ref: '#/components/parameters/MemberID'
+    post:
+      operationId: deactivateHouseholdMember
+      summary: Deactivate a household member and sessions
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyObject' }
+      responses:
+        '204': { description: Member deactivated. }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/household/records/{ownerID}/{mediaID}:
+    parameters:
+      - name: ownerID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '#/components/parameters/MediaID'
+    get:
+      operationId: getVisibleHouseholdRecord
+      summary: Read explicitly shared household record fields
+      responses:
+        '200':
+          description: Explicitly shared record fields.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VisibleRecord' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/household/records/{mediaID}/sharing:
+    parameters:
+      - $ref: '#/components/parameters/MediaID'
+    put:
+      operationId: updateHouseholdSharing
+      summary: Update explicit household sharing flags
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SharingRequest' }
+      responses:
+        '200':
+          description: Updated sharing settings.
+          headers:
+            ETag: { required: true, schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SharingResponse' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/tmdb/status:
+    get:
+      operationId: getTMDBStatus
+      summary: Read server-side TMDB configuration status
+      responses:
+        '200':
+          description: TMDB configuration status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TMDBStatus' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/tmdb/search:
+    get:
+      operationId: searchTMDB
+      summary: Search TMDB through the server adapter
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: Normalized TMDB search results.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TMDBSearchResponse' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/tmdb/movie/{id}:
+    parameters:
+      - $ref: '#/components/parameters/TMDBID'
+    get:
+      operationId: getTMDBMovie
+      summary: Read normalized TMDB movie details
+      responses:
+        '200':
+          description: TMDB movie details.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TMDBMovie' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/tmdb/tv/{id}:
+    parameters:
+      - $ref: '#/components/parameters/TMDBID'
+    get:
+      operationId: getTMDBTV
+      summary: Read normalized TMDB series details
+      responses:
+        '200':
+          description: TMDB series details.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TMDBTV' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/tmdb/tv/{id}/season/{season}:
+    parameters:
+      - $ref: '#/components/parameters/TMDBID'
+      - name: season
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      operationId: getTMDBSeason
+      summary: Read a normalized TMDB season
+      responses:
+        '200':
+          description: TMDB season details.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TMDBSeason' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/tmdb/tv/{id}/season/{season}/episode/{episode}:
+    parameters:
+      - $ref: '#/components/parameters/TMDBID'
+      - name: season
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+      - name: episode
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      operationId: getTMDBEpisode
+      summary: Read a normalized TMDB episode
+      responses:
+        '200':
+          description: TMDB episode details.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TMDBEpisode' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/media/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getMedia
+      summary: Read a local media item
+      responses:
+        '200':
+          description: Local media item.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaItem' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/media/tmdb/{mediaType}/{externalID}:
+    parameters:
+      - $ref: '#/components/parameters/MediaType'
+      - name: externalID
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    post:
+      operationId: createMediaFromTMDB
+      summary: Create or refresh local media from TMDB
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '200':
+          description: Local media item.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaItem' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/media/custom:
+    post:
+      operationId: createCustomMedia
+      summary: Create a custom local media item
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomMediaRequest' }
+      responses:
+        '201':
+          description: Custom media item created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaItem' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/media/{id}/tmdb/{mediaType}/{externalID}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '#/components/parameters/MediaType'
+      - name: externalID
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    post:
+      operationId: linkMediaToTMDB
+      summary: Link existing custom media to TMDB
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '200':
+          description: Linked media item.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaItem' }
+        default: { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: video_record_session
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    CSRFToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema: { type: string, minLength: 1 }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: string, pattern: '^"\d+"$' }
+    MediaID:
+      name: mediaID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CandidateID:
+      name: candidateID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    MemberID:
+      name: memberID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TMDBID:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    MediaType:
+      name: mediaType
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/MediaType' }
+  responses:
+    Problem:
+      description: RFC 9457 Problem Details response.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+  schemas:
+    EmptyObject:
+      type: object
+      additionalProperties: false
+    FileUpload:
+      type: object
+      additionalProperties: false
+      required: [file]
+      properties:
+        file: { type: string, format: binary }
+    SetupStatus:
+      type: object
+      additionalProperties: false
+      required: [initialized]
+      properties:
+        initialized: { type: boolean }
+    CredentialsRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1 }
+        password: { type: string, minLength: 1 }
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, username, role]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        role: { type: string, enum: [admin, member] }
+    LoginResponse:
+      type: object
+      additionalProperties: false
+      required: [user, csrfToken]
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        csrfToken: { type: string }
+    BackupManifest:
+      type: object
+      additionalProperties: false
+      required: [formatVersion, schemaVersion, createdAt, databaseSha256, databaseBytes, requiresEncryptionKey]
+      properties:
+        formatVersion: { type: integer, minimum: 1 }
+        schemaVersion: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        databaseSha256: { type: string, pattern: '^[a-f0-9]{64}$' }
+        databaseBytes: { type: integer, minimum: 0 }
+        requiresEncryptionKey: { type: boolean }
+    BackupArtifact:
+      type: object
+      additionalProperties: false
+      required: [filename, bytes, manifest]
+      properties:
+        filename: { type: string }
+        bytes: { type: integer, minimum: 0 }
+        manifest: { $ref: '#/components/schemas/BackupManifest' }
+    BackupList:
+      type: array
+      items: { $ref: '#/components/schemas/BackupArtifact' }
+    RestoreResult:
+      type: object
+      additionalProperties: false
+      required: [preRestoreBackup, warnings]
+      properties:
+        preRestoreBackup: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+    RecordStatus:
+      type: string
+      enum: [none, wishlist, watching, completed, dropped]
+    RecordSource:
+      type: string
+      enum: [manual, confirmed_import, confirmed_sync, external_default]
+    MediaType:
+      type: string
+      enum: [movie, tv]
+    CalendarEvent:
+      type: object
+      additionalProperties: false
+      required: [id, mediaId, mediaType, title, episodeId, seasonNumber, episodeNumber, absoluteNumber, watchedAt, localDate, viewingMethod, participants, status]
+      properties:
+        id: { type: string, format: uuid }
+        mediaId: { type: string, format: uuid }
+        mediaType: { $ref: '#/components/schemas/MediaType' }
+        title: { type: string }
+        episodeId: { type: [string, 'null'], format: uuid }
+        seasonNumber: { type: [integer, 'null'] }
+        episodeNumber: { type: [integer, 'null'] }
+        absoluteNumber: { type: [integer, 'null'] }
+        watchedAt: { type: string, format: date-time }
+        localDate: { type: string, format: date }
+        viewingMethod: { type: [string, 'null'] }
+        participants:
+          type: array
+          items: { type: string }
+        status: { $ref: '#/components/schemas/RecordStatus' }
+    CalendarResponse:
+      type: object
+      additionalProperties: false
+      required: [year, month, timezone, events]
+      properties:
+        year: { type: integer }
+        month: { type: integer, minimum: 1, maximum: 12 }
+        timezone: { type: string }
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/CalendarEvent' }
+    Collection:
+      type: object
+      additionalProperties: false
+      required: [id, name, items]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        items:
+          type: array
+          items: { type: string, format: uuid }
+    CollectionList:
+      type: array
+      items: { $ref: '#/components/schemas/Collection' }
+    CreateCollectionRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+    AddCollectionItemRequest:
+      type: object
+      additionalProperties: false
+      required: [mediaId]
+      properties:
+        mediaId: { type: string, format: uuid }
+    CatalogItem:
+      type: object
+      additionalProperties: false
+      required: [id, source, mediaType, title, originalTitle, year, posterPath, status]
+      properties:
+        id: { type: string, format: uuid }
+        source: { type: string, enum: [local] }
+        mediaType: { $ref: '#/components/schemas/MediaType' }
+        title: { type: string }
+        originalTitle: { type: string }
+        year: { type: string }
+        posterPath: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/RecordStatus' }
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CatalogItem' }
+        nextCursor: { type: [string, 'null'] }
+    CatalogSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CatalogItem' }
+    RecordState:
+      type: object
+      additionalProperties: false
+      required: [mediaId, status, rating, note, watchedAt, viewingMethod, version]
+      properties:
+        mediaId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/RecordStatus' }
+        rating: { type: [number, 'null'], minimum: 0, maximum: 10 }
+        note: { type: [string, 'null'] }
+        watchedAt: { type: [string, 'null'], format: date-time }
+        viewingMethod: { type: [string, 'null'] }
+        version: { type: integer, minimum: 0 }
+    UpdateRecordRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { $ref: '#/components/schemas/RecordStatus' }
+        rating: { type: [number, 'null'], minimum: 0, maximum: 10 }
+        note: { type: [string, 'null'] }
+        watchedAt: { type: string, format: date-time }
+        viewingMethod: { type: [string, 'null'] }
+        participantIds:
+          type: array
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    TagsRequest:
+      type: object
+      additionalProperties: false
+      required: [tags]
+      properties:
+        tags:
+          type: array
+          items: { type: string }
+    WatchEvent:
+      type: object
+      additionalProperties: false
+      required: [id, mediaId, watchedAt, source, completion]
+      properties:
+        id: { type: string, format: uuid }
+        mediaId: { type: string, format: uuid }
+        episodeId: { type: string, format: uuid }
+        watchedAt: { type: string, format: date-time }
+        viewingMethod: { type: string }
+        source: { $ref: '#/components/schemas/RecordSource' }
+        externalEventId: { type: string }
+        completion: { type: integer, minimum: 0, maximum: 100 }
+        note: { type: string }
+    WatchEventList:
+      type: array
+      items: { $ref: '#/components/schemas/WatchEvent' }
+    CreateWatchEventRequest:
+      type: object
+      additionalProperties: false
+      required: [watchedAt]
+      properties:
+        watchedAt: { type: string, format: date-time }
+        viewingMethod: { type: string }
+        note: { type: string }
+    EpisodeProgressItem:
+      type: object
+      additionalProperties: false
+      required: [id, seasonId, seasonNumber, episodeNumber, absoluteNumber, name, watched, watchedAt]
+      properties:
+        id: { type: string, format: uuid }
+        seasonId: { type: string, format: uuid }
+        seasonNumber: { type: integer }
+        episodeNumber: { type: integer }
+        absoluteNumber: { type: integer }
+        name: { type: string }
+        watched: { type: boolean }
+        watchedAt: { type: [string, 'null'], format: date-time }
+    EpisodeProgress:
+      type: object
+      additionalProperties: false
+      required: [mediaId, status, version, watchedEpisodes, totalEpisodes, lastWatched, nextEpisode, episodes]
+      properties:
+        mediaId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/RecordStatus' }
+        version: { type: integer, minimum: 0 }
+        watchedEpisodes: { type: integer, minimum: 0 }
+        totalEpisodes: { type: integer, minimum: 0 }
+        lastWatched:
+          oneOf:
+            - $ref: '#/components/schemas/EpisodeProgressItem'
+            - type: 'null'
+        nextEpisode:
+          oneOf:
+            - $ref: '#/components/schemas/EpisodeProgressItem'
+            - type: 'null'
+        episodes:
+          type: array
+          items: { $ref: '#/components/schemas/EpisodeProgressItem' }
+    UpdateEpisodeProgressRequest:
+      type: object
+      additionalProperties: false
+      required: [action, expectedVersion]
+      properties:
+        action: { type: string, enum: [single, range, season, next, undo] }
+        episodeId: { type: string, format: uuid }
+        throughEpisodeId: { type: string, format: uuid }
+        seasonId: { type: string, format: uuid }
+        watchedAt: { type: string, format: date-time }
+        expectedVersion: { type: integer, minimum: 0 }
+    StatsPoint:
+      type: object
+      additionalProperties: false
+      required: [label, value]
+      properties:
+        label: { type: string }
+        value: { type: integer }
+    StatsSummary:
+      type: object
+      additionalProperties: false
+      required: [totalWatches, uniqueMedia, totalMinutes, repeatWatches, monthly, yearly, genres, ratings, tags, viewingMethods]
+      properties:
+        totalWatches: { type: integer, minimum: 0 }
+        uniqueMedia: { type: integer, minimum: 0 }
+        totalMinutes: { type: integer, minimum: 0 }
+        repeatWatches: { type: integer, minimum: 0 }
+        monthly: { type: array, items: { $ref: '#/components/schemas/StatsPoint' } }
+        yearly: { type: array, items: { $ref: '#/components/schemas/StatsPoint' } }
+        genres: { type: array, items: { $ref: '#/components/schemas/StatsPoint' } }
+        ratings: { type: array, items: { $ref: '#/components/schemas/StatsPoint' } }
+        tags: { type: array, items: { $ref: '#/components/schemas/StatsPoint' } }
+        viewingMethods: { type: array, items: { $ref: '#/components/schemas/StatsPoint' } }
+    SyncAccountStatus:
+      type: object
+      additionalProperties: false
+      required: [id, provider, name, enabled, pendingCandidates]
+      properties:
+        id: { type: string, format: uuid }
+        provider: { type: string, enum: [jellyfin, emby, plex] }
+        name: { type: string }
+        enabled: { type: boolean }
+        pendingCandidates: { type: integer, minimum: 0 }
+        lastRunStatus: { type: string, enum: [running, succeeded, failed] }
+        lastRunAt: { type: string, format: date-time }
+    SyncStatus:
+      type: object
+      additionalProperties: false
+      required: [accounts, pendingTotal]
+      properties:
+        accounts:
+          type: array
+          items: { $ref: '#/components/schemas/SyncAccountStatus' }
+        pendingTotal: { type: integer, minimum: 0 }
+    SyncCandidateStatus:
+      type: string
+      enum: [exact, possible, unmatched, conflict, confirmed, ignored]
+    SyncEvidence:
+      type: object
+      additionalProperties: false
+      required: [code, text]
+      properties:
+        code: { type: string }
+        text: { type: string }
+    SyncMatchOption:
+      type: object
+      additionalProperties: false
+      required: [mediaId, mediaType, title]
+      properties:
+        mediaId: { type: string, format: uuid }
+        episodeId: { type: string, format: uuid }
+        mediaType: { $ref: '#/components/schemas/MediaType' }
+        title: { type: string }
+        originalTitle: { type: string }
+        year: { type: string }
+    SyncCandidateEvent:
+      type: object
+      additionalProperties: false
+      required: [playedAt, durationSeconds, positionSeconds, providerItemId, mediaType, title]
+      properties:
+        playedAt: { type: string, format: date-time }
+        durationSeconds: { type: integer, minimum: 0 }
+        positionSeconds: { type: integer, minimum: 0 }
+        providerItemId: { type: string }
+        mediaType: { type: string, enum: [movie, episode] }
+        title: { type: string }
+        originalTitle: { type: string }
+        year: { type: integer }
+        seasonNumber: { type: integer }
+        episodeNumber: { type: integer }
+    SyncCandidate:
+      type: object
+      additionalProperties: false
+      required: [id, accountId, externalEventId, status, event, evidence, options, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        accountId: { type: string, format: uuid }
+        externalEventId: { type: string }
+        status: { $ref: '#/components/schemas/SyncCandidateStatus' }
+        mediaId: { type: string, format: uuid }
+        episodeId: { type: string, format: uuid }
+        event: { $ref: '#/components/schemas/SyncCandidateEvent' }
+        evidence:
+          type: array
+          items: { $ref: '#/components/schemas/SyncEvidence' }
+        options:
+          type: array
+          items: { $ref: '#/components/schemas/SyncMatchOption' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SyncCandidateList:
+      type: array
+      items: { $ref: '#/components/schemas/SyncCandidate' }
+    RematchCandidateRequest:
+      type: object
+      additionalProperties: false
+      required: [mediaId]
+      properties:
+        mediaId: { type: string, format: uuid }
+        episodeId: { type: string, format: uuid }
+    CustomMediaRequest:
+      type: object
+      additionalProperties: false
+      required: [title, mediaType]
+      properties:
+        title: { type: string, minLength: 1 }
+        mediaType: { $ref: '#/components/schemas/MediaType' }
+        overview: { type: string }
+        year: { type: string }
+    Member:
+      type: object
+      additionalProperties: false
+      required: [id, username, role, active, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        role: { type: string, enum: [admin, member] }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    MemberList:
+      type: array
+      items: { $ref: '#/components/schemas/Member' }
+    CreateMemberRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1 }
+        password: { type: string, minLength: 1 }
+    ResetPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password: { type: string, minLength: 1 }
+    SharingRequest:
+      type: object
+      additionalProperties: false
+      required: [shareRating, shareReview, sharedReview, expectedVersion]
+      properties:
+        shareRating: { type: boolean }
+        shareReview: { type: boolean }
+        sharedReview: { type: string }
+        expectedVersion: { type: integer, minimum: 0 }
+    SharingResponse:
+      type: object
+      additionalProperties: false
+      required: [mediaId, shareRating, shareReview, sharedReview, version]
+      properties:
+        mediaId: { type: string, format: uuid }
+        shareRating: { type: boolean }
+        shareReview: { type: boolean }
+        sharedReview: { type: [string, 'null'] }
+        version: { type: integer, minimum: 0 }
+    VisibleRecord:
+      type: object
+      additionalProperties: false
+      required: [ownerId, mediaId, rating, privateNote, sharedReview]
+      properties:
+        ownerId: { type: string, format: uuid }
+        mediaId: { type: string, format: uuid }
+        rating: { type: [number, 'null'], minimum: 0, maximum: 10 }
+        privateNote: { type: [string, 'null'] }
+        sharedReview: { type: [string, 'null'] }
+    SharedEvent:
+      type: object
+      additionalProperties: false
+      required: [id, mediaId, title, watchedAt, participants]
+      properties:
+        id: { type: string, format: uuid }
+        mediaId: { type: string, format: uuid }
+        title: { type: string }
+        watchedAt: { type: string, format: date-time }
+        participants:
+          type: array
+          items: { type: string }
+    SharedEventList:
+      type: array
+      items: { $ref: '#/components/schemas/SharedEvent' }
+    TMDBStatus:
+      type: object
+      additionalProperties: false
+      required: [configured]
+      properties:
+        configured: { type: boolean }
+    TMDBSearchResult:
+      type: object
+      additionalProperties: false
+      required: [id, mediaType, title, originalTitle, year, posterPath, overview]
+      properties:
+        id: { type: integer, minimum: 1 }
+        mediaType: { $ref: '#/components/schemas/MediaType' }
+        title: { type: string }
+        originalTitle: { type: string }
+        year: { type: string }
+        posterPath: { type: string }
+        overview: { type: string }
+    TMDBSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [page, results, totalPages, totalResults]
+      properties:
+        page: { type: integer, minimum: 1 }
+        results:
+          type: array
+          items: { $ref: '#/components/schemas/TMDBSearchResult' }
+        totalPages: { type: integer, minimum: 0 }
+        totalResults: { type: integer, minimum: 0 }
+    TMDBMovie:
+      type: object
+      additionalProperties: false
+      required: [id, title, originalTitle, releaseDate, posterPath, backdropPath, overview, runtime]
+      properties:
+        id: { type: integer, minimum: 1 }
+        title: { type: string }
+        originalTitle: { type: string }
+        releaseDate: { type: string }
+        posterPath: { type: string }
+        backdropPath: { type: string }
+        overview: { type: string }
+        runtime: { type: integer, minimum: 0 }
+    TMDBTV:
+      type: object
+      additionalProperties: false
+      required: [id, name, originalName, firstAirDate, posterPath, backdropPath, overview, numberOfSeasons, numberOfEpisodes]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string }
+        originalName: { type: string }
+        firstAirDate: { type: string }
+        posterPath: { type: string }
+        backdropPath: { type: string }
+        overview: { type: string }
+        numberOfSeasons: { type: integer, minimum: 0 }
+        numberOfEpisodes: { type: integer, minimum: 0 }
+    TMDBEpisode:
+      type: object
+      additionalProperties: false
+      required: [id, name, overview, airDate, seasonNumber, episodeNumber, runtime]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string }
+        overview: { type: string }
+        airDate: { type: string }
+        seasonNumber: { type: integer, minimum: 0 }
+        episodeNumber: { type: integer, minimum: 1 }
+        runtime: { type: integer, minimum: 0 }
+    TMDBSeason:
+      type: object
+      additionalProperties: false
+      required: [id, name, seasonNumber, episodes]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string }
+        seasonNumber: { type: integer, minimum: 0 }
+        episodes:
+          type: array
+          items: { $ref: '#/components/schemas/TMDBEpisode' }
+    MediaItem:
+      type: object
+      additionalProperties: false
+      required: [id, mediaType, title, overview, externalTitle, externalOverview, originalTitle, releaseDate, posterPath, backdropPath, runtimeMinutes, genres]
+      properties:
+        id: { type: string, format: uuid }
+        mediaType: { $ref: '#/components/schemas/MediaType' }
+        title: { type: string }
+        overview: { type: string }
+        externalTitle: { type: string }
+        externalOverview: { type: string }
+        originalTitle: { type: string }
+        releaseDate: { type: string }
+        posterPath: { type: string }
+        backdropPath: { type: string }
+        runtimeMinutes: { type: integer, minimum: 0 }
+        genres:
+          type: array
+          items: { type: string }
+    ImportFailure:
+      type: object
+      additionalProperties: false
+      required: [recordId, code]
+      properties:
+        recordId: { type: string }
+        code: { type: string }
+    ImportReport:
+      type: object
+      additionalProperties: false
+      required: [importedRecords, importedCollections, failures]
+      properties:
+        importedRecords: { type: integer, minimum: 0 }
+        importedCollections: { type: integer, minimum: 0 }
+        failures:
+          type: array
+          items: { $ref: '#/components/schemas/ImportFailure' }
+    ExportExternalID:
+      type: object
+      additionalProperties: false
+      required: [source, sourceId, mediaType]
+      properties:
+        source: { type: string }
+        sourceId: { type: string }
+        mediaType: { $ref: '#/components/schemas/MediaType' }
+    ExportGenre:
+      type: object
+      additionalProperties: false
+      required: [source, sourceId, name]
+      properties:
+        source: { type: string }
+        sourceId: { type: string }
+        name: { type: string }
+    ExportEpisode:
+      type: object
+      additionalProperties: false
+      required: [id, episodeNumber, name, overview, stillPath, airDate]
+      properties:
+        id: { type: string, format: uuid }
+        sourceId: { type: string }
+        episodeNumber: { type: integer }
+        name: { type: string }
+        overview: { type: string }
+        stillPath: { type: string }
+        airDate: { type: string }
+        runtime: { type: integer }
+    ExportSeason:
+      type: object
+      additionalProperties: false
+      required: [id, seasonNumber, name, overview, posterPath, airDate, episodes]
+      properties:
+        id: { type: string, format: uuid }
+        sourceId: { type: string }
+        seasonNumber: { type: integer }
+        name: { type: string }
+        overview: { type: string }
+        posterPath: { type: string }
+        airDate: { type: string }
+        episodes:
+          type: array
+          items: { $ref: '#/components/schemas/ExportEpisode' }
+    ExportMedia:
+      type: object
+      additionalProperties: false
+      required: [id, mediaType, externalTitle, originalTitle, releaseDate, externalOverview, posterPath, backdropPath, externalIds, genres, seasons]
+      properties:
+        id: { type: string, format: uuid }
+        mediaType: { $ref: '#/components/schemas/MediaType' }
+        externalTitle: { type: string }
+        originalTitle: { type: string }
+        releaseDate: { type: string }
+        externalOverview: { type: string }
+        posterPath: { type: string }
+        backdropPath: { type: string }
+        customTitle: { type: string }
+        customOverview: { type: string }
+        customYear: { type: string }
+        runtimeMinutes: { type: integer }
+        externalIds:
+          type: array
+          items: { $ref: '#/components/schemas/ExportExternalID' }
+        genres:
+          type: array
+          items: { $ref: '#/components/schemas/ExportGenre' }
+        seasons:
+          type: array
+          items: { $ref: '#/components/schemas/ExportSeason' }
+    ExportState:
+      type: object
+      additionalProperties: false
+      required: [status, version, statusSource, ratingSource, noteSource, shareRating, shareReview]
+      properties:
+        status: { $ref: '#/components/schemas/RecordStatus' }
+        rating: { type: integer, minimum: 0, maximum: 100 }
+        note: { type: string }
+        version: { type: integer, minimum: 1 }
+        statusSource: { $ref: '#/components/schemas/RecordSource' }
+        ratingSource: { $ref: '#/components/schemas/RecordSource' }
+        noteSource: { $ref: '#/components/schemas/RecordSource' }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+        shareRating: { type: boolean }
+        shareReview: { type: boolean }
+        sharedReview: { type: string }
+    ExportEvent:
+      type: object
+      additionalProperties: false
+      required: [id, watchedAt, source, completion]
+      properties:
+        id: { type: string, format: uuid }
+        episodeId: { type: string, format: uuid }
+        watchedAt: { type: string, format: date-time }
+        viewingMethod: { type: string }
+        source: { $ref: '#/components/schemas/RecordSource' }
+        externalEventId: { type: string }
+        completion: { type: integer, minimum: 0, maximum: 100 }
+        note: { type: string }
+    ExportProgress:
+      type: object
+      additionalProperties: false
+      required: [episodeId, watchedAt, source, watchEventId]
+      properties:
+        episodeId: { type: string, format: uuid }
+        watchedAt: { type: string, format: date-time }
+        source: { $ref: '#/components/schemas/RecordSource' }
+        watchEventId: { type: string, format: uuid }
+    ExportRecord:
+      type: object
+      additionalProperties: false
+      required: [media, tags, events, progress]
+      properties:
+        media: { $ref: '#/components/schemas/ExportMedia' }
+        state: { $ref: '#/components/schemas/ExportState' }
+        tags:
+          type: array
+          items: { type: string }
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/ExportEvent' }
+        progress:
+          type: array
+          items: { $ref: '#/components/schemas/ExportProgress' }
+    ExportCollection:
+      type: object
+      additionalProperties: false
+      required: [id, name, mediaIds]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        mediaIds:
+          type: array
+          items: { type: string, format: uuid }
+    ExportDocument:
+      type: object
+      additionalProperties: false
+      required: [version, records, collections]
+      properties:
+        version: { type: integer, const: 1 }
+        records:
+          type: array
+          items: { $ref: '#/components/schemas/ExportRecord' }
+        collections:
+          type: array
+          items: { $ref: '#/components/schemas/ExportCollection' }
+    ProblemDetails:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code, requestId]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        code: { type: string }
+        requestId: { type: string }

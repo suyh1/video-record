@@ -19,9 +19,10 @@ import (
 func TestMediaHandlersCreateReadAndLinkTMDBItems(t *testing.T) {
 	router, cookie, csrfToken := newMediaTestRouter(t)
 	headers := map[string]string{
-		"Cookie":       cookie.String(),
-		"Origin":       "http://example.test",
-		"X-CSRF-Token": csrfToken,
+		"Cookie":          cookie.String(),
+		"Origin":          "http://example.test",
+		"X-CSRF-Token":    csrfToken,
+		"Idempotency-Key": "create-tmdb-media",
 	}
 
 	created := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/media/tmdb/movie/329865", nil, headers)
@@ -43,19 +44,23 @@ func TestMediaHandlersCreateReadAndLinkTMDBItems(t *testing.T) {
 	require.Equal(t, http.StatusOK, read.Code)
 	require.Contains(t, read.Body.String(), `"originalTitle":"Arrival"`)
 
+	customHeaders := cloneHeaders(headers)
+	customHeaders["Idempotency-Key"] = "create-custom-media"
 	custom := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/media/custom", map[string]string{
 		"mediaType": "movie",
 		"title":     "我的译名",
 		"overview":  "私人简介",
 		"year":      "2016",
-	}, headers)
+	}, customHeaders)
 	require.Equal(t, http.StatusCreated, custom.Code)
 	var customBody struct {
 		ID string `json:"id"`
 	}
 	require.NoError(t, json.Unmarshal(custom.Body.Bytes(), &customBody))
 
-	linked := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/media/"+customBody.ID+"/tmdb/movie/329866", nil, headers)
+	linkHeaders := cloneHeaders(headers)
+	linkHeaders["Idempotency-Key"] = "link-custom-media"
+	linked := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/media/"+customBody.ID+"/tmdb/movie/329866", nil, linkHeaders)
 	require.Equal(t, http.StatusOK, linked.Code)
 	require.Contains(t, linked.Body.String(), `"title":"我的译名"`)
 	require.Contains(t, linked.Body.String(), `"externalTitle":"外部更新"`)

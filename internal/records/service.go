@@ -136,6 +136,33 @@ func (service *Service) SetTags(ctx context.Context, userID, mediaID string, nam
 	return service.repository.SetTags(ctx, userID, mediaID, names)
 }
 
+func (service *Service) SetTagsVersioned(
+	ctx context.Context,
+	userID, mediaID string,
+	names []string,
+	expectedVersion int,
+) (State, error) {
+	if userID == "" || mediaID == "" || expectedVersion < 0 {
+		return State{}, ErrInvalidRecord
+	}
+	state, exists, err := service.repository.FindState(ctx, userID, mediaID)
+	if err != nil {
+		return State{}, err
+	}
+	if !exists || state.Version != expectedVersion {
+		return state, ErrVersionConflict
+	}
+	updated, err := service.repository.SetTagsVersioned(ctx, userID, mediaID, names, expectedVersion)
+	if err != nil {
+		return State{}, err
+	}
+	if !updated {
+		return state, ErrVersionConflict
+	}
+	state.Version++
+	return state, nil
+}
+
 func (service *Service) Tags(ctx context.Context, userID, mediaID string) ([]string, error) {
 	return service.repository.Tags(ctx, userID, mediaID)
 }

@@ -4,18 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"video-record/internal/auth"
 )
 
 func TestIdempotencyReplaysOriginalEventResponse(t *testing.T) {
 	router, cookie, csrfToken, mediaID, recordService, _ := newRecordsTestRouter(t)
 	baseHeaders := map[string]string{
-		"Cookie":       cookie.String(),
-		"Origin":       "http://example.test",
-		"X-CSRF-Token": csrfToken,
-		"If-Match":     `"0"`,
+		"Cookie":          cookie.String(),
+		"Origin":          "http://example.test",
+		"X-CSRF-Token":    csrfToken,
+		"Idempotency-Key": "complete-record",
+		"If-Match":        `"0"`,
 	}
 	completed := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID, map[string]any{
 		"status": "completed",
@@ -89,6 +95,131 @@ func TestIdempotencyExpiresStoredResponses(t *testing.T) {
 	require.Len(t, events, 2)
 }
 
+func TestIdempotencyReplaysNoContentResponse(t *testing.T) {
+	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
+	completeRecordForIdempotencyTest(t, router, cookie, csrfToken, mediaID)
+	headers := map[string]string{
+		"Cookie":          cookie.String(),
+		"Origin":          "http://example.test",
+		"X-CSRF-Token":    csrfToken,
+		"Idempotency-Key": "set-tags-no-content",
+		"If-Match":        `"1"`,
+	}
+	body := map[string]any{"tags": []string{"科幻"}}
+	target := "http://example.test/api/v1/records/" + mediaID + "/tags"
+
+	first := performJSONRequest(router, http.MethodPut, target, body, headers)
+	require.Equal(t, http.StatusNoContent, first.Code)
+	require.Empty(t, first.Body.String())
+
+	replayed := performJSONRequest(router, http.MethodPut, target, body, headers)
+	require.Equal(t, http.StatusNoContent, replayed.Code)
+	require.Equal(t, "true", replayed.Header().Get("Idempotency-Replayed"))
+	require.Empty(t, replayed.Body.String())
+}
+
+func TestIdempotencyReservesKeyBeforeSideEffects(t *testing.T) {
+	router, cookie, csrfToken, mediaID, _, db := newRecordsTestRouter(t)
+	_, err := db.Writer().ExecContext(context.Background(), `
+		CREATE TRIGGER fail_idempotency_completion
+		BEFORE UPDATE OF status_code ON idempotency_keys
+		WHEN NEW.key = 'completion-failure'
+		BEGIN
+			SELECT RAISE(FAIL, 'synthetic completion failure');
+		END
+	`)
+	require.NoError(t, err)
+	headers := map[string]string{
+		"Cookie":          cookie.String(),
+		"Origin":          "http://example.test",
+		"X-CSRF-Token":    csrfToken,
+		"Idempotency-Key": "completion-failure",
+		"If-Match":        `"0"`,
+	}
+	target := "http://example.test/api/v1/records/" + mediaID
+	body := map[string]any{"status": "wishlist"}
+
+	first := performJSONRequest(router, http.MethodPut, target, body, headers)
+	require.Equal(t, http.StatusInternalServerError, first.Code)
+
+	retry := performJSONRequest(router, http.MethodPut, target, body, headers)
+	require.Equal(t, http.StatusConflict, retry.Code)
+	require.Contains(t, retry.Body.String(), `"code":"idempotency_in_progress"`)
+
+	read := performJSONRequest(router, http.MethodGet, target, nil, map[string]string{"Cookie": cookie.String()})
+	require.Equal(t, http.StatusOK, read.Code)
+	require.Contains(t, read.Body.String(), `"status":"wishlist"`)
+	require.Contains(t, read.Body.String(), `"version":1`)
+}
+
+func TestIdempotencyReservationIsSharedAcrossMiddlewareInstances(t *testing.T) {
+	router, cookie, _, _, _, db := newRecordsTestRouter(t)
+	userID := currentUserID(t, router, cookie)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int32
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"created":true}`))
+	})
+	firstMiddleware := newIdempotencyMiddleware(db).Handle(handler)
+	secondMiddleware := newIdempotencyMiddleware(db).Handle(handler)
+	request := func() *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "http://example.test/api/v1/test", strings.NewReader(`{"value":1}`))
+		req.Header.Set("Idempotency-Key", "shared-reservation")
+		identity := auth.Identity{User: auth.User{ID: userID, Active: true}}
+		return req.WithContext(context.WithValue(req.Context(), identityContextKey{}, identity))
+	}
+
+	firstResult := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		recorder := httptest.NewRecorder()
+		firstMiddleware.ServeHTTP(recorder, request())
+		firstResult <- recorder
+	}()
+	<-started
+	second := httptest.NewRecorder()
+	secondMiddleware.ServeHTTP(second, request())
+	require.Equal(t, http.StatusConflict, second.Code)
+	require.Contains(t, second.Body.String(), `"code":"idempotency_in_progress"`)
+	require.EqualValues(t, 1, calls.Load())
+
+	close(release)
+	first := <-firstResult
+	require.Equal(t, http.StatusCreated, first.Code)
+	replayed := httptest.NewRecorder()
+	secondMiddleware.ServeHTTP(replayed, request())
+	require.Equal(t, http.StatusCreated, replayed.Code)
+	require.Equal(t, "true", replayed.Header().Get("Idempotency-Replayed"))
+	require.EqualValues(t, 1, calls.Load())
+}
+
+func TestIdempotencyReplayKeepsProblemRequestIDConsistent(t *testing.T) {
+	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
+	completeRecordForIdempotencyTest(t, router, cookie, csrfToken, mediaID)
+	headers := map[string]string{
+		"Cookie":          cookie.String(),
+		"Origin":          "http://example.test",
+		"X-CSRF-Token":    csrfToken,
+		"Idempotency-Key": "cached-version-conflict",
+		"If-Match":        `"0"`,
+	}
+	target := "http://example.test/api/v1/records/" + mediaID
+	body := map[string]any{"status": "wishlist"}
+
+	first := performJSONRequest(router, http.MethodPut, target, body, headers)
+	require.Equal(t, http.StatusConflict, first.Code)
+	replayed := performJSONRequest(router, http.MethodPut, target, body, headers)
+	require.Equal(t, http.StatusConflict, replayed.Code)
+	require.Equal(t, first.Body.String(), replayed.Body.String())
+	require.Equal(t, first.Header().Get(RequestIDHeader), replayed.Header().Get(RequestIDHeader))
+	require.Equal(t, "true", replayed.Header().Get("Idempotency-Replayed"))
+}
+
 func completeRecordForIdempotencyTest(
 	t *testing.T,
 	router http.Handler,
@@ -100,7 +231,8 @@ func completeRecordForIdempotencyTest(
 		"status": "completed",
 	}, map[string]string{
 		"Cookie": cookie.String(), "Origin": "http://example.test", "X-CSRF-Token": csrfToken,
-		"If-Match": `"0"`,
+		"Idempotency-Key": "complete-record",
+		"If-Match":        `"0"`,
 	})
 	require.Equal(t, http.StatusOK, completed.Code)
 }

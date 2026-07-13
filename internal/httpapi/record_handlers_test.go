@@ -16,12 +16,13 @@ import (
 )
 
 func TestRecordHandlersEnforceVersionAndCurrentUserOwnership(t *testing.T) {
-	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
+	router, cookie, csrfToken, mediaID, recordService, _ := newRecordsTestRouter(t)
 	headers := map[string]string{
-		"Cookie":       cookie.String(),
-		"Origin":       "http://example.test",
-		"X-CSRF-Token": csrfToken,
-		"If-Match":     `"0"`,
+		"Cookie":          cookie.String(),
+		"Origin":          "http://example.test",
+		"X-CSRF-Token":    csrfToken,
+		"Idempotency-Key": "update-record",
+		"If-Match":        `"0"`,
 	}
 
 	updated := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID, map[string]any{
@@ -34,22 +35,39 @@ func TestRecordHandlersEnforceVersionAndCurrentUserOwnership(t *testing.T) {
 	require.Contains(t, updated.Body.String(), `"rating":8.7`)
 	require.Contains(t, updated.Body.String(), `"version":1`)
 
+	conflictHeaders := cloneHeaders(headers)
+	conflictHeaders["Idempotency-Key"] = "conflicting-record-update"
 	conflict := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID, map[string]any{
 		"status": "wishlist",
-	}, headers)
+	}, conflictHeaders)
 	require.Equal(t, http.StatusConflict, conflict.Code)
 	require.Contains(t, conflict.Body.String(), `"code":"version_conflict"`)
 
 	tagsHeaders := cloneHeaders(headers)
 	tagsHeaders["If-Match"] = `"1"`
+	tagsHeaders["Idempotency-Key"] = "set-record-tags"
 	tags := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID+"/tags", map[string]any{
 		"tags": []string{"科幻", "家庭"},
 	}, tagsHeaders)
 	require.Equal(t, http.StatusNoContent, tags.Code)
+	require.Equal(t, `"2"`, tags.Header().Get("ETag"))
 
+	staleTagsHeaders := cloneHeaders(tagsHeaders)
+	staleTagsHeaders["Idempotency-Key"] = "stale-record-tags"
+	staleTags := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID+"/tags", map[string]any{
+		"tags": []string{"覆盖失败"},
+	}, staleTagsHeaders)
+	require.Equal(t, http.StatusConflict, staleTags.Code)
+	require.Equal(t, `"2"`, staleTags.Header().Get("ETag"))
+	storedTags, err := recordService.Tags(context.Background(), currentUserID(t, router, cookie), mediaID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"科幻", "家庭"}, storedTags)
+
+	collectionHeaders := cloneHeaders(tagsHeaders)
+	collectionHeaders["Idempotency-Key"] = "create-collection"
 	collection := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/collections", map[string]string{
 		"name": "周末电影",
-	}, tagsHeaders)
+	}, collectionHeaders)
 	require.Equal(t, http.StatusCreated, collection.Code)
 	var collectionFields map[string]any
 	require.NoError(t, json.Unmarshal(collection.Body.Bytes(), &collectionFields))
@@ -62,9 +80,11 @@ func TestRecordHandlersEnforceVersionAndCurrentUserOwnership(t *testing.T) {
 		ID string `json:"id"`
 	}
 	require.NoError(t, json.Unmarshal(collection.Body.Bytes(), &collectionBody))
+	itemHeaders := cloneHeaders(tagsHeaders)
+	itemHeaders["Idempotency-Key"] = "add-collection-item"
 	added := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/collections/"+collectionBody.ID+"/items", map[string]string{
 		"mediaId": mediaID,
-	}, tagsHeaders)
+	}, itemHeaders)
 	require.Equal(t, http.StatusNoContent, added.Code)
 
 	listed := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/collections", nil, map[string]string{
@@ -77,10 +97,11 @@ func TestRecordHandlersEnforceVersionAndCurrentUserOwnership(t *testing.T) {
 func TestRecordHandlerClearsExplicitNullRatingAndNote(t *testing.T) {
 	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
 	headers := map[string]string{
-		"Cookie":       cookie.String(),
-		"Origin":       "http://example.test",
-		"X-CSRF-Token": csrfToken,
-		"If-Match":     `"0"`,
+		"Cookie":          cookie.String(),
+		"Origin":          "http://example.test",
+		"X-CSRF-Token":    csrfToken,
+		"Idempotency-Key": "create-record-with-fields",
+		"If-Match":        `"0"`,
 	}
 	created := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID, map[string]any{
 		"status": "completed",
@@ -90,6 +111,7 @@ func TestRecordHandlerClearsExplicitNullRatingAndNote(t *testing.T) {
 	require.Equal(t, http.StatusOK, created.Code)
 
 	headers["If-Match"] = `"1"`
+	headers["Idempotency-Key"] = "clear-record-fields"
 	cleared := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID, map[string]any{
 		"status": "completed",
 		"rating": nil,
@@ -105,7 +127,8 @@ func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
 	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
 	headers := map[string]string{
 		"Cookie": cookie.String(), "Origin": "http://example.test", "X-CSRF-Token": csrfToken,
-		"If-Match": `"0"`,
+		"Idempotency-Key": "prepare-record-read",
+		"If-Match":        `"0"`,
 	}
 	updated := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID, map[string]any{
 		"status": "completed", "rating": 8.7, "note": "保留笔记",

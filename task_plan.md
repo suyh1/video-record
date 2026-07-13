@@ -39,7 +39,8 @@
 - [x] Task 19：Emby 播放历史 Provider
 - [x] Task 20：Plex 播放历史 Provider
 - [x] Task 21：候选匹配、冲突解决与同步界面
-- [ ] Task 22-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
+- [x] Task 22：OpenAPI 合约与完整 HTTP 安全测试
+- [ ] Task 23-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 
 ## 已确认约束
 
@@ -106,3 +107,8 @@
 | Task 21 前端首次 typecheck 缺少 `MediaType` 导入且显式传递 optional `undefined` | 1 | 补齐类型导入，并只在单集 ID 存在时构造该可选属性后复验 |
 | Task 21 新增生产 runner 后同步包覆盖率降至 72.3% | 4 | 补齐候选生命周期、目标归属、重复外部事件、Provider 失败与严格凭据分支，最终达到 85.1% |
 | Task 21 浏览器发现同名同年候选的 radio 可访问名称重复 | 1 | 先加失败组件/领域测试，再把候选序号和规范化原名加入受控 DTO 与标签 |
+| Task 22 通用幂等中间件读取 1 MiB 请求体后会提前拒绝合法的 10 MiB 导入 | 1 | 导入端点改为在 handler 内流式哈希文件名与内容，保留 10 MiB 导入上限且不把完整文件缓存在内存 |
+| Task 22 并发相同幂等键可在副作用前同时通过缓存查询 | 1 | 新增 SQLite 唯一约束驱动的原子 reservation 和 `pending` 状态，竞争请求返回稳定 `idempotency_in_progress` |
+| Task 22 恢复替换数据库后旧连接无法写入幂等完成结果 | 1 | 恢复端点在新数据库重开后通过专用 finalize 路径提交响应缓存，并保留原 request ID |
+| Task 22 标签写入未参与 ETag 乐观并发控制 | 1 | 先加陈旧写入红测，再在事务中校验 `If-Match`、递增记录版本并返回新 ETag |
+| Task 22 全仓 race 下调度器故障恢复测试偶发超过 1 秒等待窗 | 1 | 定向 race 连续 20 次确认无数据竞争，将测试等待窗调整为 3 秒后重跑全仓门禁 |

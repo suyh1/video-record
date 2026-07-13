@@ -40,6 +40,12 @@ func NewRouter(dependencies Dependencies) http.Handler {
 	if dependencies.Auth != nil {
 		handlers := authHandlers{service: dependencies.Auth, cookieSecure: dependencies.CookieSecure}
 		router.Route("/api/v1", func(api chi.Router) {
+			api.NotFound(func(w http.ResponseWriter, r *http.Request) {
+				writeProblem(w, r, http.StatusNotFound, "Not Found", "route_not_found")
+			})
+			api.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+				writeProblem(w, r, http.StatusMethodNotAllowed, "Method Not Allowed", "method_not_allowed")
+			})
 			if dependencies.Storage != nil {
 				api.Use(MaintenanceMode(dependencies.Storage))
 			}
@@ -48,6 +54,14 @@ func NewRouter(dependencies Dependencies) http.Handler {
 			api.With(RequireSameOrigin).Post("/auth/login", handlers.login)
 			api.Group(func(protected chi.Router) {
 				protected.Use(Authenticate(dependencies.Auth))
+				protectedWriteMiddleware := []func(http.Handler) http.Handler{
+					RequireSameOrigin,
+					RequireCSRF(dependencies.Auth),
+				}
+				if dependencies.Storage != nil {
+					idempotency := newIdempotencyMiddleware(dependencies.Storage)
+					protectedWriteMiddleware = append(protectedWriteMiddleware, idempotency.Handle)
+				}
 				protected.Get("/auth/me", handlers.me)
 				protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post("/auth/logout", handlers.logout)
 				if dependencies.Backup != nil && dependencies.Storage != nil {
@@ -69,24 +83,24 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protected.Get("/records/{mediaID}", recordAPI.getRecord)
 					protected.Get("/records/{mediaID}/events", recordAPI.watchEvents)
 					protected.Get("/records/{mediaID}/progress", recordAPI.episodeProgress)
-					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Put(
+					protected.With(protectedWriteMiddleware...).Put(
 						"/records/{mediaID}", recordAPI.updateState,
 					)
-					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Put(
+					protected.With(protectedWriteMiddleware...).Put(
 						"/records/{mediaID}/tags", recordAPI.setTags,
 					)
-					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post(
+					protected.With(protectedWriteMiddleware...).Post(
 						"/collections", recordAPI.createCollection,
 					)
-					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post(
+					protected.With(protectedWriteMiddleware...).Post(
 						"/collections/{collectionID}/items", recordAPI.addCollectionItem,
 					)
 					if dependencies.Storage != nil {
 						idempotency := newIdempotencyMiddleware(dependencies.Storage)
+						recordAPI.idempotency = idempotency
 						protected.With(
 							RequireSameOrigin,
 							RequireCSRF(dependencies.Auth),
-							idempotency.Handle,
 						).Post("/data/import", recordAPI.importData)
 						protected.With(
 							RequireSameOrigin,
@@ -99,7 +113,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 							idempotency.Handle,
 						).Post("/records/{mediaID}/progress", recordAPI.updateEpisodeProgress)
 					}
-					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Delete(
+					protected.With(protectedWriteMiddleware...).Delete(
 						"/records/{mediaID}/events/{eventID}", recordAPI.deleteWatchEvent,
 					)
 				}
@@ -153,13 +167,13 @@ func NewRouter(dependencies Dependencies) http.Handler {
 				if dependencies.Media != nil && dependencies.TMDB != nil {
 					mediaAPI := mediaHandlers{service: dependencies.Media, tmdb: dependencies.TMDB}
 					protected.Get("/media/{id}", mediaAPI.get)
-					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post(
+					protected.With(protectedWriteMiddleware...).Post(
 						"/media/tmdb/{mediaType}/{externalID}", mediaAPI.createFromTMDB,
 					)
-					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post(
+					protected.With(protectedWriteMiddleware...).Post(
 						"/media/custom", mediaAPI.createCustom,
 					)
-					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post(
+					protected.With(protectedWriteMiddleware...).Post(
 						"/media/{id}/tmdb/{mediaType}/{externalID}", mediaAPI.linkTMDB,
 					)
 				}
