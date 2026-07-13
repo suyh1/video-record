@@ -43,6 +43,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 				if dependencies.Records != nil {
 					recordAPI := recordHandlers{service: dependencies.Records}
 					protected.Get("/collections", recordAPI.collections)
+					protected.Get("/records/{mediaID}/events", recordAPI.watchEvents)
 					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Put(
 						"/records/{mediaID}", recordAPI.updateState,
 					)
@@ -54,6 +55,17 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					)
 					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post(
 						"/collections/{collectionID}/items", recordAPI.addCollectionItem,
+					)
+					if dependencies.Storage != nil {
+						idempotency := newIdempotencyMiddleware(dependencies.Storage)
+						protected.With(
+							RequireSameOrigin,
+							RequireCSRF(dependencies.Auth),
+							idempotency.Handle,
+						).Post("/records/{mediaID}/events", recordAPI.createWatchEvent)
+					}
+					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Delete(
+						"/records/{mediaID}/events/{eventID}", recordAPI.deleteWatchEvent,
 					)
 				}
 				if dependencies.TMDB != nil {

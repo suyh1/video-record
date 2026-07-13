@@ -26,7 +26,8 @@
 - [x] Task 6：TMDB 客户端、归属说明与安全缓存
 - [x] Task 7：本地影视目录与外部身份
 - [x] Task 8：个人状态、评分、标签与片单
-- [ ] Task 9-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
+- [x] Task 9：不可变观看事件与幂等
+- [ ] Task 10-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 
 ## 已确认约束
 
@@ -59,3 +60,4 @@
 | Task 6 首次 `go run` gitleaks 使用了仓库路径而非声明模块路径 | 1 | v8.30.1 的 module 仍声明为 `github.com/zricethezav/gitleaks/v8`；核对该路径版本后用声明路径重跑扫描 |
 | Task 8 片单跨用户增项被错误当作幂等成功 | 1 | 重复检查看到了所有者已有条目；改为事务入口先按 `collection_id + user_id` 验证所有权，再执行位置与插入逻辑 |
 | Task 8 初次领域覆盖率仅 75.4% | 1 | 补齐显式 null、字段省略、无操作版本、输入校验和私有片单回归测试后达到 85.5% |
+| Task 9 过期幂等夹具把 TEXT 写入 STRICT BLOB 列 | 1 | 根因是 SQL 文本字面量类型错误；改为绑定 `[]byte` 后重跑同一过期清理测试 |

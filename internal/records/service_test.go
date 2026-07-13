@@ -125,7 +125,7 @@ func TestTagsAndCollectionsArePrivateToTheirOwner(t *testing.T) {
 	service, db, firstUserID, mediaID := newTestRecordsService(t)
 	secondUserID := insertTestUser(t, db, "second")
 
-	require.NoError(t, service.SetTags(context.Background(), firstUserID, mediaID, []string{"科幻", "家庭"}))
+	require.NoError(t, service.SetTags(context.Background(), firstUserID, mediaID, []string{" 科幻 ", "家庭", "科幻", ""}))
 	require.NoError(t, service.SetTags(context.Background(), secondUserID, mediaID, []string{"科幻"}))
 	firstTags, err := service.Tags(context.Background(), firstUserID, mediaID)
 	require.NoError(t, err)
@@ -136,6 +136,7 @@ func TestTagsAndCollectionsArePrivateToTheirOwner(t *testing.T) {
 
 	collection, err := service.CreateCollection(context.Background(), firstUserID, "周末电影")
 	require.NoError(t, err)
+	require.NoError(t, service.AddCollectionItem(context.Background(), firstUserID, collection.ID, mediaID))
 	require.NoError(t, service.AddCollectionItem(context.Background(), firstUserID, collection.ID, mediaID))
 	firstCollections, err := service.Collections(context.Background(), firstUserID)
 	require.NoError(t, err)

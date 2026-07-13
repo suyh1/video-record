@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 )
 
 var (
@@ -22,6 +23,8 @@ type State struct {
 	StatusSource Source
 	RatingSource Source
 	NoteSource   Source
+	StartedAt    *time.Time
+	CompletedAt  *time.Time
 }
 
 type UpdateStateInput struct {
@@ -52,20 +55,35 @@ func NewService(repository Repository) *Service {
 }
 
 func (service *Service) UpdateState(ctx context.Context, input UpdateStateInput) (State, error) {
+	update, err := service.prepareStateUpdate(ctx, input)
+	if err != nil {
+		return update.current, err
+	}
+	return service.persistStateUpdate(ctx, update)
+}
+
+type preparedStateUpdate struct {
+	current State
+	next    State
+	exists  bool
+	changed bool
+}
+
+func (service *Service) prepareStateUpdate(ctx context.Context, input UpdateStateInput) (preparedStateUpdate, error) {
 	if input.UserID == "" || input.MediaID == "" || ValidateStatus(input.Status) != nil || sourcePriority(input.Source) == 0 {
-		return State{}, ErrInvalidRecord
+		return preparedStateUpdate{}, ErrInvalidRecord
 	}
 	ratingProvided := input.RatingSet || input.Rating != nil
 	noteProvided := input.NoteSet || input.Note != nil
 	if ratingProvided && input.Rating != nil && (*input.Rating < 0 || *input.Rating > 100) {
-		return State{}, ErrInvalidRating
+		return preparedStateUpdate{}, ErrInvalidRating
 	}
 	current, exists, err := service.repository.FindState(ctx, input.UserID, input.MediaID)
 	if err != nil {
-		return State{}, err
+		return preparedStateUpdate{}, err
 	}
 	if input.ExpectedVersion != current.Version {
-		return current, ErrVersionConflict
+		return preparedStateUpdate{current: current}, ErrVersionConflict
 	}
 
 	next := current
@@ -84,25 +102,31 @@ func (service *Service) UpdateState(ctx context.Context, input UpdateStateInput)
 		next.Note = cloneStringPointer(input.Note)
 		next.NoteSource = input.Source
 	}
-	if !changed {
-		return current, nil
-	}
 	next.UserID, next.MediaID = input.UserID, input.MediaID
-	next.Version = current.Version + 1
-	if !exists {
-		if err := service.repository.InsertState(ctx, next); err != nil {
+	if changed {
+		next.Version = current.Version + 1
+	}
+	return preparedStateUpdate{current: current, next: next, exists: exists, changed: changed}, nil
+}
+
+func (service *Service) persistStateUpdate(ctx context.Context, update preparedStateUpdate) (State, error) {
+	if !update.changed {
+		return update.current, nil
+	}
+	if !update.exists {
+		if err := service.repository.InsertState(ctx, update.next); err != nil {
 			return State{}, err
 		}
-		return next, nil
+		return update.next, nil
 	}
-	updated, err := service.repository.UpdateState(ctx, next, current.Version)
+	updated, err := service.repository.UpdateState(ctx, update.next, update.current.Version)
 	if err != nil {
 		return State{}, err
 	}
 	if !updated {
-		return current, ErrVersionConflict
+		return update.current, ErrVersionConflict
 	}
-	return next, nil
+	return update.next, nil
 }
 
 func (service *Service) SetTags(ctx context.Context, userID, mediaID string, names []string) error {

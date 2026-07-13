@@ -131,3 +131,17 @@
 - `internal/records` 覆盖率从 75.4% 提升到 85.5%，覆盖 nullable 更新、字段省略、无操作版本、输入校验和所有权边界。
 - 定向验证 `go test ./internal/records ./internal/httpapi -race -count=1` 通过。
 - 完整验证 `go test ./... -race -count=1`、`go vet ./...`、前端 typecheck/test/build、`npm audit` 与 `git diff --check` 通过。
+
+### Task 9：不可变观看事件与幂等
+
+- 已先写领域测试并确认事件 API 缺失，再用最小方法边界取得 `watch events not implemented` 行为红灯。
+- 已添加 `0006_watch_events.sql`，包含观看事件、参与者、外部事件唯一索引和带 24 小时过期时间的幂等响应表。
+- completed 首次转换现在原子保存状态、事件和参与者；wishlist 不产生事件，重复 completed 不误建重看，显式重看生成独立 UUID。
+- 已验证删除最新/最早/全部事件会重算首末观看日期，同时保留评分和私人笔记；跨用户删除返回事件不存在。
+- 已先写重复 HTTP 请求测试并确认事件路由 `404`，再实现按用户、方法、路径和请求体哈希绑定的 `Idempotency-Key` 重放。
+- 已验证相同键相同请求精确重放首次 `201`、相同键不同请求返回 `idempotency_key_conflict`、缺失键被拒绝、过期响应被清理后可重新执行。
+- 过期幂等测试夹具最初把 TEXT 字面量写入 STRICT BLOB 列；根据 SQLite 错误将夹具改为绑定 `[]byte` 后通过，未修改产品逻辑。
+- 已验证重复外部事件 ID 被唯一约束拒绝，重复标签和片单增项保持幂等。
+- `internal/records` 覆盖率为 85.7%。
+- 定向验证 `go test ./internal/records ./internal/httpapi -race -count=1` 通过：`records` 16.057s，`httpapi` 33.365s。
+- 完整验证 `go test ./... -race -count=1`、`go vet ./...`、前端 typecheck/test/build、`npm audit`、`git diff --check` 和工作树/历史 gitleaks 扫描通过。

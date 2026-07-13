@@ -1,0 +1,191 @@
+package httpapi
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"video-record/internal/storage"
+)
+
+const (
+	idempotencyTTL     = 24 * time.Hour
+	maxIdempotencyBody = 1 << 20
+)
+
+type idempotencyMiddleware struct {
+	db  *storage.DB
+	now func() time.Time
+	mu  sync.Mutex
+}
+
+type storedHTTPResponse struct {
+	Method      string
+	Path        string
+	RequestHash string
+	Status      int
+	ContentType string
+	ETag        string
+	Body        []byte
+}
+
+func newIdempotencyMiddleware(db *storage.DB) *idempotencyMiddleware {
+	return &idempotencyMiddleware{db: db, now: time.Now}
+}
+
+func (middleware *idempotencyMiddleware) Handle(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		identity, ok := IdentityFromContext(r.Context())
+		if !ok {
+			writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+			return
+		}
+		key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+		if key == "" || len(key) > 128 {
+			writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_idempotency_key")
+			return
+		}
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxIdempotencyBody+1))
+		if err != nil || len(body) > maxIdempotencyBody {
+			writeProblem(w, r, http.StatusRequestEntityTooLarge, "Content Too Large", "request_too_large")
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		hash := sha256.Sum256(body)
+		requestHash := hex.EncodeToString(hash[:])
+
+		middleware.mu.Lock()
+		defer middleware.mu.Unlock()
+		stored, found, err := middleware.find(r.Context(), identity.User.ID, key)
+		if err != nil {
+			writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
+			return
+		}
+		if found {
+			if stored.Method != r.Method || stored.Path != r.URL.Path || stored.RequestHash != requestHash {
+				writeProblem(w, r, http.StatusConflict, "Conflict", "idempotency_key_conflict")
+				return
+			}
+			writeStoredResponse(w, stored, true)
+			return
+		}
+
+		capture := newCapturedResponse()
+		next.ServeHTTP(capture, r)
+		response := capture.stored(r.Method, r.URL.Path, requestHash)
+		if response.Status < http.StatusInternalServerError {
+			if err := middleware.save(r.Context(), identity.User.ID, key, response); err != nil {
+				writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
+				return
+			}
+		}
+		copyHeader(w.Header(), capture.header)
+		w.WriteHeader(response.Status)
+		_, _ = w.Write(response.Body)
+	})
+}
+
+func (middleware *idempotencyMiddleware) find(
+	ctx context.Context,
+	userID, key string,
+) (storedHTTPResponse, bool, error) {
+	now := middleware.now().UTC().UnixMilli()
+	if _, err := middleware.db.Writer().ExecContext(ctx, "DELETE FROM idempotency_keys WHERE expires_at <= ?", now); err != nil {
+		return storedHTTPResponse{}, false, err
+	}
+	var response storedHTTPResponse
+	err := middleware.db.Reader().QueryRowContext(ctx, `
+		SELECT method, path, request_hash, status_code, content_type, etag, response_body
+		FROM idempotency_keys WHERE user_id = ? AND key = ?
+	`, userID, key).Scan(
+		&response.Method, &response.Path, &response.RequestHash, &response.Status,
+		&response.ContentType, &response.ETag, &response.Body,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return storedHTTPResponse{}, false, nil
+	}
+	return response, err == nil, err
+}
+
+func (middleware *idempotencyMiddleware) save(
+	ctx context.Context,
+	userID, key string,
+	response storedHTTPResponse,
+) error {
+	now := middleware.now().UTC()
+	_, err := middleware.db.Writer().ExecContext(ctx, `
+		INSERT INTO idempotency_keys (
+			user_id, key, method, path, request_hash, status_code,
+			content_type, etag, response_body, created_at, expires_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, userID, key, response.Method, response.Path, response.RequestHash, response.Status,
+		response.ContentType, response.ETag, response.Body, now.UnixMilli(), now.Add(idempotencyTTL).UnixMilli())
+	return err
+}
+
+func writeStoredResponse(w http.ResponseWriter, response storedHTTPResponse, replayed bool) {
+	if response.ContentType != "" {
+		w.Header().Set("Content-Type", response.ContentType)
+	}
+	if response.ETag != "" {
+		w.Header().Set("ETag", response.ETag)
+	}
+	if replayed {
+		w.Header().Set("Idempotency-Replayed", "true")
+	}
+	w.WriteHeader(response.Status)
+	_, _ = w.Write(response.Body)
+}
+
+type capturedResponse struct {
+	header http.Header
+	status int
+	body   bytes.Buffer
+}
+
+func newCapturedResponse() *capturedResponse {
+	return &capturedResponse{header: make(http.Header)}
+}
+
+func (response *capturedResponse) Header() http.Header {
+	return response.header
+}
+
+func (response *capturedResponse) WriteHeader(status int) {
+	if response.status == 0 {
+		response.status = status
+	}
+}
+
+func (response *capturedResponse) Write(body []byte) (int, error) {
+	if response.status == 0 {
+		response.status = http.StatusOK
+	}
+	return response.body.Write(body)
+}
+
+func (response *capturedResponse) stored(method, path, requestHash string) storedHTTPResponse {
+	status := response.status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	return storedHTTPResponse{
+		Method: method, Path: path, RequestHash: requestHash, Status: status,
+		ContentType: response.header.Get("Content-Type"), ETag: response.header.Get("ETag"),
+		Body: append([]byte(nil), response.body.Bytes()...),
+	}
+}
+
+func copyHeader(destination, source http.Header) {
+	for key, values := range source {
+		destination[key] = append([]string(nil), values...)
+	}
+}

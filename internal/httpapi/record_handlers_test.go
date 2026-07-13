@@ -16,7 +16,7 @@ import (
 )
 
 func TestRecordHandlersEnforceVersionAndCurrentUserOwnership(t *testing.T) {
-	router, cookie, csrfToken, mediaID := newRecordsTestRouter(t)
+	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
 	headers := map[string]string{
 		"Cookie":       cookie.String(),
 		"Origin":       "http://example.test",
@@ -75,7 +75,7 @@ func TestRecordHandlersEnforceVersionAndCurrentUserOwnership(t *testing.T) {
 }
 
 func TestRecordHandlerClearsExplicitNullRatingAndNote(t *testing.T) {
-	router, cookie, csrfToken, mediaID := newRecordsTestRouter(t)
+	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
 	headers := map[string]string{
 		"Cookie":       cookie.String(),
 		"Origin":       "http://example.test",
@@ -101,7 +101,7 @@ func TestRecordHandlerClearsExplicitNullRatingAndNote(t *testing.T) {
 	require.Contains(t, cleared.Body.String(), `"note":null`)
 }
 
-func newRecordsTestRouter(t *testing.T) (http.Handler, *http.Cookie, string, string) {
+func newRecordsTestRouter(t *testing.T) (http.Handler, *http.Cookie, string, string, *records.Service, *storage.DB) {
 	t.Helper()
 	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "video-record.db"))
 	require.NoError(t, err)
@@ -115,13 +115,14 @@ func newRecordsTestRouter(t *testing.T) (http.Handler, *http.Cookie, string, str
 		MediaType: media.MediaTypeMovie, Title: "测试电影",
 	})
 	require.NoError(t, err)
+	recordService := records.NewService(records.NewRepository(db))
 	router := NewRouter(Dependencies{
 		Storage: db,
 		Auth:    authService,
-		Records: records.NewService(records.NewRepository(db)),
+		Records: recordService,
 	})
 	cookie, csrfToken := loginForHTTPTest(t, router)
-	return router, cookie, csrfToken, item.ID
+	return router, cookie, csrfToken, item.ID, recordService, db
 }
 
 func cloneHeaders(headers map[string]string) map[string]string {

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -23,6 +24,7 @@ type updateRecordRequest struct {
 	RatingSet bool
 	Note      *string
 	NoteSet   bool
+	WatchedAt time.Time
 }
 
 type recordResponse struct {
@@ -51,6 +53,24 @@ type collectionResponse struct {
 	Items []string `json:"items"`
 }
 
+type watchEventRequest struct {
+	WatchedAt     time.Time `json:"watchedAt"`
+	ViewingMethod string    `json:"viewingMethod"`
+	Note          string    `json:"note"`
+}
+
+type watchEventResponse struct {
+	ID              string         `json:"id"`
+	MediaID         string         `json:"mediaId"`
+	EpisodeID       string         `json:"episodeId,omitempty"`
+	WatchedAt       time.Time      `json:"watchedAt"`
+	ViewingMethod   string         `json:"viewingMethod,omitempty"`
+	Source          records.Source `json:"source"`
+	ExternalEventID string         `json:"externalEventId,omitempty"`
+	Completion      int            `json:"completion"`
+	Note            string         `json:"note,omitempty"`
+}
+
 func (handlers recordHandlers) updateState(w http.ResponseWriter, r *http.Request) {
 	identity, ok := IdentityFromContext(r.Context())
 	if !ok {
@@ -75,11 +95,14 @@ func (handlers recordHandlers) updateState(w http.ResponseWriter, r *http.Reques
 		}
 		rating = &converted
 	}
-	state, err := handlers.service.UpdateState(r.Context(), records.UpdateStateInput{
-		UserID: identity.User.ID, MediaID: chi.URLParam(r, "mediaID"),
-		Status: request.Status, Rating: rating, RatingSet: request.RatingSet,
-		Note: request.Note, NoteSet: request.NoteSet,
-		Source: records.SourceManual, ExpectedVersion: expectedVersion,
+	state, _, err := handlers.service.RecordStatus(r.Context(), records.RecordStatusInput{
+		UpdateStateInput: records.UpdateStateInput{
+			UserID: identity.User.ID, MediaID: chi.URLParam(r, "mediaID"),
+			Status: request.Status, Rating: rating, RatingSet: request.RatingSet,
+			Note: request.Note, NoteSet: request.NoteSet,
+			Source: records.SourceManual, ExpectedVersion: expectedVersion,
+		},
+		WatchedAt: request.WatchedAt,
 	})
 	if err != nil {
 		writeRecordError(w, r, err, state.Version)
@@ -91,14 +114,18 @@ func (handlers recordHandlers) updateState(w http.ResponseWriter, r *http.Reques
 
 func decodeUpdateRecordRequest(r *http.Request) (updateRecordRequest, error) {
 	var raw struct {
-		Status records.Status  `json:"status"`
-		Rating json.RawMessage `json:"rating"`
-		Note   json.RawMessage `json:"note"`
+		Status    records.Status  `json:"status"`
+		Rating    json.RawMessage `json:"rating"`
+		Note      json.RawMessage `json:"note"`
+		WatchedAt *time.Time      `json:"watchedAt"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 		return updateRecordRequest{}, err
 	}
 	request := updateRecordRequest{Status: raw.Status}
+	if raw.WatchedAt != nil {
+		request.WatchedAt = raw.WatchedAt.UTC()
+	}
 	if raw.Rating != nil {
 		request.RatingSet = true
 		if string(raw.Rating) != "null" {
@@ -116,6 +143,60 @@ func decodeUpdateRecordRequest(r *http.Request) (updateRecordRequest, error) {
 		}
 	}
 	return request, nil
+}
+
+func (handlers recordHandlers) createWatchEvent(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	var request watchEventRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_request")
+		return
+	}
+	event, err := handlers.service.AddRewatch(r.Context(), records.CreateWatchEventInput{
+		UserID: identity.User.ID, MediaID: chi.URLParam(r, "mediaID"),
+		WatchedAt: request.WatchedAt, ViewingMethod: request.ViewingMethod,
+		Source: records.SourceManual, Completion: 100, Note: request.Note,
+	})
+	if err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	writeJSON(w, http.StatusCreated, newWatchEventResponse(event))
+}
+
+func (handlers recordHandlers) watchEvents(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	events, err := handlers.service.WatchEvents(r.Context(), identity.User.ID, chi.URLParam(r, "mediaID"))
+	if err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	response := make([]watchEventResponse, 0, len(events))
+	for _, event := range events {
+		response = append(response, newWatchEventResponse(event))
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (handlers recordHandlers) deleteWatchEvent(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	if err := handlers.service.DeleteWatchEvent(r.Context(), identity.User.ID, chi.URLParam(r, "eventID")); err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (handlers recordHandlers) setTags(w http.ResponseWriter, r *http.Request) {
@@ -209,6 +290,15 @@ func newCollectionResponse(collection records.Collection) collectionResponse {
 	return collectionResponse{ID: collection.ID, Name: collection.Name, Items: collection.Items}
 }
 
+func newWatchEventResponse(event records.WatchEvent) watchEventResponse {
+	return watchEventResponse{
+		ID: event.ID, MediaID: event.MediaID, EpisodeID: event.EpisodeID,
+		WatchedAt: event.WatchedAt, ViewingMethod: event.ViewingMethod,
+		Source: event.Source, ExternalEventID: event.ExternalEventID,
+		Completion: event.Completion, Note: event.Note,
+	}
+}
+
 func parseIfMatch(w http.ResponseWriter, r *http.Request) (int, bool) {
 	raw := strings.TrimSpace(r.Header.Get("If-Match"))
 	if len(raw) < 3 || raw[0] != '"' || raw[len(raw)-1] != '"' {
@@ -238,6 +328,10 @@ func writeRecordError(w http.ResponseWriter, r *http.Request, err error, version
 		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_rating")
 	case errors.Is(err, records.ErrInvalidRecord), errors.Is(err, records.ErrInvalidStatus):
 		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_record")
+	case errors.Is(err, records.ErrInvalidWatchEvent):
+		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_watch_event")
+	case errors.Is(err, records.ErrWatchEventNotFound):
+		writeProblem(w, r, http.StatusNotFound, "Not Found", "watch_event_not_found")
 	default:
 		writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
 	}

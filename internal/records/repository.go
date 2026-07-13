@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -15,6 +16,10 @@ type Repository interface {
 	FindState(context.Context, string, string) (State, bool, error)
 	InsertState(context.Context, State) error
 	UpdateState(context.Context, State, int) (bool, error)
+	ApplyStateAndEvent(context.Context, State, int, bool, WatchEvent) (bool, error)
+	CreateWatchEvent(context.Context, WatchEvent) error
+	WatchEvents(context.Context, string, string) ([]WatchEvent, error)
+	DeleteWatchEvent(context.Context, string, string) error
 	SetTags(context.Context, string, string, []string) error
 	Tags(context.Context, string, string) ([]string, error)
 	CreateCollection(context.Context, string, string) (Collection, error)
@@ -34,12 +39,15 @@ func (repository *SQLiteRepository) FindState(ctx context.Context, userID, media
 	var state State
 	var rating sql.NullInt64
 	var note sql.NullString
+	var startedAt, completedAt sql.NullString
 	err := repository.db.Reader().QueryRowContext(ctx, `
-		SELECT status, rating, note, version, status_source, rating_source, note_source
+		SELECT status, rating, note, version, status_source, rating_source, note_source,
+		       started_at, completed_at
 		FROM user_media_states WHERE user_id = ? AND media_id = ?
 	`, userID, mediaID).Scan(
 		&state.Status, &rating, &note, &state.Version,
 		&state.StatusSource, &state.RatingSource, &state.NoteSource,
+		&startedAt, &completedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return State{UserID: userID, MediaID: mediaID, Status: StatusNone}, false, nil
@@ -56,35 +64,239 @@ func (repository *SQLiteRepository) FindState(ctx context.Context, userID, media
 		value := note.String
 		state.Note = &value
 	}
+	state.StartedAt, err = parseNullableEventTime(startedAt)
+	if err != nil {
+		return State{}, false, err
+	}
+	state.CompletedAt, err = parseNullableEventTime(completedAt)
+	if err != nil {
+		return State{}, false, err
+	}
 	return state, true, nil
 }
 
 func (repository *SQLiteRepository) InsertState(ctx context.Context, state State) error {
-	_, err := repository.db.Writer().ExecContext(ctx, `
+	return insertState(ctx, repository.db.Writer(), state)
+}
+
+func insertState(ctx context.Context, executor sqlExecutor, state State) error {
+	_, err := executor.ExecContext(ctx, `
 		INSERT INTO user_media_states (
 			user_id, media_id, status, rating, note, version,
-			status_source, rating_source, note_source, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now') * 1000)
+			status_source, rating_source, note_source, started_at, completed_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now') * 1000)
 	`, state.UserID, state.MediaID, state.Status, nullableInt(state.Rating), nullableText(state.Note),
-		state.Version, state.StatusSource, state.RatingSource, state.NoteSource)
+		state.Version, state.StatusSource, state.RatingSource, state.NoteSource,
+		nullableEventTime(state.StartedAt), nullableEventTime(state.CompletedAt))
 	return err
 }
 
 func (repository *SQLiteRepository) UpdateState(ctx context.Context, state State, expectedVersion int) (bool, error) {
-	result, err := repository.db.Writer().ExecContext(ctx, `
+	return updateState(ctx, repository.db.Writer(), state, expectedVersion)
+}
+
+func updateState(ctx context.Context, executor sqlExecutor, state State, expectedVersion int) (bool, error) {
+	result, err := executor.ExecContext(ctx, `
 		UPDATE user_media_states SET
 			status = ?, rating = ?, note = ?, version = ?,
 			status_source = ?, rating_source = ?, note_source = ?,
+			started_at = ?, completed_at = ?,
 			updated_at = strftime('%s', 'now') * 1000
 		WHERE user_id = ? AND media_id = ? AND version = ?
 	`, state.Status, nullableInt(state.Rating), nullableText(state.Note), state.Version,
 		state.StatusSource, state.RatingSource, state.NoteSource,
+		nullableEventTime(state.StartedAt), nullableEventTime(state.CompletedAt),
 		state.UserID, state.MediaID, expectedVersion)
 	if err != nil {
 		return false, err
 	}
 	rows, err := result.RowsAffected()
 	return rows == 1, err
+}
+
+type sqlExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func (repository *SQLiteRepository) ApplyStateAndEvent(
+	ctx context.Context,
+	state State,
+	expectedVersion int,
+	exists bool,
+	event WatchEvent,
+) (bool, error) {
+	tx, err := repository.db.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if exists {
+		updated, err := updateState(ctx, tx, state, expectedVersion)
+		if err != nil || !updated {
+			return updated, err
+		}
+	} else if err := insertState(ctx, tx, state); err != nil {
+		return false, err
+	}
+	if err := insertWatchEvent(ctx, tx, event); err != nil {
+		return false, err
+	}
+	if err := recomputeWatchDates(ctx, tx, event.UserID, event.MediaID); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (repository *SQLiteRepository) CreateWatchEvent(ctx context.Context, event WatchEvent) error {
+	tx, err := repository.db.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := insertWatchEvent(ctx, tx, event); err != nil {
+		return err
+	}
+	if err := recomputeWatchDates(ctx, tx, event.UserID, event.MediaID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func insertWatchEvent(ctx context.Context, tx *sql.Tx, event WatchEvent) error {
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO watch_events (
+			id, created_by_user_id, media_id, episode_id, watched_at,
+			viewing_method, source, external_event_id, completion, note, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now') * 1000)
+	`, event.ID, event.UserID, event.MediaID, nullableString(event.EpisodeID), formatEventTime(event.WatchedAt),
+		nullableString(event.ViewingMethod), event.Source, nullableString(event.ExternalEventID),
+		event.Completion, nullableString(event.Note)); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO watch_event_participants (event_id, user_id) VALUES (?, ?)
+	`, event.ID, event.UserID)
+	return err
+}
+
+func (repository *SQLiteRepository) WatchEvents(ctx context.Context, userID, mediaID string) ([]WatchEvent, error) {
+	rows, err := repository.db.Reader().QueryContext(ctx, `
+		SELECT we.id, we.created_by_user_id, we.media_id, we.episode_id, we.watched_at,
+		       we.viewing_method, we.source, we.external_event_id, we.completion, we.note
+		FROM watch_events we
+		JOIN watch_event_participants participant ON participant.event_id = we.id
+		WHERE participant.user_id = ? AND we.media_id = ?
+		ORDER BY we.watched_at, we.id
+	`, userID, mediaID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	events := make([]WatchEvent, 0)
+	for rows.Next() {
+		var event WatchEvent
+		var episodeID, viewingMethod, externalEventID, note sql.NullString
+		var watchedAt string
+		if err := rows.Scan(
+			&event.ID, &event.UserID, &event.MediaID, &episodeID, &watchedAt,
+			&viewingMethod, &event.Source, &externalEventID, &event.Completion, &note,
+		); err != nil {
+			return nil, err
+		}
+		event.WatchedAt, err = time.Parse(eventTimeLayout, watchedAt)
+		if err != nil {
+			return nil, err
+		}
+		event.EpisodeID = episodeID.String
+		event.ViewingMethod = viewingMethod.String
+		event.ExternalEventID = externalEventID.String
+		event.Note = note.String
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
+func (repository *SQLiteRepository) DeleteWatchEvent(ctx context.Context, userID, eventID string) error {
+	tx, err := repository.db.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var mediaID string
+	err = tx.QueryRowContext(ctx, `
+		SELECT media_id FROM watch_events WHERE id = ? AND created_by_user_id = ?
+	`, eventID, userID).Scan(&mediaID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrWatchEventNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM watch_events WHERE id = ?", eventID); err != nil {
+		return err
+	}
+	if err := recomputeWatchDates(ctx, tx, userID, mediaID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func recomputeWatchDates(ctx context.Context, tx *sql.Tx, userID, mediaID string) error {
+	var startedAt, completedAt sql.NullString
+	if err := tx.QueryRowContext(ctx, `
+		SELECT MIN(we.watched_at), MAX(we.watched_at)
+		FROM watch_events we
+		JOIN watch_event_participants participant ON participant.event_id = we.id
+		WHERE participant.user_id = ? AND we.media_id = ?
+	`, userID, mediaID).Scan(&startedAt, &completedAt); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `
+		UPDATE user_media_states SET started_at = ?, completed_at = ?, updated_at = strftime('%s', 'now') * 1000
+		WHERE user_id = ? AND media_id = ?
+	`, nullableNullString(startedAt), nullableNullString(completedAt), userID, mediaID)
+	return err
+}
+
+const eventTimeLayout = "2006-01-02T15:04:05.000000000Z07:00"
+
+func formatEventTime(value time.Time) string {
+	return value.UTC().Format(eventTimeLayout)
+}
+
+func parseNullableEventTime(value sql.NullString) (*time.Time, error) {
+	if !value.Valid {
+		return nil, nil
+	}
+	parsed, err := time.Parse(eventTimeLayout, value.String)
+	if err != nil {
+		return nil, err
+	}
+	return &parsed, nil
+}
+
+func nullableEventTime(value *time.Time) any {
+	if value == nil {
+		return nil
+	}
+	return formatEventTime(*value)
+}
+
+func nullableString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
+}
+
+func nullableNullString(value sql.NullString) any {
+	if !value.Valid {
+		return nil
+	}
+	return value.String
 }
 
 func (repository *SQLiteRepository) SetTags(ctx context.Context, userID, mediaID string, names []string) error {
