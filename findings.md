@@ -363,3 +363,13 @@
 - 稳定事件 ID 为 `emby:{rowId}`，游标为服务器本地 `date|rowId`；重复电影行保留为独立事件，同页重复条目只抓取一次 Item 详情。
 - 历史 wrapper 的 `user_id` 必须与配置用户匹配，`activity:null`、畸形 JSON、非法游标、缺失 Item、删除用户、401/403、429、5xx 和超时均映射为稳定脱敏错误。
 - Item DTO 会丢弃 Emby 媒体 `Path`，历史 DTO 会丢弃 `RemoteAddress`，这些服务器隐私字段不会进入候选、错误或日志。
+
+## Task 20：Plex 播放历史 Provider
+
+- Plex 核心服务直接提供事件级 `/status/sessions/history/all`，不需要额外插件；`historyKey` 唯一标识一次播放，`ratingKey` 稳定标识媒体条目，重复观看不会覆盖旧事件。
+- 历史请求按 `X-Plex-Container-Start/Size` offset 分页，并固定 `accountID`、`sort=viewedAt:asc`、`includeGuids=1`；可选 `viewedAt>=/<=` 传入 UTC Unix 秒范围。
+- Plex token 只通过 `X-Plex-Token` 请求头发送，不进入 query；客户端同时发送固定的产品、客户端 ID 和版本头，不包含用户数据。
+- 适配器自动识别 XML/JSON MediaContainer，严格校验 `offset`、`size`、`totalSize` 与 Metadata 数量；null envelope、错误根节点、格式损坏和容器计数不一致均拒绝。
+- Provider 事件 ID 为 `plex:{historyKey}`，Item Provider ID 为 `ratingKey`；TMDB/IMDb/TVDB 同时支持现代 `tmdb://` 等 GUID 与旧 `com.plexapp.agents.*://` scheme。
+- typed DTO 不读取 JSON Media/Part 文件路径；认证、历史错误和同步候选不会携带 Plex 媒体文件系统信息。
+- 重复 `historyKey` 通过统一 HistoryPage 校验拒绝，缺失 historyKey/ratingKey、非法时间、负时长/进度和未知媒体类型均不能进入后续候选。

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MediaContainer size="1" totalSize="1" offset="0">
+  <Video ratingKey="movie-rating-key" type="movie" title="The Matrix" duration="8160000" viewOffset="8000000" viewedAt="1783933200"><Guid id="tmdb://603" /></Video>
+</MediaContainer>

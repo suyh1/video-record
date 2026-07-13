@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MediaContainer size="1" totalSize="3" offset="2">
+  <Video historyKey="/status/sessions/history/303" ratingKey="movie-rating-key" type="movie" title="The Matrix" originalTitle="The Matrix" year="1999" duration="8160000" viewOffset="7900000" viewedAt="1783971900">
+    <Guid id="tmdb://603" />
+    <Guid id="imdb://tt0133093" />
+  </Video>
+</MediaContainer>

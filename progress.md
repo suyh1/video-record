@@ -267,3 +267,14 @@
 - 包级 `go test ./internal/integrations/emby ./internal/integrations -race -count=1` 通过，`internal/integrations/emby` 精确语句覆盖率为 87.4%。
 - 最终 `go test ./... -race -count=1`、`go vet ./...`、前端 typecheck、12 个测试文件 24 项测试、build 与高危依赖审计通过。
 - 未创建 `.tmdb-token`，未使用真实 Emby/TMDB 凭据；全部响应和 token 均为合成测试数据。
+
+### Task 20：Plex 播放历史 Provider
+
+- 已先写 Plex XML/JSON、分页、稳定事件 ID、ratingKey、重复播放、重复事件拒绝、错误分类和 conformance 红测，再实现核心历史适配器。
+- 认证使用 `/library/sections` MediaContainer；历史使用 `/status/sessions/history/all`，token 只走 `X-Plex-Token` header，query 中显式验证不存在 token。
+- XML/JSON 两种响应映射为同一受控 DTO；容器 offset/size/totalSize、null envelope、错误根节点、格式损坏、缺失 historyKey 和重复事件均有回归测试。
+- `historyKey` 生成唯一 `plex:{historyKey}` 事件 ID，`ratingKey` 保存为 ProviderItemID；现代和旧版 Plex agent GUID 均映射到 TMDB/IMDb/TVDB。
+- 合成 JSON 特意包含私有 Media/Part 文件路径，typed DTO 不读取或传播该字段；上游正文和 token 不进入错误。
+- 包级 `go test ./internal/integrations/plex ./internal/integrations -race -count=1` 通过，`internal/integrations/plex` 精确语句覆盖率为 91.2%。
+- 最终 `go test ./... -race -count=1`、`go vet ./...`、前端 typecheck、12 个测试文件 24 项测试、build 与高危依赖审计通过。
+- 未创建 `.tmdb-token`，未使用真实 Plex/TMDB 凭据；全部 XML/JSON 与 token 均为合成数据。

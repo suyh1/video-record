@@ -37,7 +37,8 @@
 - [x] Task 17：Provider 契约、加密账户与持久化调度器
 - [x] Task 18：Jellyfin 播放历史 Provider
 - [x] Task 19：Emby 播放历史 Provider
-- [ ] Task 20-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
+- [x] Task 20：Plex 播放历史 Provider
+- [ ] Task 21-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 
 ## 已确认约束
 

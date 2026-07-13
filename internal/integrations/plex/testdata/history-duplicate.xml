@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MediaContainer size="2" totalSize="2" offset="0">
+  <Video historyKey="/status/sessions/history/301" ratingKey="movie-rating-key" type="movie" title="The Matrix" duration="8160000" viewOffset="8000000" viewedAt="1783933200"><Guid id="tmdb://603" /></Video>
+  <Video historyKey="/status/sessions/history/301" ratingKey="movie-rating-key" type="movie" title="The Matrix" duration="8160000" viewOffset="7900000" viewedAt="1783971900"><Guid id="tmdb://603" /></Video>
+</MediaContainer>

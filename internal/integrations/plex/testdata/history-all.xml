@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MediaContainer size="3" totalSize="3" offset="0">
+  <Video historyKey="/status/sessions/history/301" ratingKey="movie-rating-key" type="movie" title="The Matrix" originalTitle="The Matrix" year="1999" duration="8160000" viewOffset="8000000" viewedAt="1783933200"><Guid id="tmdb://603" /><Guid id="imdb://tt0133093" /></Video>
+  <Video historyKey="/status/sessions/history/302" ratingKey="episode-rating-key" type="episode" title="Seventh Episode" grandparentTitle="Plex Synthetic Series" year="2026" parentIndex="3" index="7" duration="3600000" viewOffset="3500000" viewedAt="1783936800"><Guid id="tmdb://30007" /><Guid id="tvdb://76543" /></Video>
+  <Video historyKey="/status/sessions/history/303" ratingKey="movie-rating-key" type="movie" title="The Matrix" originalTitle="The Matrix" year="1999" duration="8160000" viewOffset="7900000" viewedAt="1783971900"><Guid id="tmdb://603" /><Guid id="imdb://tt0133093" /></Video>
+</MediaContainer>
