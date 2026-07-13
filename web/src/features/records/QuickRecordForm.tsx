@@ -5,15 +5,16 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 
 import { APIError, updateRecord, type UpdateRecordPayload } from '../../api/client'
-import type { RecordState, RecordStatus } from '../../api/types'
+import type { HouseholdMember, RecordState, RecordStatus } from '../../api/types'
 
 type QuickRecordFormProps = {
   record: RecordState
   now: Date
+  participants?: HouseholdMember[]
   onSaved: (record: RecordState) => void
 }
 
-export function QuickRecordForm({ record, now, onSaved }: QuickRecordFormProps) {
+export function QuickRecordForm({ record, now, participants = [], onSaved }: QuickRecordFormProps) {
   const [expanded, setExpanded] = useState(Boolean(record.rating !== null || record.note || record.viewingMethod))
   const [message, setMessage] = useState<{ kind: 'error' | 'conflict'; text: string } | null>(null)
   const [conflictVersion, setConflictVersion] = useState<number | null>(null)
@@ -29,6 +30,7 @@ export function QuickRecordForm({ record, now, onSaved }: QuickRecordFormProps) 
       rating: record.rating === null ? '' : String(record.rating),
       note: record.note ?? '',
       viewingMethod: record.viewingMethod ?? '',
+      participantIds: [],
     },
   })
   const status = form.watch('status')
@@ -138,6 +140,19 @@ export function QuickRecordForm({ record, now, onSaved }: QuickRecordFormProps) 
             <span>观看方式</span>
             <input type="text" maxLength={80} placeholder="如：影院、家庭电视" {...form.register('viewingMethod')} />
           </label>
+          {status === 'completed' && participants.length > 0 ? (
+            <fieldset className="participant-fieldset">
+              <legend>共同观看者</legend>
+              <div className="participant-options">
+                {participants.map((participant) => (
+                  <label key={participant.id}>
+                    <input type="checkbox" value={participant.id} {...form.register('participantIds')} />
+                    <span>{participant.username}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ) : null}
           <label className="form-field note-field">
             <span>私人笔记</span>
             <textarea rows={4} maxLength={5000} {...form.register('note')} />
@@ -200,6 +215,7 @@ type FormValues = {
   rating: string
   note: string
   viewingMethod: string
+  participantIds: string[]
 }
 
 type MutationVariables = {
@@ -222,6 +238,7 @@ const formSchema = z
     rating: z.string().refine((value) => value === '' || (!Number.isNaN(Number(value)) && Number(value) >= 0 && Number(value) <= 10), '评分必须在 0 到 10 之间'),
     note: z.string().max(5000, '笔记不能超过 5000 字'),
     viewingMethod: z.string().max(80, '观看方式不能超过 80 字'),
+    participantIds: z.array(z.string().min(1)),
   })
   .superRefine((value, context) => {
     if (value.status === 'completed' && !value.watchedDate) {
@@ -232,6 +249,7 @@ const formSchema = z
 function toPayload(values: FormValues, expanded: boolean): UpdateRecordPayload {
   const payload: UpdateRecordPayload = { status: values.status }
   if (values.status === 'completed' && values.watchedDate) payload.watchedAt = `${values.watchedDate}T12:00:00.000Z`
+  if (values.status === 'completed' && values.participantIds.length > 0) payload.participantIds = values.participantIds
   if (expanded) {
     payload.rating = values.rating === '' ? null : Number(values.rating)
     payload.note = values.note.trim() || null
@@ -254,6 +272,7 @@ function formValuesFromRecord(record: RecordState): FormValues {
     rating: record.rating === null ? '' : String(record.rating),
     note: record.note ?? '',
     viewingMethod: record.viewingMethod ?? '',
+    participantIds: [],
   }
 }
 

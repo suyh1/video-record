@@ -109,4 +109,28 @@ describe('QuickRecordForm', () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce())
     expect(attempts).toBe(2)
   })
+
+  it('includes selected household participants in a completed event', async () => {
+    let requestBody: unknown
+    server.use(http.put('*/api/v1/records/media-1', async ({ request }) => {
+      requestBody = await request.json()
+      return HttpResponse.json({ ...initialRecord, status: 'completed', version: 1 })
+    }))
+    const user = userEvent.setup()
+    renderWithQueryClient(
+      <QuickRecordForm
+        record={initialRecord}
+        now={new Date('2026-07-13T09:00:00Z')}
+        participants={[{ id: 'member-1', username: 'family', role: 'member', active: true }]}
+        onSaved={() => undefined}
+      />,
+    )
+
+    await user.click(screen.getByRole('radio', { name: '看过' }))
+    await user.click(screen.getByRole('button', { name: '更多记录选项' }))
+    await user.click(screen.getByRole('checkbox', { name: 'family' }))
+    await user.click(screen.getByRole('button', { name: '保存记录' }))
+
+    await waitFor(() => expect(requestBody).toMatchObject({ participantIds: ['member-1'] }))
+  })
 })

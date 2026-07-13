@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarDays, Clapperboard, Star } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 
-import { getMedia, getRecord, getWatchEvents } from '../../api/client'
+import { getHouseholdParticipants, getMedia, getRecord, getWatchEvents } from '../../api/client'
 import type { MediaSearchResult, RecordState } from '../../api/types'
 import { EpisodeProgress } from '../episodes/EpisodeProgress'
 import { QuickRecordForm } from '../records/QuickRecordForm'
@@ -24,6 +24,11 @@ export function MediaDetailsPage() {
   const events = useQuery({
     queryKey: ['watch-events', mediaId],
     queryFn: ({ signal }) => getWatchEvents(mediaId, signal),
+    enabled: Boolean(mediaId),
+  })
+  const participants = useQuery({
+    queryKey: ['household-participants'],
+    queryFn: ({ signal }) => getHouseholdParticipants(signal),
     enabled: Boolean(mediaId),
   })
 
@@ -75,7 +80,12 @@ export function MediaDetailsPage() {
           ) : null}
         </div>
         {record.data.note ? <p className="personal-note">{record.data.note}</p> : null}
-        <QuickRecordForm record={record.data} now={new Date()} onSaved={savedRecord} />
+        <QuickRecordForm
+          record={record.data}
+          now={new Date()}
+          participants={participants.data ?? []}
+          onSaved={savedRecord}
+        />
       </section>
 
       <section className="details-section" aria-labelledby="history-heading">

@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"video-record/internal/auth"
+	"video-record/internal/household"
 	"video-record/internal/integrations/tmdb"
 	"video-record/internal/media"
 	"video-record/internal/records"
@@ -23,6 +24,7 @@ type Dependencies struct {
 	Media        *media.Service
 	Records      *records.Service
 	Stats        *statsdomain.Service
+	Household    *household.Service
 }
 
 func NewRouter(dependencies Dependencies) http.Handler {
@@ -83,6 +85,24 @@ func NewRouter(dependencies Dependencies) http.Handler {
 				if dependencies.Stats != nil {
 					statsAPI := statsHandlers{service: dependencies.Stats}
 					protected.Get("/stats", statsAPI.summary)
+				}
+				if dependencies.Household != nil {
+					householdAPI := householdHandlers{service: dependencies.Household}
+					protected.Get("/household/events", householdAPI.sharedEvents)
+					protected.Get("/household/members", householdAPI.members)
+					protected.Get("/household/participants", householdAPI.participants)
+					protected.Get("/household/records/{ownerID}/{mediaID}", householdAPI.visibleRecord)
+					if dependencies.Storage != nil {
+						idempotency := newIdempotencyMiddleware(dependencies.Storage)
+						protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth), idempotency.Handle).
+							Post("/household/members", householdAPI.createMember)
+						protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth), idempotency.Handle).
+							Post("/household/members/{memberID}/reset-password", householdAPI.resetPassword)
+						protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth), idempotency.Handle).
+							Post("/household/members/{memberID}/deactivate", householdAPI.deactivateMember)
+						protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth), idempotency.Handle).
+							Put("/household/records/{mediaID}/sharing", householdAPI.updateSharing)
+					}
 				}
 				if dependencies.TMDB != nil {
 					tmdbAPI := tmdbHandlers{client: dependencies.TMDB}

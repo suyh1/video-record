@@ -12,6 +12,7 @@ import (
 
 	"video-record/internal/auth"
 	"video-record/internal/config"
+	"video-record/internal/household"
 	"video-record/internal/httpapi"
 	"video-record/internal/integrations/tmdb"
 	"video-record/internal/media"
@@ -57,6 +58,7 @@ func main() {
 	mediaService := media.NewService(media.NewRepository(db))
 	recordService := records.NewService(records.NewRepository(db))
 	statsService := statsdomain.NewService(statsdomain.NewRepository(db))
+	householdService := household.NewService(household.NewRepository(db))
 
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.Port),
@@ -69,6 +71,7 @@ func main() {
 			Media:        mediaService,
 			Records:      recordService,
 			Stats:        statsService,
+			Household:    householdService,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

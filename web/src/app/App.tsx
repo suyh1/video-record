@@ -16,6 +16,7 @@ import { BrowserRouter, NavLink, Route, Routes, useNavigate } from 'react-router
 import { createMediaFromTMDB } from '../api/client'
 import type { MediaSearchResult } from '../api/types'
 import { CalendarPage } from '../features/calendar/CalendarPage'
+import { MemberSettings } from '../features/household/MemberSettings'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { MediaDetailsPage } from '../features/media/MediaDetailsPage'
 import { SearchDialog } from '../features/search/SearchDialog'
@@ -248,6 +249,7 @@ function SettingsPage() {
         <h2 id="metadata-heading">元数据</h2>
         <TmdbAttribution />
       </section>
+      <MemberSettings />
     </div>
   )
 }

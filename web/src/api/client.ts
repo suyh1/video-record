@@ -1,6 +1,8 @@
 import type {
   CalendarFilter,
   CalendarResponse,
+  CurrentUser,
+  HouseholdMember,
   LibraryResponse,
   MediaDetails,
   MediaSearchResult,
@@ -76,6 +78,7 @@ export type UpdateRecordPayload = {
   note?: string | null
   watchedAt?: string
   viewingMethod?: string | null
+  participantIds?: string[]
 }
 
 export async function updateRecord(mediaID: string, version: number, payload: UpdateRecordPayload): Promise<RecordState> {
@@ -120,6 +123,30 @@ export function getStats(timezone: string, signal?: AbortSignal) {
   return requestJSON<StatsSummary>(`/api/v1/stats?${query.toString()}`, signal ? { signal } : undefined)
 }
 
+export function getCurrentUser(signal?: AbortSignal) {
+  return requestJSON<CurrentUser>('/api/v1/auth/me', signal ? { signal } : undefined)
+}
+
+export function getHouseholdMembers(signal?: AbortSignal) {
+  return requestJSON<HouseholdMember[]>('/api/v1/household/members', signal ? { signal } : undefined)
+}
+
+export function getHouseholdParticipants(signal?: AbortSignal) {
+  return requestJSON<HouseholdMember[]>('/api/v1/household/participants', signal ? { signal } : undefined)
+}
+
+export function createHouseholdMember(username: string, password: string) {
+  return householdWrite<HouseholdMember>('/api/v1/household/members', { username, password })
+}
+
+export function resetHouseholdMemberPassword(memberID: string, password: string) {
+  return householdWrite<void>(`/api/v1/household/members/${encodeURIComponent(memberID)}/reset-password`, { password })
+}
+
+export function deactivateHouseholdMember(memberID: string) {
+  return householdWrite<void>(`/api/v1/household/members/${encodeURIComponent(memberID)}/deactivate`, {})
+}
+
 export type UpdateEpisodeProgressPayload = {
   action: 'single' | 'range' | 'season' | 'next' | 'undo'
   expectedVersion: number
@@ -160,4 +187,17 @@ function createIdempotencyKey() {
   return typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function householdWrite<T>(path: string, body: unknown) {
+  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+  return requestJSON<T>(path, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': createIdempotencyKey(),
+      'X-CSRF-Token': csrfToken,
+    },
+    body: JSON.stringify(body),
+  })
 }

@@ -19,13 +19,14 @@ type recordHandlers struct {
 }
 
 type updateRecordRequest struct {
-	Status        records.Status
-	Rating        *float64
-	RatingSet     bool
-	Note          *string
-	NoteSet       bool
-	WatchedAt     time.Time
-	ViewingMethod string
+	Status         records.Status
+	Rating         *float64
+	RatingSet      bool
+	Note           *string
+	NoteSet        bool
+	WatchedAt      time.Time
+	ViewingMethod  string
+	ParticipantIDs []string
 }
 
 type recordResponse struct {
@@ -105,8 +106,9 @@ func (handlers recordHandlers) updateState(w http.ResponseWriter, r *http.Reques
 			Note: request.Note, NoteSet: request.NoteSet,
 			Source: records.SourceManual, ExpectedVersion: expectedVersion,
 		},
-		WatchedAt:     request.WatchedAt,
-		ViewingMethod: request.ViewingMethod,
+		WatchedAt:      request.WatchedAt,
+		ViewingMethod:  request.ViewingMethod,
+		ParticipantIDs: request.ParticipantIDs,
 	})
 	if err != nil {
 		writeRecordError(w, r, err, state.Version)
@@ -119,11 +121,12 @@ func (handlers recordHandlers) updateState(w http.ResponseWriter, r *http.Reques
 
 func decodeUpdateRecordRequest(r *http.Request) (updateRecordRequest, error) {
 	var raw struct {
-		Status        records.Status  `json:"status"`
-		Rating        json.RawMessage `json:"rating"`
-		Note          json.RawMessage `json:"note"`
-		WatchedAt     *time.Time      `json:"watchedAt"`
-		ViewingMethod string          `json:"viewingMethod"`
+		Status         records.Status  `json:"status"`
+		Rating         json.RawMessage `json:"rating"`
+		Note           json.RawMessage `json:"note"`
+		WatchedAt      *time.Time      `json:"watchedAt"`
+		ViewingMethod  string          `json:"viewingMethod"`
+		ParticipantIDs []string        `json:"participantIds"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 		return updateRecordRequest{}, err
@@ -133,6 +136,7 @@ func decodeUpdateRecordRequest(r *http.Request) (updateRecordRequest, error) {
 		request.WatchedAt = raw.WatchedAt.UTC()
 	}
 	request.ViewingMethod = strings.TrimSpace(raw.ViewingMethod)
+	request.ParticipantIDs = raw.ParticipantIDs
 	if raw.Rating != nil {
 		request.RatingSet = true
 		if string(raw.Rating) != "null" {

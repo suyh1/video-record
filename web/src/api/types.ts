@@ -115,6 +115,17 @@ export type StatsSummary = {
   viewingMethods: StatsPoint[]
 }
 
+export type CurrentUser = {
+  id: string
+  username: string
+  role: 'admin' | 'member'
+}
+
+export type HouseholdMember = CurrentUser & {
+  active: boolean
+  createdAt?: string
+}
+
 export type LibraryResponse = {
   items: MediaSearchResult[]
   nextCursor: string | null

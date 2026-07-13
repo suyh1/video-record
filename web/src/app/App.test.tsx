@@ -1,6 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { http, HttpResponse } from 'msw'
+import { describe, expect, it, vi } from 'vitest'
 
+import { server } from '../test/server'
 import { App } from './App'
 
 describe('App', () => {
@@ -11,12 +13,18 @@ describe('App', () => {
     expect(screen.getByRole('searchbox', { name: '搜索影视' })).toBeVisible()
   })
 
-  it('shows TMDB attribution on the settings page', () => {
+  it('shows TMDB attribution on the settings page', async () => {
+    const currentUserRequest = vi.fn()
+    server.use(http.get('*/api/v1/auth/me', () => {
+      currentUserRequest()
+      return HttpResponse.json({ id: 'member-1', username: 'family', role: 'member' })
+    }))
     window.history.pushState({}, '', '/settings')
 
     render(<App />)
 
     expect(screen.getByText('This product uses the TMDB API but is not endorsed or certified by TMDB.')).toBeVisible()
+    await waitFor(() => expect(currentUserRequest).toHaveBeenCalledOnce())
     window.history.pushState({}, '', '/')
   })
 

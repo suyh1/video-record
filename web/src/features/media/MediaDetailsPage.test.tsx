@@ -36,6 +36,11 @@ describe('MediaDetailsPage', () => {
           },
         ]),
       ),
+      http.get('*/api/v1/household/participants', () =>
+        HttpResponse.json([
+          { id: 'member-1', username: 'family', role: 'member', active: true },
+        ]),
+      ),
     )
     renderWithQueryClient(
       <MemoryRouter initialEntries={['/media/media-1']}>
@@ -50,6 +55,7 @@ describe('MediaDetailsPage', () => {
     expect(screen.getByText('9.4 / 10')).toBeVisible()
     expect(screen.getByText('雨夜与走廊。')).toBeVisible()
     expect(screen.getByText('2026年7月12日')).toBeVisible()
+    expect(await screen.findByRole('checkbox', { name: 'family' })).toBeVisible()
     const personalRecord = screen.getByRole('heading', { name: '个人记录' })
     const overview = screen.getByRole('heading', { name: '简介' })
     expect(personalRecord.compareDocumentPosition(overview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

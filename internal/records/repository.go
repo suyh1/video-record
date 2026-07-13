@@ -181,10 +181,14 @@ func insertWatchEvent(ctx context.Context, tx *sql.Tx, event WatchEvent) error {
 		event.Completion, nullableString(event.Note)); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, `
-		INSERT INTO watch_event_participants (event_id, user_id) VALUES (?, ?)
-	`, event.ID, event.UserID)
-	return err
+	for _, participantID := range event.ParticipantIDs {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO watch_event_participants (event_id, user_id) VALUES (?, ?)
+		`, event.ID, participantID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (repository *SQLiteRepository) WatchEvents(ctx context.Context, userID, mediaID string) ([]WatchEvent, error) {

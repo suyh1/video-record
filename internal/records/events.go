@@ -3,6 +3,7 @@ package records
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,12 +25,14 @@ type WatchEvent struct {
 	ExternalEventID string
 	Completion      int
 	Note            string
+	ParticipantIDs  []string
 }
 
 type RecordStatusInput struct {
 	UpdateStateInput
-	WatchedAt     time.Time
-	ViewingMethod string
+	WatchedAt      time.Time
+	ViewingMethod  string
+	ParticipantIDs []string
 }
 
 type CreateWatchEventInput struct {
@@ -42,6 +45,7 @@ type CreateWatchEventInput struct {
 	ExternalEventID string
 	Completion      int
 	Note            string
+	ParticipantIDs  []string
 }
 
 func (service *Service) RecordStatus(ctx context.Context, input RecordStatusInput) (State, *WatchEvent, error) {
@@ -58,6 +62,7 @@ func (service *Service) RecordStatus(ctx context.Context, input RecordStatusInpu
 	event, err := newWatchEvent(CreateWatchEventInput{
 		UserID: input.UserID, MediaID: input.MediaID, WatchedAt: input.WatchedAt,
 		ViewingMethod: input.ViewingMethod, Source: input.Source, Completion: 100,
+		ParticipantIDs: input.ParticipantIDs,
 	})
 	if err != nil {
 		return update.current, nil, err
@@ -118,6 +123,19 @@ func newWatchEvent(input CreateWatchEventInput) (WatchEvent, error) {
 	if input.WatchedAt.IsZero() {
 		input.WatchedAt = time.Now().UTC()
 	}
+	participants := make([]string, 0, len(input.ParticipantIDs)+1)
+	seen := make(map[string]struct{}, len(input.ParticipantIDs)+1)
+	for _, participantID := range append([]string{input.UserID}, input.ParticipantIDs...) {
+		participantID = strings.TrimSpace(participantID)
+		if participantID == "" {
+			return WatchEvent{}, ErrInvalidWatchEvent
+		}
+		if _, exists := seen[participantID]; exists {
+			continue
+		}
+		seen[participantID] = struct{}{}
+		participants = append(participants, participantID)
+	}
 	completion := input.Completion
 	if completion == 0 {
 		completion = 100
@@ -127,5 +145,6 @@ func newWatchEvent(input CreateWatchEventInput) (WatchEvent, error) {
 		EpisodeID: input.EpisodeID, WatchedAt: input.WatchedAt.UTC(),
 		ViewingMethod: input.ViewingMethod, Source: input.Source,
 		ExternalEventID: input.ExternalEventID, Completion: completion, Note: input.Note,
+		ParticipantIDs: participants,
 	}, nil
 }

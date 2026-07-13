@@ -128,6 +128,10 @@ func TestEventValidationOwnershipAndExternalDeduplication(t *testing.T) {
 		UserID: userID, MediaID: mediaID, Source: SourceManual, Completion: 101,
 	})
 	require.ErrorIs(t, err, ErrInvalidWatchEvent)
+	_, err = newWatchEvent(CreateWatchEventInput{
+		UserID: userID, MediaID: mediaID, Source: SourceManual, ParticipantIDs: []string{""},
+	})
+	require.ErrorIs(t, err, ErrInvalidWatchEvent)
 }
 
 func TestEventDefaultsAndRecordStatusConflicts(t *testing.T) {
@@ -139,6 +143,7 @@ func TestEventDefaultsAndRecordStatusConflicts(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, event.WatchedAt.IsZero())
 	require.Equal(t, 100, event.Completion)
+	require.Equal(t, []string{userID}, event.ParticipantIDs)
 
 	_, _, err = service.RecordStatus(ctx, RecordStatusInput{UpdateStateInput: UpdateStateInput{
 		UserID: userID, MediaID: mediaID, Status: StatusWishlist, Source: "unknown",
@@ -159,6 +164,26 @@ func TestEventDefaultsAndRecordStatusConflicts(t *testing.T) {
 	require.Equal(t, wishlist.Version, current.Version)
 	require.Empty(t, mustWatchEvents(t, service, userID, mediaID))
 	require.ErrorIs(t, service.DeleteWatchEvent(ctx, userID, "missing-event"), ErrWatchEventNotFound)
+}
+
+func TestCompletedEventIncludesSelectedHouseholdParticipants(t *testing.T) {
+	service, db, userID, mediaID := newTestRecordsService(t)
+	participantID := insertTestUser(t, db, "co-watcher")
+	_, event, err := service.RecordStatus(context.Background(), RecordStatusInput{
+		UpdateStateInput: UpdateStateInput{
+			UserID: userID, MediaID: mediaID, Status: StatusCompleted,
+			Source: SourceManual, ExpectedVersion: 0,
+		},
+		ParticipantIDs: []string{participantID, participantID},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, event)
+
+	var participants int
+	require.NoError(t, db.Reader().QueryRowContext(context.Background(), `
+		SELECT COUNT(*) FROM watch_event_participants WHERE event_id = ?
+	`, event.ID).Scan(&participants))
+	require.Equal(t, 2, participants)
 }
 
 func mustWatchEvents(t *testing.T, service *Service, userID, mediaID string) []WatchEvent {
