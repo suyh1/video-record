@@ -1,0 +1,17 @@
+.DS_Store
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+.tmdb-token
+
+# Runtime data and build outputs
+/data/
+/dist/
+/video-record
+/coverage.out
+web/node_modules/
+web/dist/
+web/playwright-report/
+web/test-results/

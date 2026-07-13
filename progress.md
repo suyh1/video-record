@@ -39,4 +39,15 @@
 
 ## 当前状态
 
-设计与实施计划均已完成，正在执行最终仓库验证。
+设计与实施计划均已完成，正在 `main` 按实施计划执行。
+
+## 实施记录
+
+### Task 1：仓库工具链与最小服务器
+
+- 已确认初始工作区为干净的 `main`，未创建分支或 worktree。
+- 已先写 `TestHealthz`；补齐测试依赖后，测试按预期因 `NewRouter` 与 `Dependencies` 缺失而失败。
+- 已添加 Go 1.26 模块、Chi v5、Testify、`/healthz`、带读写和空闲超时的最小服务器、Makefile、`.env.example` 与 `.gitignore`。
+- `.env.example` 只有空值或合成值；`.gitignore` 覆盖本地环境、数据、构建、覆盖率和 Playwright 产物，并预留忽略 `.tmdb-token`。
+- 定向测试 `go test ./internal/httpapi -run TestHealthz -v` 通过。
+- 完整验证 `go test ./...`、`go vet ./...` 与 `git diff --check` 通过。

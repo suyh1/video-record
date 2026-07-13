@@ -7,6 +7,13 @@
 - 空仓库，仅有 `.git`。
 - 当前分支为 `main`，尚无提交。
 
+## 实施环境与基础
+
+- 2026-07-13 开始实施时仓库位于干净的 `main`，已有设计与实施计划提交。
+- 本机工具链为 Go `1.26.0`（`darwin/arm64`）和 Node.js `24.13.0`，满足 Task 1 的版本要求。
+- Task 1 使用 Chi v5 提供最小路由，健康端点仅返回进程存活状态；存储就绪检查留给 Task 3。
+- 本机 TMDB 凭据文件名预留为被 Git 忽略的 `.tmdb-token`，在 Task 6 需要真实上游验证前不创建，也不进入命令、日志或提交。
+
 ## `invoice-manage` 工程参照
 
 - 前端为 React 19 + TypeScript + Vite，后端为 Python 3.12 + FastAPI + SQLAlchemy。
