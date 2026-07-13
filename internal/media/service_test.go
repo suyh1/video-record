@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 
@@ -98,6 +99,135 @@ func TestLinkExternalRejectsIdentityAlreadyOwnedByAnotherItem(t *testing.T) {
 	})
 
 	require.ErrorIs(t, err, ErrExternalIdentityConflict)
+}
+
+func TestExternalRuntimeAndGenresRefreshAtomically(t *testing.T) {
+	service, db := newTestMediaService(t)
+	created, err := service.UpsertExternal(context.Background(), ExternalSnapshot{
+		Source: "tmdb", SourceID: "329865", MediaType: MediaTypeMovie,
+		Title: "降临", RuntimeMinutes: 116,
+		Genres: []ExternalGenre{{ID: "18", Name: "剧情"}, {ID: "878", Name: "科幻"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 116, created.RuntimeMinutes)
+	require.Equal(t, []string{"剧情", "科幻"}, created.Genres)
+
+	refreshed, err := service.UpsertExternal(context.Background(), ExternalSnapshot{
+		Source: "tmdb", SourceID: "329865", MediaType: MediaTypeMovie,
+		Title: "降临", RuntimeMinutes: 118,
+		Genres: []ExternalGenre{{ID: "9648", Name: "悬疑"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, created.ID, refreshed.ID)
+	require.Equal(t, 118, refreshed.RuntimeMinutes)
+	require.Equal(t, []string{"悬疑"}, refreshed.Genres)
+
+	var associations int
+	require.NoError(t, db.Reader().QueryRowContext(context.Background(), `
+		SELECT COUNT(*) FROM media_genres WHERE media_id = ?
+	`, created.ID).Scan(&associations))
+	require.Equal(t, 1, associations)
+}
+
+func TestMediaServiceValidatesInputsAndReadsItems(t *testing.T) {
+	service, _ := newTestMediaService(t)
+	invalidSnapshots := []ExternalSnapshot{
+		{SourceID: "1", MediaType: MediaTypeMovie, Title: "标题"},
+		{Source: "tmdb", MediaType: MediaTypeMovie, Title: "标题"},
+		{Source: "tmdb", SourceID: "1", MediaType: MediaTypeMovie},
+		{Source: "tmdb", SourceID: "1", MediaType: "book", Title: "标题"},
+		{Source: "tmdb", SourceID: "1", MediaType: MediaTypeMovie, Title: "标题", RuntimeMinutes: -1},
+		{Source: "tmdb", SourceID: "1", MediaType: MediaTypeMovie, Title: "标题", Genres: []ExternalGenre{{Name: "剧情"}}},
+		{Source: "tmdb", SourceID: "1", MediaType: MediaTypeMovie, Title: "标题", Genres: []ExternalGenre{{ID: "18"}}},
+	}
+	for _, snapshot := range invalidSnapshots {
+		_, err := service.UpsertExternal(context.Background(), snapshot)
+		require.ErrorIs(t, err, ErrInvalidMedia)
+	}
+
+	_, err := service.CreateCustom(context.Background(), CreateCustomInput{MediaType: "book", Title: "标题"})
+	require.ErrorIs(t, err, ErrInvalidMedia)
+	_, err = service.CreateCustom(context.Background(), CreateCustomInput{MediaType: MediaTypeMovie, Title: "  "})
+	require.ErrorIs(t, err, ErrInvalidMedia)
+	custom, err := service.CreateCustom(context.Background(), CreateCustomInput{
+		MediaType: MediaTypeMovie, Title: "  本地条目  ",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "本地条目", custom.Title)
+	require.Zero(t, custom.RuntimeMinutes)
+	require.Empty(t, custom.Genres)
+
+	found, err := service.FindByID(context.Background(), custom.ID)
+	require.NoError(t, err)
+	require.Equal(t, custom.ID, found.ID)
+	_, err = service.FindByID(context.Background(), "missing")
+	require.ErrorIs(t, err, sql.ErrNoRows)
+	_, err = service.LinkExternal(context.Background(), "", ExternalSnapshot{
+		Source: "tmdb", SourceID: "1", MediaType: MediaTypeMovie, Title: "标题",
+	})
+	require.ErrorIs(t, err, ErrInvalidMedia)
+}
+
+func TestLinkExternalRejectsTypeMismatchAndRefreshesSameIdentity(t *testing.T) {
+	service, _ := newTestMediaService(t)
+	custom, err := service.CreateCustom(context.Background(), CreateCustomInput{
+		MediaType: MediaTypeMovie, Title: "本地条目",
+	})
+	require.NoError(t, err)
+	_, err = service.LinkExternal(context.Background(), custom.ID, ExternalSnapshot{
+		Source: "tmdb", SourceID: "42", MediaType: MediaTypeTV, Title: "剧集",
+	})
+	require.ErrorIs(t, err, ErrMediaTypeMismatch)
+
+	snapshot := ExternalSnapshot{
+		Source: "tmdb", SourceID: "42", MediaType: MediaTypeMovie, Title: "电影",
+		Genres: []ExternalGenre{{ID: "18", Name: "剧情"}},
+	}
+	linked, err := service.LinkExternal(context.Background(), custom.ID, snapshot)
+	require.NoError(t, err)
+	snapshot.Title = "电影更新"
+	snapshot.Genres[0].Name = "剧情片"
+	linkedAgain, err := service.LinkExternal(context.Background(), custom.ID, snapshot)
+	require.NoError(t, err)
+	require.Equal(t, linked.ID, linkedAgain.ID)
+	require.Equal(t, "电影更新", linkedAgain.ExternalTitle)
+	require.Equal(t, []string{"剧情片"}, linkedAgain.Genres)
+
+	_, err = service.LinkExternal(context.Background(), "missing", snapshot)
+	require.ErrorIs(t, err, sql.ErrNoRows)
+}
+
+func TestMediaRepositoryRollsBackGenreErrorsAndReportsClosedStorage(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.Open(ctx, filepath.Join(t.TempDir(), "video-record.db"))
+	require.NoError(t, err)
+	require.NoError(t, storage.Migrate(ctx, db))
+	repository := NewRepository(db)
+	duplicateGenres := ExternalSnapshot{
+		Source: "tmdb", SourceID: "duplicate-genres", MediaType: MediaTypeMovie, Title: "测试",
+		Genres: []ExternalGenre{{ID: "18", Name: "剧情"}, {ID: "18", Name: "剧情"}},
+	}
+	_, err = repository.UpsertExternal(ctx, duplicateGenres)
+	require.Error(t, err)
+	var items int
+	require.NoError(t, db.Reader().QueryRowContext(ctx, "SELECT COUNT(*) FROM media_items").Scan(&items))
+	require.Zero(t, items)
+
+	created, err := repository.CreateCustom(ctx, CreateCustomInput{MediaType: MediaTypeMovie, Title: "本地"})
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+	_, err = repository.UpsertExternal(ctx, ExternalSnapshot{
+		Source: "tmdb", SourceID: "1", MediaType: MediaTypeMovie, Title: "外部",
+	})
+	require.Error(t, err)
+	_, err = repository.LinkExternal(ctx, created.ID, ExternalSnapshot{
+		Source: "tmdb", SourceID: "1", MediaType: MediaTypeMovie, Title: "外部",
+	})
+	require.Error(t, err)
+	_, err = repository.CreateCustom(ctx, CreateCustomInput{MediaType: MediaTypeMovie, Title: "另一个"})
+	require.Error(t, err)
+	_, err = repository.FindByID(ctx, created.ID)
+	require.Error(t, err)
 }
 
 func newTestMediaService(t *testing.T) (*Service, *storage.DB) {

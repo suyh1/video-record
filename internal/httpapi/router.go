@@ -10,6 +10,7 @@ import (
 	"video-record/internal/integrations/tmdb"
 	"video-record/internal/media"
 	"video-record/internal/records"
+	statsdomain "video-record/internal/stats"
 	"video-record/internal/storage"
 )
 
@@ -21,6 +22,7 @@ type Dependencies struct {
 	TMDB         *tmdb.Client
 	Media        *media.Service
 	Records      *records.Service
+	Stats        *statsdomain.Service
 }
 
 func NewRouter(dependencies Dependencies) http.Handler {
@@ -77,6 +79,10 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Delete(
 						"/records/{mediaID}/events/{eventID}", recordAPI.deleteWatchEvent,
 					)
+				}
+				if dependencies.Stats != nil {
+					statsAPI := statsHandlers{service: dependencies.Stats}
+					protected.Get("/stats", statsAPI.summary)
 				}
 				if dependencies.TMDB != nil {
 					tmdbAPI := tmdbHandlers{client: dependencies.TMDB}

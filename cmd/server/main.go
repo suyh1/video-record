@@ -16,6 +16,7 @@ import (
 	"video-record/internal/integrations/tmdb"
 	"video-record/internal/media"
 	"video-record/internal/records"
+	statsdomain "video-record/internal/stats"
 	"video-record/internal/storage"
 )
 
@@ -55,6 +56,7 @@ func main() {
 	})
 	mediaService := media.NewService(media.NewRepository(db))
 	recordService := records.NewService(records.NewRepository(db))
+	statsService := statsdomain.NewService(statsdomain.NewRepository(db))
 
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.Port),
@@ -66,6 +68,7 @@ func main() {
 			TMDB:         tmdbClient,
 			Media:        mediaService,
 			Records:      recordService,
+			Stats:        statsService,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

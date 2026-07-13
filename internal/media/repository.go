@@ -45,10 +45,10 @@ func (repository *SQLiteRepository) UpsertExternal(ctx context.Context, snapshot
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO media_items (
 				id, media_type, external_title, original_title, release_date,
-				external_overview, poster_path, backdrop_path, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				external_overview, poster_path, backdrop_path, runtime_minutes, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, itemID, snapshot.MediaType, snapshot.Title, snapshot.OriginalTitle,
-			snapshot.ReleaseDate, snapshot.Overview, snapshot.PosterPath, snapshot.BackdropPath,
+			snapshot.ReleaseDate, snapshot.Overview, snapshot.PosterPath, snapshot.BackdropPath, nullableRuntime(snapshot.RuntimeMinutes),
 			now, now); err != nil {
 			return Item{}, err
 		}
@@ -64,6 +64,9 @@ func (repository *SQLiteRepository) UpsertExternal(ctx context.Context, snapshot
 		if err := updateExternalSnapshot(ctx, tx, itemID, snapshot); err != nil {
 			return Item{}, err
 		}
+	}
+	if err := replaceMediaGenres(ctx, tx, itemID, snapshot.Source, snapshot.Genres); err != nil {
+		return Item{}, err
 	}
 
 	item, err := findItem(ctx, tx, itemID)
@@ -132,6 +135,9 @@ func (repository *SQLiteRepository) LinkExternal(ctx context.Context, itemID str
 	if err := updateExternalSnapshot(ctx, tx, itemID, snapshot); err != nil {
 		return Item{}, err
 	}
+	if err := replaceMediaGenres(ctx, tx, itemID, snapshot.Source, snapshot.Genres); err != nil {
+		return Item{}, err
+	}
 	item, err := findItem(ctx, tx, itemID)
 	if err != nil {
 		return Item{}, err
@@ -150,31 +156,85 @@ func updateExternalSnapshot(ctx context.Context, tx *sql.Tx, itemID string, snap
 	_, err := tx.ExecContext(ctx, `
 		UPDATE media_items SET
 			external_title = ?, original_title = ?, release_date = ?, external_overview = ?,
-			poster_path = ?, backdrop_path = ?, updated_at = ?
+			poster_path = ?, backdrop_path = ?, runtime_minutes = ?, updated_at = ?
 		WHERE id = ?
 	`, snapshot.Title, snapshot.OriginalTitle, snapshot.ReleaseDate, snapshot.Overview,
-		snapshot.PosterPath, snapshot.BackdropPath, time.Now().UTC().UnixMilli(), itemID)
+		snapshot.PosterPath, snapshot.BackdropPath, nullableRuntime(snapshot.RuntimeMinutes), time.Now().UTC().UnixMilli(), itemID)
 	return err
+}
+
+func replaceMediaGenres(ctx context.Context, tx *sql.Tx, itemID, source string, genres []ExternalGenre) error {
+	if _, err := tx.ExecContext(ctx, "DELETE FROM media_genres WHERE media_id = ? AND source = ?", itemID, source); err != nil {
+		return err
+	}
+	for _, genre := range genres {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO genres (source, source_id, name) VALUES (?, ?, ?)
+			ON CONFLICT (source, source_id) DO UPDATE SET name = excluded.name
+		`, source, genre.ID, genre.Name); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO media_genres (media_id, source, source_id) VALUES (?, ?, ?)
+		`, itemID, source, genre.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func findItem(ctx context.Context, query interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }, id string) (Item, error) {
 	var item Item
+	var runtime sql.NullInt64
 	err := query.QueryRowContext(ctx, `
 		SELECT
 			id, media_type,
 			COALESCE(custom_title, external_title),
 			COALESCE(custom_overview, external_overview),
 			external_title, external_overview, original_title, release_date,
-			poster_path, backdrop_path
+			poster_path, backdrop_path, runtime_minutes
 		FROM media_items WHERE id = ?
 	`, id).Scan(
 		&item.ID, &item.MediaType, &item.Title, &item.Overview,
 		&item.ExternalTitle, &item.ExternalOverview, &item.OriginalTitle,
-		&item.ReleaseDate, &item.PosterPath, &item.BackdropPath,
+		&item.ReleaseDate, &item.PosterPath, &item.BackdropPath, &runtime,
 	)
-	return item, err
+	if err != nil {
+		return Item{}, err
+	}
+	if runtime.Valid {
+		item.RuntimeMinutes = int(runtime.Int64)
+	}
+	rows, err := query.QueryContext(ctx, `
+		SELECT genre.name
+		FROM media_genres media_genre
+		JOIN genres genre ON genre.source = media_genre.source AND genre.source_id = media_genre.source_id
+		WHERE media_genre.media_id = ?
+		ORDER BY genre.name
+	`, id)
+	if err != nil {
+		return Item{}, err
+	}
+	defer func() { _ = rows.Close() }()
+	item.Genres = make([]string, 0)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return Item{}, err
+		}
+		item.Genres = append(item.Genres, name)
+	}
+	return item, rows.Err()
+}
+
+func nullableRuntime(runtime int) any {
+	if runtime <= 0 {
+		return nil
+	}
+	return runtime
 }
 
 func nullableString(value string) any {

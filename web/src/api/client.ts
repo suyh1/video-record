@@ -7,6 +7,7 @@ import type {
   RecordState,
   RecordStatus,
   SeriesProgress,
+  StatsSummary,
   SearchResultsResponse,
   TMDBSearchResponse,
   WatchEvent,
@@ -112,6 +113,11 @@ export function getEpisodeProgress(mediaID: string, signal?: AbortSignal) {
 export function getCalendar(month: string, timezone: string, filter: CalendarFilter, signal?: AbortSignal) {
   const query = new URLSearchParams({ month, timezone, filter })
   return requestJSON<CalendarResponse>(`/api/v1/calendar?${query.toString()}`, signal ? { signal } : undefined)
+}
+
+export function getStats(timezone: string, signal?: AbortSignal) {
+  const query = new URLSearchParams({ timezone })
+  return requestJSON<StatsSummary>(`/api/v1/stats?${query.toString()}`, signal ? { signal } : undefined)
 }
 
 export type UpdateEpisodeProgressPayload = {

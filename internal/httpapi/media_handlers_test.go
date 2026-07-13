@@ -34,6 +34,8 @@ func TestMediaHandlersCreateReadAndLinkTMDBItems(t *testing.T) {
 	require.NotEmpty(t, createdBody.ID)
 	require.NotEqual(t, "329865", createdBody.ID)
 	require.Equal(t, "降临", createdBody.Title)
+	require.Contains(t, created.Body.String(), `"runtimeMinutes":116`)
+	require.Contains(t, created.Body.String(), `"genres":["剧情"]`)
 
 	read := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/media/"+createdBody.ID, nil, map[string]string{
 		"Cookie": cookie.String(),
@@ -71,7 +73,7 @@ func newMediaTestRouter(t *testing.T) (http.Handler, *http.Cookie, string) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/movie/329865":
-			_, _ = w.Write([]byte(`{"id":329865,"title":"降临","original_title":"Arrival","release_date":"2016-11-10","overview":"外部简介","poster_path":"/arrival.jpg"}`))
+			_, _ = w.Write([]byte(`{"id":329865,"title":"降临","original_title":"Arrival","release_date":"2016-11-10","overview":"外部简介","poster_path":"/arrival.jpg","runtime":116,"genres":[{"id":18,"name":"剧情"}]}`))
 		case "/movie/329866":
 			_, _ = w.Write([]byte(`{"id":329866,"title":"外部更新","original_title":"Updated","release_date":"2016-11-10","overview":"外部简介 v2","poster_path":"/updated.jpg"}`))
 		default:

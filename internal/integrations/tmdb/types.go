@@ -21,26 +21,33 @@ type SearchResult struct {
 }
 
 type MovieDetails struct {
-	ID            int    `json:"id"`
-	Title         string `json:"title"`
-	OriginalTitle string `json:"original_title"`
-	ReleaseDate   string `json:"release_date"`
-	PosterPath    string `json:"poster_path"`
-	BackdropPath  string `json:"backdrop_path"`
-	Overview      string `json:"overview"`
-	Runtime       int    `json:"runtime"`
+	ID            int     `json:"id"`
+	Title         string  `json:"title"`
+	OriginalTitle string  `json:"original_title"`
+	ReleaseDate   string  `json:"release_date"`
+	PosterPath    string  `json:"poster_path"`
+	BackdropPath  string  `json:"backdrop_path"`
+	Overview      string  `json:"overview"`
+	Runtime       int     `json:"runtime"`
+	Genres        []Genre `json:"genres"`
 }
 
 type TVDetails struct {
-	ID             int    `json:"id"`
-	Name           string `json:"name"`
-	OriginalName   string `json:"original_name"`
-	FirstAirDate   string `json:"first_air_date"`
-	PosterPath     string `json:"poster_path"`
-	BackdropPath   string `json:"backdrop_path"`
-	Overview       string `json:"overview"`
-	NumberSeasons  int    `json:"number_of_seasons"`
-	NumberEpisodes int    `json:"number_of_episodes"`
+	ID             int     `json:"id"`
+	Name           string  `json:"name"`
+	OriginalName   string  `json:"original_name"`
+	FirstAirDate   string  `json:"first_air_date"`
+	PosterPath     string  `json:"poster_path"`
+	BackdropPath   string  `json:"backdrop_path"`
+	Overview       string  `json:"overview"`
+	NumberSeasons  int     `json:"number_of_seasons"`
+	NumberEpisodes int     `json:"number_of_episodes"`
+	Genres         []Genre `json:"genres"`
+}
+
+type Genre struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
 }
 
 type SeasonDetails struct {

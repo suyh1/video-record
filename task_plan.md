@@ -30,7 +30,8 @@
 - [x] Task 10：搜索、详情、影库与快速记录界面
 - [x] Task 11：剧集进度与系列状态投影
 - [x] Task 12：日历与时间线查询
-- [ ] Task 13-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
+- [x] Task 13：可访问统计
+- [ ] Task 14-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 
 ## 已确认约束
 
@@ -76,3 +77,4 @@
 | Task 11 浏览器验证端口 `18080` 已占用 | 1 | 未复用未知进程，改用独立 `28080/25173` 启动合成数据验证环境 |
 | Task 12 首次组件运行因测试缺少 Router、ES target 不含 `toSorted` 且严格索引报错 | 1 | 测试包裹 `MemoryRouter`，使用复制后 `sort`，并显式处理数组/月份拆分空值，再重跑原命令 |
 | Task 12 新增日历查询后领域覆盖率降至 84.2% | 1 | 增加真实剧集事件的季集/累计集数/观看方式投影测试，最终达到 85.8% |
+| Task 13 检查关键领域覆盖率时发现 `internal/media` 仅 68.1% | 1 | 补齐 runtime/genre 原子刷新、校验、链接冲突、事务回滚与存储故障测试，提升至 86.6% |

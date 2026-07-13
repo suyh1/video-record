@@ -36,6 +36,8 @@ type mediaItemResponse struct {
 	ReleaseDate      string          `json:"releaseDate"`
 	PosterPath       string          `json:"posterPath"`
 	BackdropPath     string          `json:"backdropPath"`
+	RuntimeMinutes   int             `json:"runtimeMinutes"`
+	Genres           []string        `json:"genres"`
 }
 
 func (handlers mediaHandlers) get(w http.ResponseWriter, r *http.Request) {
@@ -120,6 +122,8 @@ func (handlers mediaHandlers) tmdbSnapshot(w http.ResponseWriter, r *http.Reques
 		snapshot.Overview = item.Overview
 		snapshot.PosterPath = item.PosterPath
 		snapshot.BackdropPath = item.BackdropPath
+		snapshot.RuntimeMinutes = item.Runtime
+		snapshot.Genres = externalGenres(item.Genres)
 	case media.MediaTypeTV:
 		item, err := handlers.tmdb.TVDetails(r.Context(), externalID, "zh-CN")
 		if err != nil {
@@ -132,6 +136,7 @@ func (handlers mediaHandlers) tmdbSnapshot(w http.ResponseWriter, r *http.Reques
 		snapshot.Overview = item.Overview
 		snapshot.PosterPath = item.PosterPath
 		snapshot.BackdropPath = item.BackdropPath
+		snapshot.Genres = externalGenres(item.Genres)
 	default:
 		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_media_type")
 		return media.ExternalSnapshot{}, false
@@ -145,7 +150,16 @@ func newMediaItemResponse(item media.Item) mediaItemResponse {
 		ExternalTitle: item.ExternalTitle, ExternalOverview: item.ExternalOverview,
 		OriginalTitle: item.OriginalTitle, ReleaseDate: item.ReleaseDate,
 		PosterPath: item.PosterPath, BackdropPath: item.BackdropPath,
+		RuntimeMinutes: item.RuntimeMinutes, Genres: item.Genres,
 	}
+}
+
+func externalGenres(genres []tmdb.Genre) []media.ExternalGenre {
+	result := make([]media.ExternalGenre, 0, len(genres))
+	for _, genre := range genres {
+		result = append(result, media.ExternalGenre{ID: strconv.Itoa(genre.ID), Name: genre.Name})
+	}
+	return result
 }
 
 func writeMediaError(w http.ResponseWriter, r *http.Request, err error) {

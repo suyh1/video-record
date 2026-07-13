@@ -20,6 +20,7 @@ import { LibraryPage } from '../features/library/LibraryPage'
 import { MediaDetailsPage } from '../features/media/MediaDetailsPage'
 import { SearchDialog } from '../features/search/SearchDialog'
 import { TmdbAttribution } from '../features/settings/TmdbStatus'
+import { StatsPage } from '../features/stats/StatsPage'
 
 type NavigationItem = {
   label: string
@@ -119,7 +120,7 @@ function ApplicationShell() {
             <Route path="/library" element={<LibraryPage onSearch={() => setSearchOpen(true)} />} />
             <Route path="/media/:mediaId" element={<MediaDetailsPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
-            <Route path="/stats" element={<PlaceholderPage title="统计" />} />
+            <Route path="/stats" element={<StatsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>

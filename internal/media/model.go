@@ -18,18 +18,27 @@ type Item struct {
 	ReleaseDate      string
 	PosterPath       string
 	BackdropPath     string
+	RuntimeMinutes   int
+	Genres           []string
+}
+
+type ExternalGenre struct {
+	ID   string
+	Name string
 }
 
 type ExternalSnapshot struct {
-	Source        string
-	SourceID      string
-	MediaType     MediaType
-	Title         string
-	OriginalTitle string
-	ReleaseDate   string
-	Overview      string
-	PosterPath    string
-	BackdropPath  string
+	Source         string
+	SourceID       string
+	MediaType      MediaType
+	Title          string
+	OriginalTitle  string
+	ReleaseDate    string
+	Overview       string
+	PosterPath     string
+	BackdropPath   string
+	RuntimeMinutes int
+	Genres         []ExternalGenre
 }
 
 type CreateCustomInput struct {

@@ -182,3 +182,15 @@
 - `internal/records` 全包语句覆盖率为 85.8%；全仓 Go race/vet、前端 typecheck、8 个测试文件 18 个测试、build、npm audit、补丁和 gitleaks 均通过。
 - 浏览器合成数据验证 `1440x900` 显示 42 格月表和同日两条记录，`375x812` 切换议程并显示 `S01E03`/累计集数/共同观看者；两端无横向溢出，筛选可用，控制台无 warning/error。
 - 临时浏览器登录页和本地服务已在验证后删除/关闭。
+
+### Task 13：可访问统计
+
+- 已先写真实 SQLite 统计测试并确认 `internal/stats` 服务/仓储缺失，再实现当前用户隔离的观看事件、月度、年度、类型、评分、时长、标签、观看方式和重看聚合。
+- 新增 `0008_media_runtime.sql` 补齐电影分钟时长；统计优先使用单集 runtime，其次使用电影 runtime，并按请求 IANA 时区划分月/年。
+- 静态审阅发现 TMDB 入库丢弃 runtime/genres；已先扩展媒体 HTTP 夹具取得响应字段缺失红灯，再实现受控 DTO、同事务 runtime/genre 替换和详情响应。
+- 已先写 stats HTTP 测试并确认 Router 依赖缺失，再实现会话用户注入、时区校验、camelCase DTO 和稳定 `invalid_stats_query` Problem Details；生产入口已装配统计服务。
+- 已先写 StatsPage 测试并确认组件缺失，再实现无卡片概览、六个文字/数值条形图、六张可见语义数据表、加载/空维度/错误重试和移动双列响应式布局。
+- 关键领域覆盖率：`internal/stats` 85.1%、`internal/media` 86.6%、`internal/records` 85.8%。
+- 全仓 Go race/vet、前端 typecheck、9 个测试文件 19 个测试、build、npm audit、补丁和 gitleaks 均通过。
+- 浏览器合成数据验证 `1440x900` 与 `375x812`：6 个图表和 6 张数据表均存在，概览/条形/表格无裁切或横向溢出，控制台无 warning/error。
+- 临时浏览器登录页和本地服务已在验证后删除/关闭。

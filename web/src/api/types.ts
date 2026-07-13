@@ -97,6 +97,24 @@ export type CalendarResponse = {
   events: CalendarEvent[]
 }
 
+export type StatsPoint = {
+  label: string
+  value: number
+}
+
+export type StatsSummary = {
+  totalWatches: number
+  uniqueMedia: number
+  totalMinutes: number
+  repeatWatches: number
+  monthly: StatsPoint[]
+  yearly: StatsPoint[]
+  genres: StatsPoint[]
+  ratings: StatsPoint[]
+  tags: StatsPoint[]
+  viewingMethods: StatsPoint[]
+}
+
 export type LibraryResponse = {
   items: MediaSearchResult[]
   nextCursor: string | null

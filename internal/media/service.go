@@ -50,8 +50,13 @@ func validateExternalSnapshot(snapshot ExternalSnapshot) error {
 	if strings.TrimSpace(snapshot.Source) == "" ||
 		strings.TrimSpace(snapshot.SourceID) == "" ||
 		strings.TrimSpace(snapshot.Title) == "" ||
-		!validMediaType(snapshot.MediaType) {
+		!validMediaType(snapshot.MediaType) || snapshot.RuntimeMinutes < 0 {
 		return ErrInvalidMedia
+	}
+	for _, genre := range snapshot.Genres {
+		if strings.TrimSpace(genre.ID) == "" || strings.TrimSpace(genre.Name) == "" {
+			return ErrInvalidMedia
+		}
 	}
 	return nil
 }
