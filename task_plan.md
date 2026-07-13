@@ -22,8 +22,9 @@
 - [x] Task 2：配置、日志与请求 ID
 - [x] Task 3：SQLite 连接与嵌入式迁移
 - [x] Task 4：用户、密码、会话与封闭初始化
-- [ ] Task 5：前端基础与设计令牌
-- [ ] Task 6-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
+- [x] Task 5：前端基础与设计令牌
+- [ ] Task 6：TMDB 客户端、归属说明与安全缓存
+- [ ] Task 7-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 
 ## 已确认约束
 
@@ -50,3 +51,5 @@
 | Seerr 主界面静态图的浏览器整页截图超时 | 1 | 不重复整页截图；改用官方页面 DOM、静态资源或局部图核对 |
 | Filmo 美国区商店详情被当前地区重定向至中国区首页 | 1 | 使用中国区精确应用 ID 搜索结果与多来源商店摘要交叉核对，不臆测不可见界面 |
 | Task 1 健康测试被缺失的 Testify 及传递依赖 `go.sum` 条目阻断 | 2 | 顶层模块下载不足，改用 `go get -t video-record/internal/httpapi` 解析完整测试依赖图，再重跑以取得有效红灯 |
+| Task 5 首次 npm 安装发生 Vite peer dependency 冲突 | 1 | `@vitejs/plugin-react 6.0.3` 仅支持 Vite 8；固定为明确支持 Vite 7 的 `5.2.0` 后重跑原安装命令 |
+| Task 5 首次 typecheck/build 缺少 CSS 与 Vitest 配置类型 | 1 | `types` 显式列表排除了 `vite/client`，且 `defineConfig` 来源错误；分别补入 Vite 客户端类型并改用 `vitest/config` 后逐项复验 |

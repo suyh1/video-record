@@ -73,6 +73,17 @@
 - 定向验证 `go test ./internal/storage ./internal/httpapi -race` 通过。
 - 完整验证 `go test ./... -race -count=1`、`go vet ./...`、`git diff --check` 与通用 JWT 形态扫描通过。
 
+### Task 5：前端基础与设计令牌
+
+- 已先建立 React 19/Vite 7/Vitest/strict TypeScript 测试脚手架并写 App shell 角色测试，确认因 `App.tsx` 缺失而失败。
+- 首次 npm 安装发现 plugin-react 6 仅支持 Vite 8；核对 peer dependency 后固定为支持 Vite 7 的 `5.2.0`，原命令重跑成功。
+- 已实现五项主导航、全局搜索、桌面/平板侧栏、移动底栏、首页空状态和稳定尺寸的响应式应用壳。
+- 已实现设计文档规定的 OKLCH 亮暗主题、固定字号/间距/圆角、可见焦点、44px 触控目标、150-200ms 反馈和 reduced-motion。
+- 首次 typecheck 暴露 Vite CSS 与 Vitest 配置类型缺失；逐项补入 `vite/client` 并改用 `vitest/config` 后通过。
+- 浏览器验证覆盖 `1440x900`、`768x1024`、`375x812`：无横向溢出、无布局重叠、无控制台错误，移动搜索动作正确聚焦搜索框。
+- 定向测试 `npm --prefix web test -- --run src/app/App.test.tsx` 已按红绿顺序通过。
+- 完整验证前端 typecheck/test/build、npm audit、全仓 Go race/vet、`git diff --check`、OKLCH 色值检查与凭据扫描全部通过。
+
 ### Task 4：用户、密码、会话与封闭初始化
 
 - 已先写 Argon2id 格式、正确/错误密码和畸形哈希测试，再实现固定参数、随机 salt 与常量时间验证。
