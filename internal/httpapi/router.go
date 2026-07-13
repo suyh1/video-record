@@ -13,6 +13,7 @@ import (
 	"video-record/internal/records"
 	statsdomain "video-record/internal/stats"
 	"video-record/internal/storage"
+	syncdomain "video-record/internal/sync"
 )
 
 type Dependencies struct {
@@ -26,6 +27,7 @@ type Dependencies struct {
 	Stats        *statsdomain.Service
 	Household    *household.Service
 	Backup       *storage.BackupManager
+	Sync         *syncdomain.CandidateService
 }
 
 func NewRouter(dependencies Dependencies) http.Handler {
@@ -104,6 +106,22 @@ func NewRouter(dependencies Dependencies) http.Handler {
 				if dependencies.Stats != nil {
 					statsAPI := statsHandlers{service: dependencies.Stats}
 					protected.Get("/stats", statsAPI.summary)
+				}
+				if dependencies.Sync != nil {
+					syncAPI := syncHandlers{service: dependencies.Sync}
+					protected.Get("/sync/status", syncAPI.status)
+					protected.Get("/sync/candidates", syncAPI.candidates)
+					if dependencies.Storage != nil {
+						idempotency := newIdempotencyMiddleware(dependencies.Storage)
+						protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth), idempotency.Handle).
+							Post("/sync/candidates/{candidateID}/confirm", syncAPI.confirm)
+						protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth), idempotency.Handle).
+							Post("/sync/candidates/{candidateID}/rematch", syncAPI.rematch)
+						protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth), idempotency.Handle).
+							Post("/sync/candidates/{candidateID}/ignore", syncAPI.ignore)
+						protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth), idempotency.Handle).
+							Post("/sync/candidates/{candidateID}/custom", syncAPI.custom)
+					}
 				}
 				if dependencies.Household != nil {
 					householdAPI := householdHandlers{service: dependencies.Household}

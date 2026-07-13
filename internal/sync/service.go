@@ -73,6 +73,33 @@ func (service *Service) EnsureJobs(ctx context.Context, accountID string) error 
 	return tx.Commit()
 }
 
+func (service *Service) EnsureEnabledAccountJobs(ctx context.Context) error {
+	rows, err := service.db.Reader().QueryContext(ctx, `
+		SELECT id FROM external_accounts WHERE enabled = 1 ORDER BY id
+	`)
+	if err != nil {
+		return err
+	}
+	accountIDs := make([]string, 0)
+	for rows.Next() {
+		var accountID string
+		if err := rows.Scan(&accountID); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		accountIDs = append(accountIDs, accountID)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, accountID := range accountIDs {
+		if err := service.EnsureJobs(ctx, accountID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (service *Service) ClaimDue(
 	ctx context.Context,
 	owner string,

@@ -8,10 +8,13 @@ import type {
   LibraryResponse,
   MediaDetails,
   MediaSearchResult,
+  MediaType,
   RecordState,
   RecordStatus,
   SeriesProgress,
   StatsSummary,
+  SyncCandidate,
+  SyncStatusResponse,
   SearchResultsResponse,
   RestoreResult,
   TMDBSearchResponse,
@@ -166,6 +169,45 @@ export function importData(file: File) {
 
 export function getBackups(signal?: AbortSignal) {
   return requestJSON<BackupArtifact[]>('/api/v1/backups', signal ? { signal } : undefined)
+}
+
+export function getSyncStatus(signal?: AbortSignal) {
+  return requestJSON<SyncStatusResponse>('/api/v1/sync/status', signal ? { signal } : undefined)
+}
+
+export function getSyncCandidates(signal?: AbortSignal) {
+  return requestJSON<SyncCandidate[]>('/api/v1/sync/candidates', signal ? { signal } : undefined)
+}
+
+export function confirmSyncCandidate(candidateID: string) {
+  return protectedWrite<SyncCandidate>(
+    `/api/v1/sync/candidates/${encodeURIComponent(candidateID)}/confirm`,
+    {},
+  )
+}
+
+export function rematchSyncCandidate(candidateID: string, mediaID: string, episodeID = '') {
+  return protectedWrite<SyncCandidate>(
+    `/api/v1/sync/candidates/${encodeURIComponent(candidateID)}/rematch`,
+    { mediaId: mediaID, episodeId: episodeID },
+  )
+}
+
+export function ignoreSyncCandidate(candidateID: string) {
+  return protectedWrite<SyncCandidate>(
+    `/api/v1/sync/candidates/${encodeURIComponent(candidateID)}/ignore`,
+    {},
+  )
+}
+
+export function createCustomSyncCandidate(
+  candidateID: string,
+  payload: { title: string; mediaType: MediaType; year: string },
+) {
+  return protectedWrite<SyncCandidate>(
+    `/api/v1/sync/candidates/${encodeURIComponent(candidateID)}/custom`,
+    payload,
+  )
 }
 
 export function createBackup() {

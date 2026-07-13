@@ -14,14 +14,23 @@ import (
 	"video-record/internal/config"
 	"video-record/internal/household"
 	"video-record/internal/httpapi"
+	"video-record/internal/integrations"
 	"video-record/internal/integrations/tmdb"
 	"video-record/internal/media"
 	"video-record/internal/records"
 	statsdomain "video-record/internal/stats"
 	"video-record/internal/storage"
+	syncdomain "video-record/internal/sync"
 )
 
+type syncRuntime struct {
+	candidates *syncdomain.CandidateService
+	scheduler  *syncdomain.Scheduler
+}
+
 func main() {
+	appContext, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	bootstrapLogger := httpapi.NewLogger(os.Getenv("APP_ENV"), os.Stdout)
 	cfg, err := config.Load()
 	if err != nil {
@@ -35,7 +44,7 @@ func main() {
 		cfg.TMDBReadAccessToken,
 		os.Getenv("APP_ENCRYPTION_KEY"),
 	)
-	db, err := storage.Open(context.Background(), filepath.Join(cfg.DataDir, "video-record.db"))
+	db, err := storage.Open(appContext, filepath.Join(cfg.DataDir, "video-record.db"))
 	if err != nil {
 		logger.Error("storage unavailable", slog.Any("error", err))
 		os.Exit(1)
@@ -45,7 +54,7 @@ func main() {
 			logger.Error("storage close failed", slog.Any("error", err))
 		}
 	}()
-	if err := storage.Migrate(context.Background(), db); err != nil {
+	if err := storage.Migrate(appContext, db); err != nil {
 		logger.Error("database migration failed", slog.Any("error", err))
 		os.Exit(1)
 	}
@@ -63,6 +72,17 @@ func main() {
 		BackupsDir:             filepath.Join(cfg.DataDir, "backups"),
 		EncryptionKeyAvailable: len(cfg.EncryptionKey) > 0,
 	})
+	syncRuntime, err := newSyncRuntime(appContext, db, cfg.EncryptionKey)
+	if err != nil {
+		logger.Error("sync scheduler initialization failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+	syncDone := syncRuntime.scheduler.Start(appContext)
+	go func() {
+		if err := <-syncDone; err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("sync scheduler stopped", slog.Any("error", err))
+		}
+	}()
 
 	server := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.Port),
@@ -77,6 +97,7 @@ func main() {
 			Stats:        statsService,
 			Household:    householdService,
 			Backup:       backupManager,
+			Sync:         syncRuntime.candidates,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
@@ -89,4 +110,28 @@ func main() {
 		logger.Error("server stopped", slog.Any("error", err))
 		os.Exit(1)
 	}
+}
+
+func newSyncRuntime(ctx context.Context, db *storage.DB, encryptionKey []byte) (syncRuntime, error) {
+	candidates := syncdomain.NewCandidateService(db, syncdomain.CandidateServiceOptions{})
+	accounts := integrations.NewAccountRepository(
+		db,
+		integrations.NewCredentialCipher(encryptionKey),
+		integrations.AccountRepositoryOptions{},
+	)
+	service := syncdomain.NewService(db, syncdomain.ServiceOptions{})
+	if err := service.EnsureEnabledAccountJobs(ctx); err != nil {
+		return syncRuntime{}, err
+	}
+	runner := syncdomain.NewProviderRunner(
+		db,
+		accounts,
+		candidates,
+		syncdomain.NewDefaultProviderFactory(syncdomain.DefaultProviderFactoryOptions{}),
+		syncdomain.ProviderRunnerOptions{},
+	)
+	return syncRuntime{
+		candidates: candidates,
+		scheduler:  syncdomain.NewScheduler(service, runner, syncdomain.SchedulerOptions{}),
+	}, nil
 }

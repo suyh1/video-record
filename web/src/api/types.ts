@@ -160,6 +160,62 @@ export type LibraryResponse = {
   nextCursor: string | null
 }
 
+export type SyncCandidateStatus = 'exact' | 'possible' | 'unmatched' | 'conflict' | 'confirmed' | 'ignored'
+
+export type SyncAccountStatus = {
+  id: string
+  provider: 'jellyfin' | 'emby' | 'plex'
+  name: string
+  enabled: boolean
+  pendingCandidates: number
+  lastRunStatus?: 'running' | 'succeeded' | 'failed'
+  lastRunAt?: string
+}
+
+export type SyncStatusResponse = {
+  accounts: SyncAccountStatus[]
+  pendingTotal: number
+}
+
+export type SyncMatchEvidence = {
+  code: string
+  text: string
+}
+
+export type SyncMatchOption = {
+  mediaId: string
+  episodeId?: string
+  mediaType: MediaType
+  title: string
+  originalTitle?: string
+  year?: string
+}
+
+export type SyncCandidate = {
+  id: string
+  accountId: string
+  externalEventId: string
+  status: SyncCandidateStatus
+  mediaId?: string
+  episodeId?: string
+  event: {
+    playedAt: string
+    durationSeconds: number
+    positionSeconds: number
+    providerItemId: string
+    mediaType: 'movie' | 'episode'
+    title: string
+    originalTitle?: string
+    year?: number
+    seasonNumber?: number
+    episodeNumber?: number
+  }
+  evidence: SyncMatchEvidence[]
+  options: SyncMatchOption[]
+  createdAt: string
+  updatedAt: string
+}
+
 export type TMDBSearchResponse = {
   results: Array<{
     id: number

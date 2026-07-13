@@ -38,7 +38,8 @@
 - [x] Task 18：Jellyfin 播放历史 Provider
 - [x] Task 19：Emby 播放历史 Provider
 - [x] Task 20：Plex 播放历史 Provider
-- [ ] Task 21-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
+- [x] Task 21：候选匹配、冲突解决与同步界面
+- [ ] Task 22-27：按 `docs/plans/2026-07-13-video-record-implementation.md` 顺序执行
 
 ## 已确认约束
 
@@ -102,3 +103,6 @@
 | Task 18 新增 HTTP 测试 handler 混用命名与匿名参数导致编译失败 | 1 | 将未使用请求参数显式命名为 `_` 后重跑同一红测 |
 | Task 18 初版按插件注释使用 `movies,series` 且假定返回完整时间 | 2 | 核对插件实现后改用真实 `Movie,Episode`，并将日期路径与 `h:mm tt` 组合为 UTC 时间 |
 | Task 18 全仓 race 发现取消期间 SQLite 错误覆盖正常关停结果 | 1 | `RunDue` 返回后优先检查父 context，定向 race 连续 20 次通过后重跑全仓 |
+| Task 21 前端首次 typecheck 缺少 `MediaType` 导入且显式传递 optional `undefined` | 1 | 补齐类型导入，并只在单集 ID 存在时构造该可选属性后复验 |
+| Task 21 新增生产 runner 后同步包覆盖率降至 72.3% | 4 | 补齐候选生命周期、目标归属、重复外部事件、Provider 失败与严格凭据分支，最终达到 85.1% |
+| Task 21 浏览器发现同名同年候选的 radio 可访问名称重复 | 1 | 先加失败组件/领域测试，再把候选序号和规范化原名加入受控 DTO 与标签 |

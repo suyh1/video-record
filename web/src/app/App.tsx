@@ -24,6 +24,8 @@ import { TmdbAttribution } from '../features/settings/TmdbStatus'
 import { DataTransfer } from '../features/settings/DataTransfer'
 import { BackupRestore } from '../features/settings/BackupRestore'
 import { StatsPage } from '../features/stats/StatsPage'
+import { CandidateReviewPage } from '../features/sync/CandidateReviewPage'
+import { SyncStatus } from '../features/sync/SyncStatus'
 
 type NavigationItem = {
   label: string
@@ -125,6 +127,7 @@ function ApplicationShell() {
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/stats" element={<StatsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings/sync" element={<CandidateReviewPage />} />
           </Routes>
         </main>
       </div>
@@ -251,6 +254,7 @@ function SettingsPage() {
         <h2 id="metadata-heading">元数据</h2>
         <TmdbAttribution />
       </section>
+      <SyncStatus />
       <MemberSettings />
       <DataTransfer />
       <BackupRestore />

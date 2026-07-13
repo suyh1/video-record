@@ -373,3 +373,18 @@
 - Provider 事件 ID 为 `plex:{historyKey}`，Item Provider ID 为 `ratingKey`；TMDB/IMDb/TVDB 同时支持现代 `tmdb://` 等 GUID 与旧 `com.plexapp.agents.*://` scheme。
 - typed DTO 不读取 JSON Media/Part 文件路径；认证、历史错误和同步候选不会携带 Plex 媒体文件系统信息。
 - 重复 `historyKey` 通过统一 HistoryPage 校验拒绝，缺失 historyKey/ratingKey、非法时间、负时长/进度和未知媒体类型均不能进入后续候选。
+
+## Task 21：候选匹配、冲突解决与同步界面
+
+- 候选匹配优先使用当前账户已确认映射，其次使用 TMDB/IMDb/TVDB 外部身份；标题/原名与年份只能形成可能匹配，不能自动落档。
+- 任一外部身份提示发生媒体类型冲突、多个外部 ID 指向不同条目，或目标已有手工/更高优先级状态时，候选必须进入冲突；手工 `completed` 不再成为自动落档例外。
+- 自动应用只发生于精确且无冲突的候选；确认、重匹配与创建自定义条目在同一 SQLite 事务内写入确认映射、观看事件、参与者、剧集进度、个人状态/日期、候选状态与审计。
+- 同步观看事件 ID 使用 `account_id:event_id` 命名空间；重复事件只复用原候选或映射，不重复创建观看事件，若试图把同一外部事实改指其他媒体则拒绝。
+- 候选 payload 只保存统一 `HistoryEvent`、受控证据和匹配选项，不保存 Provider 原始响应、错误正文、媒体路径、基础 URL 或凭据；HTTP 响应再次收窄为前端实际需要的事件字段。
+- Provider runner 在运行时按账户解密凭据，使用严格 JSON：Jellyfin/Emby 为 token + userId，Emby 可带 IANA timezone，Plex 为 token + accountId；未知字段、尾随 JSON和非法时区均返回不含秘密值的稳定错误。
+- 增量任务延续持久化 Provider 游标，补偿任务固定回看 24 小时且不推进增量游标；每页再次执行统一 HistoryPage 校验，再交给候选服务幂等落档。
+- 服务启动会为全部启用账户补齐增量/补偿任务，后台启动调度器，并把候选服务装配到受认证路由；凭据锁定或上游短暂失败不会阻塞 HTTP 服务。
+- 同步状态 API 只返回当前用户账户的 provider/name/enabled、待核对数量和受控运行状态；候选查询与 confirm/rematch/ignore/custom 全部按当前用户隔离，写入复用 Origin、CSRF 与 Idempotency-Key。
+- 设置页只显示紧凑账户状态与待核对入口，`/settings/sync` 使用非卡片列表展示图标+文字状态、匹配证据、单选候选和内联自定义表单；网络错误保留选择/输入，自定义展开后焦点进入标题。
+- 浏览器发现同名同年候选的两个 radio 名称相同；修复后标签始终含候选序号，并在规范化原名与显示标题不同时展示原名，读屏与键盘用户可区分。
+- `internal/sync` 最终语句覆盖率为 85.1%；真实浏览器在 `1440x900`、`768x1024`、`375x812` 无横向溢出，四种候选写入可用，控制台无 warning/error。

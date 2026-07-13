@@ -18,7 +18,7 @@ describe('App', () => {
     server.use(http.get('*/api/v1/auth/me', () => {
       currentUserRequest()
       return HttpResponse.json({ id: 'member-1', username: 'family', role: 'member' })
-    }))
+    }), http.get('*/api/v1/sync/status', () => HttpResponse.json({ accounts: [], pendingTotal: 0 })))
     window.history.pushState({}, '', '/settings')
 
     render(<App />)
@@ -34,5 +34,15 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('searchbox', { name: '搜索影视' }))
 
     expect(screen.getByRole('dialog', { name: '搜索影视' })).toBeVisible()
+  })
+
+  it('routes to the dedicated sync candidate review page', async () => {
+    server.use(http.get('*/api/v1/sync/candidates', () => HttpResponse.json([])))
+    window.history.pushState({}, '', '/settings/sync')
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: '同步候选' })).toBeVisible()
+    window.history.pushState({}, '', '/')
   })
 })
