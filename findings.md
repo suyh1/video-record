@@ -353,3 +353,13 @@
 - 删除用户在认证检查中映射为稳定认证错误；401/403、429/Retry-After、5xx、超时、畸形/null JSON、非法 RowId、负 runtime、类型或条目不匹配均有显式边界。
 - 上游正文和令牌不进入 Provider 错误；共享 conformance suite 验证认证、分页稳定性、取消、重试分类和脱敏。
 - 全仓 race 暴露调度取消期间 SQLite 可能返回 `ErrTxDone`/`interrupted`；调度器现以父 context 为正常关停真值，不把取消竞争误报为持久化故障。
+
+## Task 19：Emby 播放历史 Provider
+
+- Emby 核心用户条目 API同样不能提供每次重复播放事实；事件级历史来自 Emby Playback Reporting 插件的管理员端点，通常位于服务器 `/emby` 基路径下。
+- Emby 插件与 Jellyfin 版本协议不同：`GetItems` 返回包含 `user_id` 和 `activity` 的对象，时间为服务器本地 `HH:mm`，并可能附带 `RemoteAddress`；适配器使用专用 typed DTO，只保留同步需要的字段。
+- 客户端接受可配置服务器 `time.Location`，按该位置选择历史日期并把本地插件时钟转换为 UTC；默认 UTC，避免把无时区字符串隐式交给进程本地时区。
+- 历史请求使用 `/user_usage_stats/{userId}/{date}/GetItems?Filter=Movie,Episode`，标准条目详情使用 `/Items/{id}`；BaseURL 可显式包含 `/emby` 子路径。
+- 稳定事件 ID 为 `emby:{rowId}`，游标为服务器本地 `date|rowId`；重复电影行保留为独立事件，同页重复条目只抓取一次 Item 详情。
+- 历史 wrapper 的 `user_id` 必须与配置用户匹配，`activity:null`、畸形 JSON、非法游标、缺失 Item、删除用户、401/403、429、5xx 和超时均映射为稳定脱敏错误。
+- Item DTO 会丢弃 Emby 媒体 `Path`，历史 DTO 会丢弃 `RemoteAddress`，这些服务器隐私字段不会进入候选、错误或日志。

@@ -1,0 +1,13 @@
+{
+  "Id": "movie-emby-1",
+  "Name": "The Matrix",
+  "OriginalTitle": "The Matrix",
+  "Type": "Movie",
+  "ProductionYear": 1999,
+  "RunTimeTicks": 81600000000,
+  "ProviderIds": {
+    "Tmdb": "603",
+    "Imdb": "tt0133093"
+  },
+  "Path": "/media/secret-path-that-must-not-propagate.mkv"
+}

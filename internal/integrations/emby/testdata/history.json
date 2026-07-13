@@ -1,0 +1,43 @@
+{
+  "has_image": false,
+  "user_name": "Synthetic Emby User",
+  "user_id": "emby-user-1",
+  "activity": [
+    {
+      "Time": "09:15",
+      "Id": "movie-emby-1",
+      "Name": "The Matrix",
+      "Type": "Movie",
+      "Client": "Synthetic Client",
+      "Method": "DirectPlay",
+      "Device": "Synthetic Device",
+      "Duration": "8100",
+      "RowId": "201",
+      "RemoteAddress": "192.0.2.10"
+    },
+    {
+      "Time": "10:30",
+      "Id": "episode-emby-1",
+      "Name": "Fourth Episode",
+      "Type": "Episode",
+      "Client": "Synthetic Client",
+      "Method": "Transcode",
+      "Device": "Synthetic Device",
+      "Duration": "3400",
+      "RowId": "202",
+      "RemoteAddress": "192.0.2.10"
+    },
+    {
+      "Time": "20:45",
+      "Id": "movie-emby-1",
+      "Name": "The Matrix",
+      "Type": "Movie",
+      "Client": "Synthetic Client",
+      "Method": "DirectPlay",
+      "Device": "Synthetic Device",
+      "Duration": "8000",
+      "RowId": "203",
+      "RemoteAddress": "192.0.2.10"
+    }
+  ]
+}

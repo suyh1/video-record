@@ -257,3 +257,13 @@
 - 首次全仓 race 发现调度器取消竞争可能返回 SQLite 底层错误；已让父 context 优先决定关停结果，定向 race 连续 20 次和最终全仓 race 均通过。
 - 最终 `go test ./... -race -count=1`、`go vet ./...`、前端 typecheck、12 个测试文件 24 项测试、build 与高危依赖审计通过。
 - 未创建 `.tmdb-token`，未接触真实 Jellyfin/TMDB 凭据；全部 JSON 夹具均为合成数据。
+
+### Task 19：Emby 播放历史 Provider
+
+- 已先写 Emby 专用合成测试并确认客户端缺失，再实现 `/emby` 基路径、认证、Playback Reporting wrapper 解码和标准 Item 映射。
+- 共享 conformance suite 覆盖认证、稳定分页、取消、错误脱敏和重试；额外覆盖电影、单集、重复播放、日期/游标、删除用户、wrapper 用户不匹配、null activity、畸形 Item、429、5xx 和超时。
+- Emby 插件响应中的 `HH:mm` 使用配置的服务器 `time.Location` 解释并转 UTC；`+08:00` 测试确认 `09:15` 正确保存为 `01:15Z`，请求日期按服务器本地日历计算。
+- 稳定事件 ID 使用 `emby:{rowId}`，游标使用 `date|rowId`；typed DTO 不读取或传播历史 `RemoteAddress` 与媒体文件 `Path`。
+- 包级 `go test ./internal/integrations/emby ./internal/integrations -race -count=1` 通过，`internal/integrations/emby` 精确语句覆盖率为 87.4%。
+- 最终 `go test ./... -race -count=1`、`go vet ./...`、前端 typecheck、12 个测试文件 24 项测试、build 与高危依赖审计通过。
+- 未创建 `.tmdb-token`，未使用真实 Emby/TMDB 凭据；全部响应和 token 均为合成测试数据。

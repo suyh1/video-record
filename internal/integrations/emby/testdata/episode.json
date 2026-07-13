@@ -1,0 +1,15 @@
+{
+  "Id": "episode-emby-1",
+  "Name": "Fourth Episode",
+  "OriginalTitle": "Fourth Episode",
+  "SeriesName": "Emby Synthetic Series",
+  "Type": "Episode",
+  "ProductionYear": 2025,
+  "ParentIndexNumber": 1,
+  "IndexNumber": 4,
+  "RunTimeTicks": 35000000000,
+  "ProviderIds": {
+    "Tmdb": "20004",
+    "Tvdb": "76543"
+  }
+}
