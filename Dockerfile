@@ -6,7 +6,7 @@ RUN npm ci
 COPY web/ ./
 RUN VITE_EMBED_OUT_DIR=/out npm run build
 
-FROM golang:1.26.4-bookworm AS go-build
+FROM golang:1.26.5-bookworm AS go-build
 
 ARG TARGETOS
 ARG TARGETARCH

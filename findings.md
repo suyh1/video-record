@@ -437,3 +437,15 @@
 - 初始 Go 1.26.0 编译镜像由 Docker Scout 检出 12 个 High；仅把容器编译器补丁升级到 1.26.4 后，最终镜像 `sha256:9c97ac12b67f...` 为 `linux/arm64`、约 5.82 MB、17 个包，扫描结果 `0C/0H/0M/0L`。
 - 本机 Docker 配置的 `credsStore: desktop` 会让匿名 registry 元数据和 Scout 默认解析挂起；构建使用空 `DOCKER_CONFIG` 的本地缓存路径，Scout 直接调用插件并指定空配置与 `local://` 后稳定完成。Task 26 仍需在 CI 用 Buildx/QEMU 验证 amd64/arm64。
 - 工作树、27 个提交、OCI 元数据、14 个运行时层/964 个文件和二进制 strings 均经 gitleaks 扫描无匹配；独立审查确认无剩余 Critical/Important。
+
+## Task 26：CI、双架构发布与供应链元数据
+
+- 2026-07-13 核对 npm peer 约束时，`typescript-eslint 8.64.0` 仍只声明支持 TypeScript `<6.1.0`，与项目固定的 TypeScript 7.0.2 不兼容；前端 lint 选择原生解析 TS/TSX 的 `oxlint 1.73.0`，避免以忽略兼容警告建立门禁。
+- GitHub Actions、Docker Actions、actionlint 与 govulncheck 的使用版本均从官方 Git tag/module 列表核对；workflow 将把第三方 action 固定到完整提交 SHA，并保留版本注释，Dependabot 负责后续更新。
+- Go 1.26.4 下 `govulncheck` 报告标准库可达漏洞 `GO-2026-5856`；把 Docker 与 CI Go 工具链统一升级到 1.26.5 后，完整扫描不再报告可达漏洞。
+- 关键包覆盖率不能依赖 `go test` 四舍五入后的一位百分比；门禁从 raw coverprofile 汇总 statement count，使用精确加权值逐包比较 85% 基线。
+- 发布别名必须基于已经推送并校验的不可变 build digest；若再次从可变 tag 解析 digest，仓库并发或外部覆盖可能让 `latest`/major.minor 指向未经预检的内容。
+- release workflow 使用仓库级并发组串行所有 tag 发布；amd64/arm64 在任何 push 前独立完成烟测、漏洞与层密钥扫描，完整版本推送并验证双平台 manifest 后才允许稳定别名晋级。
+- manifest verifier 要求每个目标平台恰好一个 descriptor、合法 SHA-256 digest 且两个平台 digest 不同，避免重复 descriptor 或同一镜像伪装成双架构通过门禁。
+- Buildx 导出的扫描产物可能是 OCI layout，也可能来自传统 `docker save`；镜像密钥扫描器需要同时解析两种索引/manifest 与 layer 路径，才能覆盖本地和 CI 的实际导出形态。
+- 独立复核重新执行 workflow、覆盖率、Go/前端、漏洞与两种归档扫描后确认无剩余 Critical/Important；外部 push、标签和发布均未执行。

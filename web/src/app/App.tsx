@@ -234,17 +234,6 @@ function HomePage() {
   )
 }
 
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="page">
-      <header className="page-heading">
-        <p className="page-kicker">video-record</p>
-        <h1>{title}</h1>
-      </header>
-    </div>
-  )
-}
-
 function SettingsPage() {
   return (
     <div className="page">

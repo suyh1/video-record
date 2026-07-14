@@ -36,6 +36,7 @@ func TestOpenCreatesPrivateDataDirectory(t *testing.T) {
 
 func TestReadyRequiresAppliedMigrationsAndWritableStorage(t *testing.T) {
 	ctx := context.Background()
+	require.ErrorIs(t, (&DB{}).Ready(ctx), sql.ErrConnDone)
 	db, err := Open(ctx, filepath.Join(t.TempDir(), "video-record.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })

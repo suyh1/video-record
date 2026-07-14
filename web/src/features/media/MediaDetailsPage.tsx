@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, Clapperboard, Star } from 'lucide-react'
+import { CalendarDays, Star } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 
 import { getHouseholdParticipants, getMedia, getRecord, getWatchEvents } from '../../api/client'

@@ -52,6 +52,12 @@ func TestCleanupIncompleteBackupArtifactsAfterProcessTermination(t *testing.T) {
 		require.NoError(t, err, name)
 	}
 	require.NoError(t, manager.CleanupIncomplete(ctx), "cleanup is idempotent")
+	missing := NewBackupManager(nil, BackupOptions{BackupsDir: filepath.Join(t.TempDir(), "missing")})
+	require.NoError(t, missing.CleanupIncomplete(ctx))
+	require.NoError(t, os.WriteFile(filepath.Join(backupsDir, ".snapshot-canceled.db"), []byte("stale"), 0o600))
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	require.ErrorIs(t, manager.CleanupIncomplete(canceled), context.Canceled)
 }
 
 func TestOnlineBackupProducesConsistentChecksummedSnapshotDuringWrites(t *testing.T) {
@@ -402,6 +408,10 @@ func TestBackupManagerDefaultsAndCanceledOperations(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, closed.Close())
 	_, err = databaseRequiresEncryptionKey(ctx, closed)
+	require.Error(t, err)
+	_, err = databaseLogicalBytes(ctx, closed)
+	require.Error(t, err)
+	_, err = databaseSchemaVersion(ctx, closed)
 	require.Error(t, err)
 }
 

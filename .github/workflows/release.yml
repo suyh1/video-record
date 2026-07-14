@@ -1,0 +1,134 @@
+name: Release container
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish multi-architecture image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      IMAGE_REPOSITORY: ${{ vars.IMAGE_REPOSITORY }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+      - name: Validate release inputs and tags
+        id: release
+        shell: bash
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$DOCKERHUB_USERNAME" || -z "$DOCKERHUB_TOKEN" ]]; then
+            echo "Docker Hub credentials are required" >&2
+            exit 1
+          fi
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          ./scripts/release-metadata.sh "$GITHUB_REF_NAME" "$IMAGE_REPOSITORY" "$GITHUB_OUTPUT"
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.13.0
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.26.5
+          cache: true
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - name: Log in to Docker Hub
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build amd64 release candidate
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: local/video-record:release-amd64
+          pull: true
+          sbom: false
+          provenance: false
+          cache-from: type=gha
+      - name: Smoke amd64 release candidate
+        run: ./scripts/container-smoke.sh local/video-record:release-amd64
+      - name: Scan amd64 vulnerabilities
+        uses: docker/scout-action@5dae9c7571dd0f3de81f5b501240c593c13c3eb6 # v1.9.3
+        with:
+          command: cves
+          image: local://local/video-record:release-amd64
+          only-severities: critical,high
+          exit-code: true
+          write-comment: false
+      - name: Scan amd64 image layers for secrets
+        run: ./scripts/image-secret-scan.sh local/video-record:release-amd64
+      - name: Build arm64 release candidate
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/arm64
+          load: true
+          tags: local/video-record:release-arm64
+          pull: true
+          sbom: false
+          provenance: false
+          cache-from: type=gha
+      - name: Smoke arm64 release candidate
+        run: ./scripts/container-smoke.sh local/video-record:release-arm64
+      - name: Scan arm64 vulnerabilities
+        uses: docker/scout-action@5dae9c7571dd0f3de81f5b501240c593c13c3eb6 # v1.9.3
+        with:
+          command: cves
+          image: local://local/video-record:release-arm64
+          only-severities: critical,high
+          exit-code: true
+          write-comment: false
+      - name: Scan arm64 image layers for secrets
+        run: ./scripts/image-secret-scan.sh local/video-record:release-arm64
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.release.outputs.full_tag }}
+          pull: false
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Verify multi-architecture manifest
+        run: ./scripts/verify-manifest.sh "$IMAGE_REPOSITORY@${{ steps.build.outputs.digest }}"
+      - name: Promote stable aliases
+        if: steps.release.outputs.stable == 'true'
+        env:
+          MANIFEST_DIGEST: ${{ steps.build.outputs.digest }}
+          MAJOR_MINOR_TAG: ${{ steps.release.outputs.major_minor_tag }}
+          LATEST_TAG: ${{ steps.release.outputs.latest_tag }}
+        run: docker buildx imagetools create --tag "$MAJOR_MINOR_TAG" --tag "$LATEST_TAG" "$IMAGE_REPOSITORY@$MANIFEST_DIGEST"
+      - name: Verify stable aliases
+        if: steps.release.outputs.stable == 'true'
+        env:
+          MAJOR_MINOR_TAG: ${{ steps.release.outputs.major_minor_tag }}
+          LATEST_TAG: ${{ steps.release.outputs.latest_tag }}
+        run: |
+          ./scripts/verify-manifest.sh "$MAJOR_MINOR_TAG"
+          ./scripts/verify-manifest.sh "$LATEST_TAG"

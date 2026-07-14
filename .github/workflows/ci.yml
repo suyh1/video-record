@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality and end-to-end
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.26.5
+          cache: true
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.13.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Check Go formatting
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l .)"
+          test -z "$unformatted"
+      - name: Validate workflow syntax
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.9
+      - name: Enforce workflow policy
+        run: node scripts/workflow-policy-test.mjs
+      - name: Test release scripts
+        run: |
+          ./scripts/coverage-gate-test.sh
+          ./scripts/release-metadata-test.sh
+          ./scripts/image-secret-scan-test.sh
+          ./scripts/verify-manifest-test.sh
+      - name: Run Go race tests
+        run: go test ./... -race -count=1
+      - name: Run Go vet
+        run: go vet ./...
+      - name: Run migration tests
+        run: go test ./internal/storage -run 'Test(Migrate|RestoreMigratesPreviousSchemaBackup)' -count=1
+      - name: Enforce critical package coverage
+        run: ./scripts/coverage-gate.sh
+      - name: Scan Go vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+      - name: Scan repository secrets
+        shell: bash
+        run: |
+          go run github.com/zricethezav/gitleaks/v8@v8.30.1 dir . --redact --no-banner
+          go run github.com/zricethezav/gitleaks/v8@v8.30.1 git --redact --no-banner
+      - name: Install frontend dependencies
+        working-directory: web
+        run: npm ci
+      - name: Install Playwright browser
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+      - name: Lint frontend
+        working-directory: web
+        run: npm run lint
+      - name: Type-check frontend
+        working-directory: web
+        run: npm run typecheck
+      - name: Test frontend
+        working-directory: web
+        run: npm test -- --run
+      - name: Check generated API client
+        working-directory: web
+        run: npm run api:check
+      - name: Build frontend
+        working-directory: web
+        run: npm run build
+      - name: Audit frontend dependencies
+        working-directory: web
+        run: npm audit --audit-level=high
+      - name: Run browser journeys and accessibility checks
+        working-directory: web
+        run: npm run e2e
+
+  container:
+    name: Container smoke and vulnerability scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.13.0
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.26.5
+          cache: true
+      - name: Build production image
+        run: docker build -t local/video-record:ci .
+      - name: Run container policy tests
+        run: ./scripts/container-smoke-policy-test.sh
+      - name: Run container smoke
+        run: ./scripts/container-smoke.sh local/video-record:ci
+      - name: Scan image layers for secrets
+        run: ./scripts/image-secret-scan.sh local/video-record:ci
+      - name: Scan image vulnerabilities
+        uses: docker/scout-action@5dae9c7571dd0f3de81f5b501240c593c13c3eb6 # v1.9.3
+        with:
+          command: cves
+          image: local://local/video-record:ci
+          only-severities: critical,high
+          exit-code: true
+          write-comment: false

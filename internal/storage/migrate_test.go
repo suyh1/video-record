@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
@@ -40,4 +41,12 @@ func TestMigrateRejectsChangedAppliedMigration(t *testing.T) {
 	err = migrate(context.Background(), db.Writer(), changed)
 
 	require.ErrorIs(t, err, ErrMigrationChecksumMismatch)
+}
+
+func TestMigrateReportsClosedDatabase(t *testing.T) {
+	database, err := sql.Open("sqlite", sqliteDSN(filepath.Join(t.TempDir(), "closed.db"), false))
+	require.NoError(t, err)
+	require.NoError(t, database.Close())
+
+	require.Error(t, migrate(context.Background(), database, fstest.MapFS{}))
 }

@@ -39,7 +39,7 @@
 
 ## 当前状态
 
-设计与实施计划均已完成，正在 `main` 按实施计划执行；Task 25 已完成，下一步从 Task 26 继续。
+设计与实施计划均已完成，正在 `main` 按实施计划执行；Task 26 已完成，下一步从 Task 27 继续。
 
 ## 实施记录
 
@@ -348,3 +348,14 @@
 - 最终全仓 `go test ./... -race -count=1`、`go vet ./...`、前端 16 文件 33 测试、typecheck/API check/build、9 项 E2E、npm 高危审计、Compose config、策略测试、容器烟测与 `git diff --check` 全部通过。
 - 工作树、27 个提交、OCI 元数据、14 个镜像层/964 个文件和二进制 strings 的 gitleaks 扫描均无匹配；独立复审确认无剩余 Critical/Important。
 - 当前本机只验收 arm64；amd64 与双平台 manifest 明确留给 Task 26 的 Buildx/QEMU CI，不创建或推送镜像标签。
+
+### Task 26：CI、双架构发布与供应链元数据
+
+- 已先添加 workflow policy、release metadata、manifest verifier、覆盖率门禁和镜像密钥扫描测试，并确认缺少 workflow/脚本、单平台 manifest、非法 SemVer、输出注入及不安全发布顺序均按预期失败，再实现最小发布链路。
+- CI 固定第三方 action 到完整提交 SHA，执行 Go format/race/vet/迁移/精确覆盖率/govulncheck/gitleaks、前端 npm ci/lint/typecheck/33 项测试/OpenAPI/build/audit、Playwright 9 项 E2E、容器烟测、镜像层密钥扫描和高危/严重漏洞扫描。
+- Go 1.26.4 被 `govulncheck` 检出标准库可达漏洞 `GO-2026-5856`；Docker 与 workflow 工具链升级到 Go 1.26.5 后复测为 0 个可达漏洞，arm64 镜像仍为 17 个包且 `0C/0H/0M/0L`。
+- 精确加权语句覆盖率门禁结果为 records 85.0171%、media 86.5546%、stats 85.1485%、household 85.8447%、storage 85.3835%、integrations 91.7355%、sync 85.1093%。
+- release workflow 在任何 push 前分别构建、烟测、漏洞扫描和镜像层密钥扫描 amd64/arm64；先推不可变完整版本并生成 SBOM/provenance、校验双平台 digest，再仅为稳定 SemVer 推送 major.minor 与 latest，预发布版本不生成稳定别名。
+- manifest verifier 要求 amd64/arm64 各且仅各一个有效 SHA-256 descriptor 且平台 digest 不同；镜像密钥扫描器同时覆盖 OCI layout 与传统 Docker save archive。
+- 最终 actionlint、workflow policy、release/manifest 脚本测试、shell 语法、覆盖率门禁、`git diff --check` 与工作树/28 个提交历史 gitleaks 均通过；独立复核同时通过 Go race/vet/govulncheck、前端全套验证和两种镜像归档扫描，确认无剩余 Critical/Important。
+- 未创建或推送任何 Git 标签、Docker 镜像或发布产物；外部发布仍需显式授权。
