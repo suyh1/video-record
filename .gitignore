@@ -15,3 +15,5 @@ web/dist/
 internal/assets/dist/
 web/playwright-report/
 web/test-results/
+
+docker-compose-example.yml
