@@ -52,7 +52,9 @@ reject_literal docker-compose.yml '${' 'variable interpolation'
 require_pattern docker-compose.yml 'image:[[:space:]]+video-record:local' 'the explicit local image name'
 require_pattern docker-compose.yml '8080:8080' 'the explicit default host port'
 require_pattern docker-compose.yml 'APP_COOKIE_SECURE:[[:space:]]*"false"' 'the explicit local HTTP cookie setting'
+require_pattern docker-compose.yml 'HTTPS.*true|true.*HTTPS' 'when secure cookies must be enabled'
 require_pattern docker-compose.yml 'APP_ENCRYPTION_KEY:[[:space:]]*""' 'an explicit optional encryption-key value'
+require_pattern docker-compose.yml 'openssl rand -base64 32' 'how to generate the encryption key'
 require_pattern docker-compose.yml 'TMDB_READ_ACCESS_TOKEN:[[:space:]]*""' 'an explicit optional TMDB token value'
 
 for operator_document in \

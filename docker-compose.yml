@@ -15,8 +15,10 @@ services:
     environment:
       APP_ENV: production
       APP_PORT: "8080"
+      # Keep false for plain HTTP; set to "true" when served through HTTPS.
       APP_COOKIE_SECURE: "false"
       DATA_DIR: /data
+      # Generate with `openssl rand -base64 32` before enabling media server integrations.
       APP_ENCRYPTION_KEY: ""
       TMDB_READ_ACCESS_TOKEN: ""
     volumes:
