@@ -28,6 +28,45 @@ export type RecordState = {
   version: number
 }
 
+export type CurrentRound = {
+	roundId: string
+	mediaId: string
+	seasonNumber: number | null
+	roundNumber: number
+	status: RecordStatus
+	rating: number | null
+	note: string | null
+	viewingMethod: string | null
+	watchedAt: string | null
+	version: number
+	profileVersion: number
+}
+
+export type ArchivedRound = Omit<CurrentRound, 'version' | 'profileVersion'> & {
+	archivedAt: string | null
+}
+
+export type RoundSummary = {
+	roundId: string
+	mediaId: string
+	seasonNumber: number | null
+	roundNumber: number
+	watchedAt: string | null
+	rating: number | null
+}
+
+export type RoundEpisode = EpisodeProgressItem
+
+export type RoundDetail = {
+	round: ArchivedRound
+	episodes: RoundEpisode[]
+}
+
+export type RewatchRoundResult = {
+	archived: ArchivedRound
+	current: CurrentRound
+}
+
 export type RecordTags = {
   tags: string[]
 }
@@ -89,7 +128,9 @@ export type EpisodeProgressItem = {
 }
 
 export type SeriesProgress = {
-  mediaId: string
+	roundId: string
+	mediaId: string
+	seasonNumber: number
   status: RecordStatus
   version: number
   watchedEpisodes: number

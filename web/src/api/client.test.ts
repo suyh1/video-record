@@ -2,7 +2,19 @@ import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { server } from '../test/server'
-import { createMediaFromTMDB, getTMDBCredits, getTMDBSeason, getTMDBTV } from './client'
+import {
+  createMediaFromTMDB,
+  getCurrentRound,
+  getEpisodeProgress,
+  getRoundDetail,
+  getRoundHistory,
+  getTMDBCredits,
+  getTMDBSeason,
+  getTMDBTV,
+  startRewatch,
+  updateCurrentRound,
+  updateEpisodeProgress,
+} from './client'
 
 describe('API client protected writes', () => {
   beforeEach(() => sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token'))
@@ -62,5 +74,72 @@ describe('API client protected writes', () => {
     expect(tv.seasons[0]?.episodeCount).toBe(10)
     expect(season.episodes[0]?.stillPath).toBe('/winter.jpg')
     expect(credits[0]?.character).toBe('艾德·史塔克')
+  })
+
+  it('scopes movie and season round reads without ambiguous URLs', async () => {
+    server.use(
+      http.get('*/api/v1/records/movie-1/rounds/current', ({ request }) => {
+        expect(new URL(request.url).search).toBe('')
+        return HttpResponse.json({ roundId: '', mediaId: 'movie-1', seasonNumber: null, roundNumber: 1, status: 'none', rating: null, note: null, viewingMethod: null, watchedAt: null, version: 0, profileVersion: 0 })
+      }),
+      http.get('*/api/v1/records/series-1/rounds/current', ({ request }) => {
+        expect(new URL(request.url).searchParams.get('seasonNumber')).toBe('2')
+        return HttpResponse.json({ roundId: 'round-2', mediaId: 'series-1', seasonNumber: 2, roundNumber: 1, status: 'watching', rating: null, note: null, viewingMethod: null, watchedAt: null, version: 1, profileVersion: 1 })
+      }),
+    )
+
+    expect((await getCurrentRound('movie-1')).seasonNumber).toBeNull()
+    expect((await getCurrentRound('series-1', 2)).seasonNumber).toBe(2)
+  })
+
+  it('writes rounds and progress with versions, season scope, CSRF, and idempotency', async () => {
+    server.use(
+      http.put('*/api/v1/records/series-1/rounds/current', async ({ request }) => {
+        expect(new URL(request.url).searchParams.get('seasonNumber')).toBe('2')
+        expect(request.headers.get('If-Match')).toBe('"3"')
+        expect(request.headers.get('X-CSRF-Token')).toBe('csrf-test-token')
+        expect(request.headers.get('Idempotency-Key')).toBeTruthy()
+        expect(await request.json()).toMatchObject({ status: 'completed' })
+        return HttpResponse.json({ roundId: 'round-2', mediaId: 'series-1', seasonNumber: 2, roundNumber: 1, status: 'completed', rating: null, note: null, viewingMethod: null, watchedAt: '2026-07-13T12:00:01Z', version: 4, profileVersion: 1 })
+      }),
+      http.post('*/api/v1/records/series-1/progress', async ({ request }) => {
+        expect(new URL(request.url).searchParams.get('seasonNumber')).toBe('2')
+        expect(request.headers.get('X-CSRF-Token')).toBe('csrf-test-token')
+        expect(request.headers.get('Idempotency-Key')).toBeTruthy()
+        expect(await request.json()).toMatchObject({ action: 'set_time', expectedVersion: 4 })
+        return HttpResponse.json({ roundId: 'round-2', mediaId: 'series-1', seasonNumber: 2, status: 'watching', version: 5, watchedEpisodes: 1, totalEpisodes: 2, lastWatched: null, nextEpisode: null, episodes: [] })
+      }),
+    )
+
+    await updateCurrentRound('series-1', 2, 3, { status: 'completed', watchedAt: '2026-07-13T12:00:01Z' })
+    await updateEpisodeProgress('series-1', 2, { action: 'set_time', expectedVersion: 4, episodeId: 'episode-1', watchedAt: '2026-07-13T12:00:01Z' })
+  })
+
+  it('reads round history/detail and replays the scoped rewatch command', async () => {
+    server.use(
+      http.get('*/api/v1/records/series-1/rounds', ({ request }) => {
+        expect(new URL(request.url).searchParams.get('seasonNumber')).toBe('1')
+        return HttpResponse.json({ rounds: [{ roundId: 'archived-1', mediaId: 'series-1', seasonNumber: 1, roundNumber: 1, watchedAt: '2026-07-13T12:00:01Z', rating: 9 }] })
+      }),
+      http.get('*/api/v1/records/series-1/rounds/archived-1', ({ request }) => {
+        expect(new URL(request.url).searchParams.get('seasonNumber')).toBe('1')
+        return HttpResponse.json({ round: { roundId: 'archived-1', mediaId: 'series-1', seasonNumber: 1, roundNumber: 1, status: 'completed', rating: 9, note: '第一轮', viewingMethod: null, watchedAt: '2026-07-13T12:00:01Z', archivedAt: '2026-07-14T12:00:01Z' }, episodes: [] })
+      }),
+      http.post('*/api/v1/records/series-1/rounds/current/rewatch', ({ request }) => {
+        expect(new URL(request.url).searchParams.get('seasonNumber')).toBe('1')
+        expect(request.headers.get('If-Match')).toBe('"2"')
+        expect(request.headers.get('X-CSRF-Token')).toBe('csrf-test-token')
+        return HttpResponse.json({ archived: {}, current: { roundId: 'current-2', version: 1 } })
+      }),
+      http.get('*/api/v1/records/series-1/progress', ({ request }) => {
+        expect(new URL(request.url).searchParams.get('seasonNumber')).toBe('1')
+        return HttpResponse.json({ roundId: 'current-2', mediaId: 'series-1', seasonNumber: 1, status: 'watching', version: 1, watchedEpisodes: 0, totalEpisodes: 0, lastWatched: null, nextEpisode: null, episodes: [] })
+      }),
+    )
+
+    expect(await getRoundHistory('series-1', 1)).toHaveLength(1)
+    expect((await getRoundDetail('series-1', 'archived-1', 1)).round.note).toBe('第一轮')
+    expect((await startRewatch('series-1', 1, 2)).current.roundId).toBe('current-2')
+    expect((await getEpisodeProgress('series-1', 1)).seasonNumber).toBe(1)
   })
 })

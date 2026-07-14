@@ -9,7 +9,9 @@ import { server } from '../../test/server'
 import { EpisodeProgress } from './EpisodeProgress'
 
 const sparseProgress: SeriesProgress = {
+  roundId: 'round-1',
   mediaId: 'series-1',
+  seasonNumber: 1,
   status: 'watching',
   version: 1,
   watchedEpisodes: 1,

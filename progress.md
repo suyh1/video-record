@@ -491,3 +491,6 @@
 - Task 8 完成：JSON 导入导出升级为 version 2 的 `profile + rounds[]`，轮次内嵌事件和分集时间；version 1 明确拒绝，不保留调试旧数据兼容。
 - Task 8 CSV 按轮次逐行输出 `round_id/round_number/season_number` 及归档时间，并继续防护表格公式；JSON 往返已验证归档私人记录、逐集时间、标签、片单和分享设置。
 - Task 8 同步候选改用 records 轮次事务 helper：电影重复完成自动分轮，单集事件写入所属季当前轮次，外部事件 ID 幂等和候选/映射事务边界保留；完整 sync 包通过。
+- Task 9 完成：前端新增 Current/Archived Round、历史摘要/详情、再刷结果和季级 SeriesProgress 类型，以及当前轮次读写、历史、详情、再刷客户端。
+- Task 9 分集客户端的新签名强制携带季号并支持 `set_time`；旧组件的临时重载保留到 Task 10-12 删除，最终页面不会调用无季号路径。
+- Task 9 新增本地秒级时间工具，使用 `Intl.DateTimeFormat` 显示并通过本地日期分量转换 `datetime-local`；8 个定向测试、typecheck 和 lint 通过。

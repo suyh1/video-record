@@ -24,7 +24,9 @@ const season: TMDBSeasonDetails = {
 
 function progress(episodes: SeriesProgress['episodes']): SeriesProgress {
   return {
+    roundId: 'round-1',
     mediaId: 'series-1',
+    seasonNumber: 1,
     status: 'watching',
     version: 3,
     watchedEpisodes: episodes.filter((episode) => episode.watched).length,

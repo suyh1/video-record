@@ -4,6 +4,7 @@ import type {
   BackupArtifact,
   Collection,
   CurrentUser,
+	CurrentRound,
   HouseholdMember,
   ImportReport,
   IntegrationAccount,
@@ -16,6 +17,9 @@ import type {
   RecordTags,
   RecordSharing,
   RecordStatus,
+	RewatchRoundResult,
+	RoundDetail,
+	RoundSummary,
   SeriesProgress,
   StatsSummary,
   SyncCandidate,
@@ -132,6 +136,82 @@ export type UpdateRecordPayload = {
   participantIds?: string[]
 }
 
+export type UpdateCurrentRoundPayload = {
+	status: RecordStatus
+	rating?: number | null
+	note?: string | null
+	viewingMethod?: string | null
+	watchedAt?: string
+	participantIds?: string[]
+}
+
+function roundScopeQuery(seasonNumber?: number) {
+	if (seasonNumber === undefined) return ''
+	if (!Number.isInteger(seasonNumber) || seasonNumber < 1) throw new Error('Invalid season number')
+	return `?seasonNumber=${seasonNumber}`
+}
+
+export function getCurrentRound(mediaID: string, seasonNumber?: number, signal?: AbortSignal) {
+	return requestJSON<CurrentRound>(
+		`/api/v1/records/${encodeURIComponent(mediaID)}/rounds/current${roundScopeQuery(seasonNumber)}`,
+		signal ? { signal } : undefined,
+	)
+}
+
+export function updateCurrentRound(
+	mediaID: string,
+	seasonNumber: number | undefined,
+	version: number,
+	payload: UpdateCurrentRoundPayload,
+) {
+	const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+	return requestJSON<CurrentRound>(
+		`/api/v1/records/${encodeURIComponent(mediaID)}/rounds/current${roundScopeQuery(seasonNumber)}`,
+		{
+			method: 'PUT',
+			headers: {
+				'Content-Type': 'application/json',
+				'Idempotency-Key': createIdempotencyKey(),
+				'If-Match': `"${version}"`,
+				'X-CSRF-Token': csrfToken,
+			},
+			body: JSON.stringify(payload),
+		},
+	)
+}
+
+export async function getRoundHistory(mediaID: string, seasonNumber?: number, signal?: AbortSignal) {
+	const response = await requestJSON<{ rounds: RoundSummary[] }>(
+		`/api/v1/records/${encodeURIComponent(mediaID)}/rounds${roundScopeQuery(seasonNumber)}`,
+		signal ? { signal } : undefined,
+	)
+	return response.rounds
+}
+
+export function getRoundDetail(mediaID: string, roundID: string, seasonNumber?: number, signal?: AbortSignal) {
+	return requestJSON<RoundDetail>(
+		`/api/v1/records/${encodeURIComponent(mediaID)}/rounds/${encodeURIComponent(roundID)}${roundScopeQuery(seasonNumber)}`,
+		signal ? { signal } : undefined,
+	)
+}
+
+export function startRewatch(mediaID: string, seasonNumber: number | undefined, version: number) {
+	const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+	return requestJSON<RewatchRoundResult>(
+		`/api/v1/records/${encodeURIComponent(mediaID)}/rounds/current/rewatch${roundScopeQuery(seasonNumber)}`,
+		{
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'Idempotency-Key': createIdempotencyKey(),
+				'If-Match': `"${version}"`,
+				'X-CSRF-Token': csrfToken,
+			},
+			body: JSON.stringify({}),
+		},
+	)
+}
+
 export async function updateRecord(mediaID: string, version: number, payload: UpdateRecordPayload): Promise<RecordState> {
   const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
   return requestJSON<RecordState>(`/api/v1/records/${encodeURIComponent(mediaID)}`, {
@@ -230,11 +310,15 @@ export function deleteWatchEvent(mediaID: string, eventID: string) {
   )
 }
 
-export function getEpisodeProgress(mediaID: string, signal?: AbortSignal) {
-  return requestJSON<SeriesProgress>(
-    `/api/v1/records/${encodeURIComponent(mediaID)}/progress`,
-    signal ? { signal } : undefined,
-  )
+export function getEpisodeProgress(mediaID: string, seasonNumber: number, signal?: AbortSignal): Promise<SeriesProgress>
+export function getEpisodeProgress(mediaID: string, signal?: AbortSignal): Promise<SeriesProgress>
+export function getEpisodeProgress(mediaID: string, seasonNumberOrSignal?: number | AbortSignal, signal?: AbortSignal) {
+	const seasonNumber = typeof seasonNumberOrSignal === 'number' ? seasonNumberOrSignal : undefined
+	const requestSignal = typeof seasonNumberOrSignal === 'number' ? signal : seasonNumberOrSignal
+	return requestJSON<SeriesProgress>(
+		`/api/v1/records/${encodeURIComponent(mediaID)}/progress${roundScopeQuery(seasonNumber)}`,
+		requestSignal ? { signal: requestSignal } : undefined,
+	)
 }
 
 export function getCalendar(month: string, timezone: string, filter: CalendarFilter, signal?: AbortSignal) {
@@ -394,7 +478,7 @@ export function restoreBackup(file: File) {
 }
 
 export type UpdateEpisodeProgressPayload = {
-  action: 'single' | 'range' | 'season' | 'next' | 'undo'
+	action: 'single' | 'range' | 'season' | 'next' | 'undo' | 'set_time'
   expectedVersion: number
   episodeId?: string
   throughEpisodeId?: string
@@ -404,9 +488,18 @@ export type UpdateEpisodeProgressPayload = {
   totalEpisodes?: number
 }
 
-export function updateEpisodeProgress(mediaID: string, payload: UpdateEpisodeProgressPayload) {
-  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
-  return requestJSON<SeriesProgress>(`/api/v1/records/${encodeURIComponent(mediaID)}/progress`, {
+export function updateEpisodeProgress(mediaID: string, seasonNumber: number, payload: UpdateEpisodeProgressPayload): Promise<SeriesProgress>
+export function updateEpisodeProgress(mediaID: string, payload: UpdateEpisodeProgressPayload): Promise<SeriesProgress>
+export function updateEpisodeProgress(
+	mediaID: string,
+	seasonNumberOrPayload: number | UpdateEpisodeProgressPayload,
+	maybePayload?: UpdateEpisodeProgressPayload,
+) {
+	const seasonNumber = typeof seasonNumberOrPayload === 'number' ? seasonNumberOrPayload : undefined
+	const payload = typeof seasonNumberOrPayload === 'number' ? maybePayload : seasonNumberOrPayload
+	if (!payload) throw new Error('Missing episode progress payload')
+	const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+	return requestJSON<SeriesProgress>(`/api/v1/records/${encodeURIComponent(mediaID)}/progress${roundScopeQuery(seasonNumber)}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
