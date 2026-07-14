@@ -468,3 +468,7 @@
 - 已比较显式轮次、JSON 快照和事件推导三种方案；用户确认显式观看轮次架构，正在确认页面交互与错误边界。
 - 页面交互设计已确认；正在提交最后的 API、事务、状态投影、错误处理和测试设计供整体确认。
 - 整套设计已确认；已写入 `docs/plans/2026-07-14-viewing-rounds-season-records-design.md`，等待校验和提交。
+- 设计文档已提交到 `main`，提交为 `6e5b59d`；独立新文件检查发现两处 Markdown 行尾空格，已修正并记录流程错误。
+- 已按 `writing-plans` 审计轮次改造的服务端、迁移、API、前端和测试消费者，正在编写逐任务实施计划。
+- 已补齐影视级 profile、家庭分享、同步/导入和 E2E 种子依赖，计划将按迁移、领域、API、消费者、前端和浏览器门禁分层执行。
+- 已生成 `docs/plans/2026-07-14-viewing-rounds-season-records-implementation.md`：13 个任务，全部包含 RED/GREEN、精确文件、验证命令和提交边界。
