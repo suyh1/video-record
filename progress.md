@@ -28,6 +28,12 @@
 - 提交前地标审计发现 App 壳已有 `<main>`，详情主列不可再使用嵌套 `<main>`；已先加入壳内嵌套回归断言，准备完成 RED/GREEN 修正。
 - 嵌套主地标红灯已确认：定向测试 1/3 失败并准确返回 `.media-details-primary` 内层 `<main>`；最小修正仅将布局容器改为 `<div>`。
 - 嵌套主地标 GREEN：同一定向测试恢复 3/3 通过，详情主列内部的进度与历史 section 语义保持不变。
+- Task 8 已提交为 `ca42bf7`；Task 9 审计确认共享 helper 已覆盖默认季、远端/本地合并、下一集和总集数计算，首页只需组织 live 查询及复用稀疏写入。
+- Task 9 RED 已确认：Home 定向测试 2/3 失败，分别因稀疏本地目录误显示“已全部看完”和 TMDB 失败时缺少“打开详情继续记录”；失败原因与目标行为一致。
+- Task 9 GREEN：Home 定向测试 3/3 通过；live TV/单季目录识别下一集，next/undo 均发送最小 `episodeRefs + totalEpisodes`，TMDB 失败显示详情降级链接，未关联条目保留旧本地路径。
+- Task 9 首次 typecheck 仅报 live/legacy 联合类型未随普通布尔值收窄；根因定位后改为在各来源分支使用其原始 episode 值，不使用强制断言。
+- Task 9 类型修正后复验：`npm --prefix web run typecheck` 退出 0，Home 定向测试保持 3/3 通过。
+- Task 9 提交前门禁：Home + episodeCatalog 6/6 通过，前端 lint 与 `git diff --check` 退出 0；未新增依赖或本地 TMDB 展示数据存储。
 
 ## 2026-07-13：Task 27 恢复与 v1 MUST 审计
 

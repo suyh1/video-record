@@ -3,8 +3,16 @@ import { Bookmark, Check, ChevronRight, CircleStop, Clapperboard, LoaderCircle, 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { getEpisodeProgress, getLibrary, updateEpisodeProgress, type UpdateEpisodeProgressPayload } from '../../api/client'
-import type { EpisodeProgressItem, MediaSearchResult, RecordStatus } from '../../api/types'
+import {
+  getEpisodeProgress,
+  getLibrary,
+  getTMDBSeason,
+  getTMDBTV,
+  updateEpisodeProgress,
+  type UpdateEpisodeProgressPayload,
+} from '../../api/client'
+import type { EpisodeProgressItem, EpisodeReference, MediaSearchResult, RecordStatus } from '../../api/types'
+import { findNextEpisode, mergeSeason, selectDefaultSeason, totalEpisodeCount } from '../episodes/episodeCatalog'
 import { MediaPoster } from '../media/MediaPoster'
 
 const statusDetails = {
@@ -96,57 +104,120 @@ export function HomePage({ onSearch }: { onSearch?: () => void }) {
 
 function HomeContinueItem({ item }: { item: MediaSearchResult }) {
   const queryClient = useQueryClient()
-  const [savedEpisode, setSavedEpisode] = useState<EpisodeProgressItem | null>(null)
+  const [savedAdvance, setSavedAdvance] = useState<SavedAdvance | null>(null)
   const progress = useQuery({
     queryKey: ['episode-progress', item.id],
     queryFn: ({ signal }) => getEpisodeProgress(item.id, signal),
+  })
+  const linked = Boolean(item.tmdbId)
+  const tv = useQuery({
+    queryKey: ['tmdb-tv', item.tmdbId],
+    queryFn: ({ signal }) => getTMDBTV(item.tmdbId ?? 0, signal),
+    enabled: linked,
+  })
+  const defaultSeason = tv.data && progress.data ? selectDefaultSeason(tv.data.seasons, progress.data) : null
+  const activeSeason = savedAdvance?.kind === 'live' ? savedAdvance.episode.seasonNumber : defaultSeason
+  const season = useQuery({
+    queryKey: ['tmdb-season', item.tmdbId, activeSeason],
+    queryFn: ({ signal }) => getTMDBSeason(item.tmdbId ?? 0, activeSeason ?? 0, signal),
+    enabled: linked && activeSeason !== null,
   })
   const mutation = useMutation({
     mutationFn: (payload: UpdateEpisodeProgressPayload) => updateEpisodeProgress(item.id, payload),
     onSuccess: (nextProgress, variables) => {
       queryClient.setQueryData(['episode-progress', item.id], nextProgress)
-      if (variables.action === 'next') setSavedEpisode(nextProgress.lastWatched)
-      if (variables.action === 'undo') setSavedEpisode(null)
+      if (variables.action === 'next') {
+        const liveEpisode = variables.episodeRefs?.[0]
+        if (liveEpisode) setSavedAdvance({ kind: 'live', episode: liveEpisode })
+        else if (nextProgress.lastWatched) setSavedAdvance({ kind: 'legacy', episode: nextProgress.lastWatched })
+      }
+      if (variables.action === 'undo') setSavedAdvance(null)
       void queryClient.invalidateQueries({ queryKey: ['library'] })
     },
   })
   useEffect(() => {
-    if (!savedEpisode) return
-    const timeout = window.setTimeout(() => setSavedEpisode(null), 10_000)
+    if (!savedAdvance) return
+    const timeout = window.setTimeout(() => setSavedAdvance(null), 10_000)
     return () => window.clearTimeout(timeout)
-  }, [savedEpisode])
+  }, [savedAdvance])
 
-  const nextEpisode = progress.data?.nextEpisode
+  const mergedSeason = tv.data && season.data && progress.data
+    ? mergeSeason(season.data, tv.data.seasons, progress.data)
+    : null
+  const liveNextEpisode = mergedSeason ? findNextEpisode(mergedSeason.episodes) : null
+  const legacyNextEpisode = progress.data?.nextEpisode
     ?? progress.data?.episodes.find((episode) => !episode.watched)
     ?? null
+  const nextEpisode = linked ? liveNextEpisode : legacyNextEpisode
+  const totalEpisodes = tv.data ? totalEpisodeCount(tv.data.seasons) : progress.data?.totalEpisodes ?? 0
+  const catalogPending = linked && (tv.isPending || (activeSeason !== null && season.isPending))
+  const catalogUnavailable = linked && !catalogPending && (
+    tv.isError
+    || !tv.data
+    || activeSeason === null
+    || season.isError
+    || !season.data
+    || season.data.episodes.length === 0
+  )
+  const liveComplete = linked
+    && !catalogUnavailable
+    && Boolean(mergedSeason?.episodes.length)
+    && liveNextEpisode === null
   const advance = () => {
-    if (!progress.data || !nextEpisode) return
+    if (!progress.data) return
+    if (linked) {
+      if (!liveNextEpisode) return
+      mutation.mutate({
+        action: 'next',
+        expectedVersion: progress.data.version,
+        watchedAt: new Date().toISOString(),
+        episodeRefs: [toEpisodeReference(liveNextEpisode)],
+        totalEpisodes,
+      })
+      return
+    }
+    if (!legacyNextEpisode) return
     mutation.mutate({ action: 'next', expectedVersion: progress.data.version, watchedAt: new Date().toISOString() })
   }
   const undo = () => {
-    if (!progress.data || !savedEpisode) return
-    mutation.mutate({ action: 'undo', episodeId: savedEpisode.id, expectedVersion: progress.data.version })
+    if (!progress.data || !savedAdvance) return
+    if (savedAdvance.kind === 'live') {
+      mutation.mutate({
+        action: 'undo',
+        expectedVersion: progress.data.version,
+        episodeRefs: [savedAdvance.episode],
+        totalEpisodes,
+      })
+      return
+    }
+    mutation.mutate({ action: 'undo', episodeId: savedAdvance.episode.id, expectedVersion: progress.data.version })
   }
+  const savedEpisode = savedAdvance?.episode ?? null
 
   return (
     <article className="home-continue-item">
       <Link className="poster-link" to={`/media/${item.id}`}><MediaPoster item={item} /></Link>
       <div className="home-continue-action">
-        {progress.isPending ? <div className="skeleton home-continue-action-skeleton" aria-label={`正在加载 ${item.title} 的剧集进度`} /> : null}
+        {progress.isPending || catalogPending ? <div className="skeleton home-continue-action-skeleton" aria-label={`正在加载 ${item.title} 的剧集进度`} /> : null}
         {progress.isError ? <span role="alert">进度暂不可用</span> : null}
-        {!progress.isPending && !progress.isError && savedEpisode ? (
+        {!progress.isPending && !catalogPending && !progress.isError && savedEpisode ? (
           <button type="button" disabled={mutation.isPending} aria-label={`撤销 ${item.title} ${episodeLabel(savedEpisode)}`} onClick={undo}>
             {mutation.isPending ? <LoaderCircle className="loading-icon" aria-hidden="true" size={16} /> : <RotateCcw aria-hidden="true" size={16} />}
             撤销 {episodeLabel(savedEpisode)}
           </button>
         ) : null}
-        {!progress.isPending && !progress.isError && !savedEpisode && nextEpisode ? (
+        {!progress.isPending && !catalogPending && !progress.isError && !catalogUnavailable && !savedEpisode && nextEpisode ? (
           <button type="button" disabled={mutation.isPending} aria-label={`推进 ${item.title} 下一集 ${episodeLabel(nextEpisode)}`} onClick={advance}>
             {mutation.isPending ? <LoaderCircle className="loading-icon" aria-hidden="true" size={16} /> : <ChevronRight aria-hidden="true" size={16} />}
             下一集 {episodeLabel(nextEpisode)}
           </button>
         ) : null}
-        {!progress.isPending && !progress.isError && !savedEpisode && !nextEpisode ? <span><Check aria-hidden="true" size={15} />已全部看完</span> : null}
+        {!progress.isPending && !catalogPending && !progress.isError && catalogUnavailable && !savedEpisode ? (
+          <Link className="text-link" to={`/media/${item.id}`}>打开详情继续记录</Link>
+        ) : null}
+        {!progress.isPending && !catalogPending && !progress.isError && !catalogUnavailable && !savedEpisode && (linked ? liveComplete : !nextEpisode) ? (
+          <span><Check aria-hidden="true" size={15} />已全部看完</span>
+        ) : null}
         {mutation.isError ? <span role="alert">进度保存失败</span> : null}
         {savedEpisode ? <span className="sr-only" role="status">已推进至 {episodeLabel(savedEpisode)}</span> : null}
       </div>
@@ -207,6 +278,19 @@ function HomeRecentSkeleton() {
   )
 }
 
-function episodeLabel(episode: EpisodeProgressItem) {
+type SavedAdvance =
+  | { kind: 'live'; episode: EpisodeReference }
+  | { kind: 'legacy'; episode: EpisodeProgressItem }
+
+function toEpisodeReference(episode: Pick<EpisodeReference, 'seasonNumber' | 'episodeNumber' | 'absoluteNumber'> & { id: number }) {
+  return {
+    sourceId: String(episode.id),
+    seasonNumber: episode.seasonNumber,
+    episodeNumber: episode.episodeNumber,
+    absoluteNumber: episode.absoluteNumber,
+  }
+}
+
+function episodeLabel(episode: Pick<EpisodeProgressItem, 'seasonNumber' | 'episodeNumber'>) {
   return `S${String(episode.seasonNumber).padStart(2, '0')}E${String(episode.episodeNumber).padStart(2, '0')}`
 }

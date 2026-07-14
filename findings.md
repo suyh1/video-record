@@ -33,6 +33,7 @@
 - `MediaSearchResult` 同时服务影库、搜索和首页；为本地 TMDB 条目增加可空 `tmdbId` 可让详情页和首页复用现有受保护 TMDB 路由。自定义未关联条目保持 `null`，不会误发外部请求。
 - OpenAPI 现有 `TMDBTV`、`TMDBSeason`、`TMDBEpisode` 和 `MediaItem` 都可向后兼容扩展；进度请求需新增 `episodeRefs` 与远端总集数，进度项需返回 `sourceId`，再用固定版本 `openapi-typescript@7.13.0` 重生成并运行 `api:check`。
 - 无需新增整季目录迁移；现有 seasons/episodes 非空字段允许为用户标记集创建空展示字段的身份桩。若要保留准确累计集数，需要给身份桩记录由远端目录计算的 `absolute_number`，并让日历优先读取该值。
+- Task 9 可完全复用 `selectDefaultSeason`、`mergeSeason`、`findNextEpisode` 和 `totalEpisodeCount`：首页按条目 `tmdbId` 获取 TV 摘要，只加载当前未完成季，再将单个远端 episode 转成与详情页一致的最小 `episodeRefs` 写入；TMDB 失败时不根据稀疏本地身份误判“全看完”。
 
 ## 仓库现状
 
