@@ -88,6 +88,7 @@ func (middleware *idempotencyMiddleware) handleHashWithPersistence(
 		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_idempotency_key")
 		return
 	}
+	requestPath := r.URL.RequestURI()
 
 	stored, found, err := middleware.find(r.Context(), identity.User.ID, key)
 	if err != nil {
@@ -96,7 +97,7 @@ func (middleware *idempotencyMiddleware) handleHashWithPersistence(
 	}
 	if !found {
 		err = middleware.reserve(
-			r.Context(), identity.User.ID, key, r.Method, r.URL.Path, requestHash, RequestIDFromContext(r.Context()),
+			r.Context(), identity.User.ID, key, r.Method, requestPath, requestHash, RequestIDFromContext(r.Context()),
 		)
 		if err != nil {
 			stored, found, err = middleware.find(r.Context(), identity.User.ID, key)
@@ -107,7 +108,7 @@ func (middleware *idempotencyMiddleware) handleHashWithPersistence(
 		}
 	}
 	if found {
-		if stored.Method != r.Method || stored.Path != r.URL.Path || stored.RequestHash != requestHash {
+		if stored.Method != r.Method || stored.Path != requestPath || stored.RequestHash != requestHash {
 			writeProblem(w, r, http.StatusConflict, "Conflict", "idempotency_key_conflict")
 			return
 		}
@@ -121,7 +122,7 @@ func (middleware *idempotencyMiddleware) handleHashWithPersistence(
 
 	capture := newCapturedResponse()
 	next.ServeHTTP(capture, r)
-	response := capture.stored(r.Method, r.URL.Path, requestHash, RequestIDFromContext(r.Context()))
+	response := capture.stored(r.Method, requestPath, requestHash, RequestIDFromContext(r.Context()))
 	if response.Status < http.StatusInternalServerError {
 		err := middleware.complete(r.Context(), identity.User.ID, key, response)
 		if err != nil && !persistenceRequired {

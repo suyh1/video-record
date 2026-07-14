@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -128,4 +129,85 @@ func TestCurrentRoundHandlersRejectFutureTimeAndStaleVersion(t *testing.T) {
 	}, headers)
 	require.Equal(t, http.StatusConflict, stale.Code)
 	require.Equal(t, `"1"`, stale.Header().Get("ETag"))
+}
+
+func TestRewatchRoundAndRoundHistoryHandlers(t *testing.T) {
+	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
+	currentURL := "http://example.test/api/v1/records/" + mediaID + "/rounds/current"
+	completed := performJSONRequest(router, http.MethodPut, currentURL, map[string]any{
+		"status": "completed", "rating": 9.1, "note": "第一轮",
+		"watchedAt": "2026-07-13T20:30:45Z",
+	}, map[string]string{
+		"Cookie": cookie.String(), "Origin": "http://example.test",
+		"X-CSRF-Token": csrfToken, "Idempotency-Key": "complete-before-rewatch",
+		"If-Match": `"0"`,
+	})
+	require.Equal(t, http.StatusOK, completed.Code)
+
+	rewatchURL := currentURL + "/rewatch"
+	headers := map[string]string{
+		"Cookie": cookie.String(), "Origin": "http://example.test",
+		"X-CSRF-Token": csrfToken, "Idempotency-Key": "rewatch-movie-1",
+		"If-Match": `"1"`,
+	}
+	rewatched := performJSONRequest(router, http.MethodPost, rewatchURL, map[string]any{}, headers)
+	require.Equal(t, http.StatusOK, rewatched.Code)
+	require.Contains(t, rewatched.Body.String(), `"roundNumber":2`)
+	require.Contains(t, rewatched.Body.String(), `"status":"watching"`)
+	require.Contains(t, rewatched.Body.String(), `"note":"第一轮"`)
+
+	replayed := performJSONRequest(router, http.MethodPost, rewatchURL, map[string]any{}, headers)
+	require.Equal(t, http.StatusOK, replayed.Code)
+	require.Equal(t, "true", replayed.Header().Get("Idempotency-Replayed"))
+	require.Equal(t, rewatched.Body.String(), replayed.Body.String())
+
+	historyURL := "http://example.test/api/v1/records/" + mediaID + "/rounds"
+	history := performJSONRequest(router, http.MethodGet, historyURL, nil, map[string]string{
+		"Cookie": cookie.String(),
+	})
+	require.Equal(t, http.StatusOK, history.Code)
+	require.Contains(t, history.Body.String(), `"roundNumber":1`)
+	var payload struct {
+		Rounds []struct {
+			RoundID string `json:"roundId"`
+		} `json:"rounds"`
+	}
+	require.NoError(t, json.Unmarshal(history.Body.Bytes(), &payload))
+	require.Len(t, payload.Rounds, 1)
+
+	detail := performJSONRequest(
+		router, http.MethodGet, historyURL+"/"+payload.Rounds[0].RoundID, nil,
+		map[string]string{"Cookie": cookie.String()},
+	)
+	require.Equal(t, http.StatusOK, detail.Code)
+	require.Contains(t, detail.Body.String(), `"note":"第一轮"`)
+	require.Contains(t, detail.Body.String(), `"episodes":[]`)
+}
+
+func TestRewatchRoundHandlersRequireCompletionAndSecurity(t *testing.T) {
+	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
+	currentURL := "http://example.test/api/v1/records/" + mediaID + "/rounds/current"
+	watching := performJSONRequest(router, http.MethodPut, currentURL, map[string]any{
+		"status": "watching",
+	}, map[string]string{
+		"Cookie": cookie.String(), "Origin": "http://example.test",
+		"X-CSRF-Token": csrfToken, "Idempotency-Key": "watching-before-rewatch",
+		"If-Match": `"0"`,
+	})
+	require.Equal(t, http.StatusOK, watching.Code)
+
+	rewatchURL := currentURL + "/rewatch"
+	withoutCSRF := performJSONRequest(router, http.MethodPost, rewatchURL, map[string]any{}, map[string]string{
+		"Cookie": cookie.String(), "Origin": "http://example.test",
+		"Idempotency-Key": "rewatch-no-csrf", "If-Match": `"1"`,
+	})
+	require.Equal(t, http.StatusForbidden, withoutCSRF.Code)
+
+	incomplete := performJSONRequest(router, http.MethodPost, rewatchURL, map[string]any{}, map[string]string{
+		"Cookie": cookie.String(), "Origin": "http://example.test",
+		"X-CSRF-Token": csrfToken, "Idempotency-Key": "rewatch-incomplete",
+		"If-Match": `"1"`,
+	})
+	require.Equal(t, http.StatusConflict, incomplete.Code)
+	require.Contains(t, incomplete.Body.String(), `"code":"round_not_completed"`)
 }

@@ -490,6 +490,10 @@ func writeRecordError(w http.ResponseWriter, r *http.Request, err error, version
 		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_watched_at")
 	case errors.Is(err, records.ErrRoundArchived):
 		writeProblem(w, r, http.StatusConflict, "Conflict", "round_archived")
+	case errors.Is(err, records.ErrRoundNotCompleted):
+		writeProblem(w, r, http.StatusConflict, "Conflict", "round_not_completed")
+	case errors.Is(err, records.ErrRoundNotFound):
+		writeProblem(w, r, http.StatusNotFound, "Not Found", "round_not_found")
 	case errors.Is(err, records.ErrInvalidRecord), errors.Is(err, records.ErrInvalidStatus):
 		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_record")
 	case errors.Is(err, records.ErrInvalidWatchEvent):

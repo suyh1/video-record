@@ -124,6 +124,155 @@ func TestRoundScopeArchiveAndFutureTimeValidation(t *testing.T) {
 	require.ErrorIs(t, err, ErrRoundArchived)
 }
 
+func TestRewatchRoundArchivesCompletedMovieAndStartsBlankRound(t *testing.T) {
+	service, db, userID, mediaID := newTestRecordsService(t)
+	ctx := context.Background()
+	completedAt := time.Date(2026, 7, 13, 21, 2, 3, 0, time.UTC)
+	rating := 91
+	note := "第一轮笔记"
+	method := "家庭投影"
+	completed, err := service.UpdateRound(ctx, UpdateRoundInput{
+		Scope:  RoundScope{UserID: userID, MediaID: mediaID},
+		Status: StatusCompleted, Rating: &rating, RatingSet: true,
+		Note: &note, NoteSet: true, ViewingMethod: &method, ViewingMethodSet: true,
+		CompletedAt: &completedAt, Source: SourceManual,
+	})
+	require.NoError(t, err)
+
+	result, err := service.StartRewatch(ctx, RewatchInput{
+		Scope:           RoundScope{UserID: userID, MediaID: mediaID},
+		ExpectedVersion: completed.Version,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Archived.RoundNumber)
+	require.Equal(t, completedAt, *result.Archived.CompletedAt)
+	require.NotNil(t, result.Archived.ArchivedAt)
+	require.Equal(t, rating, *result.Archived.Rating)
+	require.Equal(t, note, *result.Archived.Note)
+	require.Equal(t, 2, result.Current.RoundNumber)
+	require.Equal(t, StatusWatching, result.Current.Status)
+	require.Nil(t, result.Current.Rating)
+	require.Nil(t, result.Current.Note)
+	require.Nil(t, result.Current.ViewingMethod)
+	require.Nil(t, result.Current.CompletedAt)
+
+	history, err := service.RoundHistory(ctx, RoundScope{UserID: userID, MediaID: mediaID})
+	require.NoError(t, err)
+	require.Len(t, history, 1)
+	require.Equal(t, result.Archived.ID, history[0].ID)
+	detail, err := service.RoundDetail(ctx, RoundScope{UserID: userID, MediaID: mediaID}, result.Archived.ID)
+	require.NoError(t, err)
+	require.Equal(t, note, *detail.Round.Note)
+	require.Empty(t, detail.Episodes)
+
+	otherUserID := insertTestUser(t, db, "round-history-outsider")
+	otherHistory, err := service.RoundHistory(ctx, RoundScope{UserID: otherUserID, MediaID: mediaID})
+	require.NoError(t, err)
+	require.Empty(t, otherHistory)
+	_, err = service.RoundDetail(ctx, RoundScope{UserID: otherUserID, MediaID: mediaID}, result.Archived.ID)
+	require.ErrorIs(t, err, ErrRoundNotFound)
+}
+
+func TestRewatchRoundRequiresCompletedCurrentRound(t *testing.T) {
+	service, _, userID, mediaID := newTestRecordsService(t)
+	ctx := context.Background()
+	watching, err := service.UpdateRound(ctx, UpdateRoundInput{
+		Scope:  RoundScope{UserID: userID, MediaID: mediaID},
+		Status: StatusWatching, Source: SourceManual,
+	})
+	require.NoError(t, err)
+
+	_, err = service.StartRewatch(ctx, RewatchInput{
+		Scope:           RoundScope{UserID: userID, MediaID: mediaID},
+		ExpectedVersion: watching.Version,
+	})
+	require.ErrorIs(t, err, ErrRoundNotCompleted)
+	history, historyErr := service.RoundHistory(ctx, RoundScope{UserID: userID, MediaID: mediaID})
+	require.NoError(t, historyErr)
+	require.Empty(t, history)
+}
+
+func TestRewatchRoundArchivesSeasonEpisodesWithoutChangingOtherSeason(t *testing.T) {
+	service, _, userID, mediaID, seasons := newTestSeriesService(t)
+	ctx := context.Background()
+	watchedAt := time.Date(2026, 7, 13, 20, 1, 2, 0, time.UTC)
+	seasonOne, err := service.UpdateEpisodeProgress(ctx, EpisodeProgressInput{
+		UserID: userID, MediaID: mediaID, SeasonNumber: 1,
+		Action: EpisodeProgressSingle, EpisodeID: seasons[0][0],
+		WatchedAt: watchedAt, Source: SourceManual,
+	})
+	require.NoError(t, err)
+	seasonTwo, err := service.UpdateEpisodeProgress(ctx, EpisodeProgressInput{
+		UserID: userID, MediaID: mediaID, SeasonNumber: 2,
+		Action: EpisodeProgressSeason, WatchedAt: watchedAt.Add(time.Hour),
+		Source: SourceManual, TotalEpisodes: 3,
+	})
+	require.NoError(t, err)
+	require.Equal(t, StatusCompleted, seasonTwo.Status)
+
+	result, err := service.StartRewatch(ctx, RewatchInput{
+		Scope:           RoundScope{UserID: userID, MediaID: mediaID, SeasonNumber: integerPointer(2)},
+		ExpectedVersion: seasonTwo.Version,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 2, *result.Archived.SeasonNumber)
+	detail, err := service.RoundDetail(
+		ctx,
+		RoundScope{UserID: userID, MediaID: mediaID, SeasonNumber: integerPointer(2)},
+		result.Archived.ID,
+	)
+	require.NoError(t, err)
+	require.Len(t, detail.Episodes, 3)
+	for _, episode := range detail.Episodes {
+		require.True(t, episode.Watched)
+		require.Equal(t, watchedAt.Add(time.Hour), *episode.WatchedAt)
+	}
+	currentSeasonTwo, err := service.EpisodeProgress(ctx, userID, mediaID, 2)
+	require.NoError(t, err)
+	require.Equal(t, result.Current.ID, currentSeasonTwo.RoundID)
+	require.Zero(t, currentSeasonTwo.WatchedEpisodes)
+	currentSeasonOne, err := service.EpisodeProgress(ctx, userID, mediaID, 1)
+	require.NoError(t, err)
+	require.Equal(t, seasonOne.RoundID, currentSeasonOne.RoundID)
+	require.Equal(t, 1, currentSeasonOne.WatchedEpisodes)
+}
+
+func TestRewatchRoundRollsBackArchiveWhenNextRoundInsertFails(t *testing.T) {
+	service, db, userID, mediaID := newTestRecordsService(t)
+	ctx := context.Background()
+	completedAt := time.Date(2026, 7, 13, 21, 2, 3, 0, time.UTC)
+	completed, err := service.UpdateRound(ctx, UpdateRoundInput{
+		Scope:  RoundScope{UserID: userID, MediaID: mediaID},
+		Status: StatusCompleted, CompletedAt: &completedAt, Source: SourceManual,
+	})
+	require.NoError(t, err)
+	_, err = db.Writer().ExecContext(ctx, `
+		CREATE TRIGGER fail_second_round
+		BEFORE INSERT ON watch_rounds
+		WHEN NEW.round_number = 2
+		BEGIN SELECT RAISE(ABORT, 'injected rewatch failure'); END
+	`)
+	require.NoError(t, err)
+
+	_, err = service.StartRewatch(ctx, RewatchInput{
+		Scope:           RoundScope{UserID: userID, MediaID: mediaID},
+		ExpectedVersion: completed.Version,
+	})
+	require.Error(t, err)
+	current, currentErr := service.CurrentRound(ctx, RoundScope{UserID: userID, MediaID: mediaID})
+	require.NoError(t, currentErr)
+	require.Equal(t, completed.ID, current.ID)
+	require.Equal(t, StatusCompleted, current.Status)
+	require.Nil(t, current.ArchivedAt)
+	var count int
+	require.NoError(t, db.Reader().QueryRowContext(ctx, "SELECT COUNT(*) FROM watch_rounds").Scan(&count))
+	require.Equal(t, 1, count)
+}
+
+func integerPointer(value int) *int {
+	return &value
+}
+
 func timePointer(value time.Time) *time.Time {
 	return &value
 }

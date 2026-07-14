@@ -37,6 +37,42 @@ type updateCurrentRoundRequest struct {
 	WatchedAt        *time.Time
 }
 
+type archivedRoundResponse struct {
+	RoundID       string         `json:"roundId"`
+	MediaID       string         `json:"mediaId"`
+	SeasonNumber  *int           `json:"seasonNumber"`
+	RoundNumber   int            `json:"roundNumber"`
+	Status        records.Status `json:"status"`
+	Rating        *float64       `json:"rating"`
+	Note          *string        `json:"note"`
+	ViewingMethod *string        `json:"viewingMethod"`
+	WatchedAt     *time.Time     `json:"watchedAt"`
+	ArchivedAt    *time.Time     `json:"archivedAt"`
+}
+
+type roundSummaryResponse struct {
+	RoundID      string     `json:"roundId"`
+	MediaID      string     `json:"mediaId"`
+	SeasonNumber *int       `json:"seasonNumber"`
+	RoundNumber  int        `json:"roundNumber"`
+	WatchedAt    *time.Time `json:"watchedAt"`
+	Rating       *float64   `json:"rating"`
+}
+
+type roundHistoryResponse struct {
+	Rounds []roundSummaryResponse `json:"rounds"`
+}
+
+type archivedRoundDetailResponse struct {
+	Round    archivedRoundResponse `json:"round"`
+	Episodes []episodeProgressItem `json:"episodes"`
+}
+
+type rewatchRoundResponse struct {
+	Archived archivedRoundResponse `json:"archived"`
+	Current  currentRoundResponse  `json:"current"`
+}
+
 func (handlers recordHandlers) currentRound(w http.ResponseWriter, r *http.Request) {
 	identity, ok := IdentityFromContext(r.Context())
 	if !ok {
@@ -89,6 +125,89 @@ func (handlers recordHandlers) updateCurrentRound(w http.ResponseWriter, r *http
 	}
 	w.Header().Set("ETag", quotedVersion(round.Version))
 	writeJSON(w, http.StatusOK, newCurrentRoundResponse(round))
+}
+
+func (handlers recordHandlers) roundHistory(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	scope, ok := roundScopeFromRequest(w, r, identity.User.ID)
+	if !ok {
+		return
+	}
+	history, err := handlers.service.RoundHistory(r.Context(), scope)
+	if err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	response := roundHistoryResponse{Rounds: make([]roundSummaryResponse, 0, len(history))}
+	for _, round := range history {
+		item := roundSummaryResponse{
+			RoundID: round.ID, MediaID: round.MediaID, SeasonNumber: round.SeasonNumber,
+			RoundNumber: round.RoundNumber, WatchedAt: round.CompletedAt,
+		}
+		if round.Rating != nil {
+			rating := records.RatingToTen(*round.Rating)
+			item.Rating = &rating
+		}
+		response.Rounds = append(response.Rounds, item)
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (handlers recordHandlers) archivedRoundDetail(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	scope, ok := roundScopeFromRequest(w, r, identity.User.ID)
+	if !ok {
+		return
+	}
+	detail, err := handlers.service.RoundDetail(r.Context(), scope, chi.URLParam(r, "roundID"))
+	if err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	response := archivedRoundDetailResponse{
+		Round:    newArchivedRoundResponse(detail.Round),
+		Episodes: make([]episodeProgressItem, 0, len(detail.Episodes)),
+	}
+	for _, episode := range detail.Episodes {
+		response.Episodes = append(response.Episodes, newEpisodeProgressItem(episode))
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (handlers recordHandlers) startRewatch(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	expectedVersion, ok := parseIfMatch(w, r)
+	if !ok {
+		return
+	}
+	scope, ok := roundScopeFromRequest(w, r, identity.User.ID)
+	if !ok {
+		return
+	}
+	result, err := handlers.service.StartRewatch(r.Context(), records.RewatchInput{
+		Scope: scope, ExpectedVersion: expectedVersion,
+	})
+	if err != nil {
+		writeRecordError(w, r, err, expectedVersion)
+		return
+	}
+	w.Header().Set("ETag", quotedVersion(result.Current.Version))
+	writeJSON(w, http.StatusOK, rewatchRoundResponse{
+		Archived: newArchivedRoundResponse(result.Archived),
+		Current:  newCurrentRoundResponse(result.Current),
+	})
 }
 
 func roundScopeFromRequest(w http.ResponseWriter, r *http.Request, userID string) (records.RoundScope, bool) {
@@ -175,6 +294,19 @@ func newCurrentRoundResponse(round records.WatchRound) currentRoundResponse {
 		RoundNumber: round.RoundNumber, Status: round.Status, Note: round.Note,
 		ViewingMethod: round.ViewingMethod, WatchedAt: round.CompletedAt,
 		Version: round.Version, ProfileVersion: round.ProfileVersion,
+	}
+	if round.Rating != nil {
+		rating := records.RatingToTen(*round.Rating)
+		response.Rating = &rating
+	}
+	return response
+}
+
+func newArchivedRoundResponse(round records.WatchRound) archivedRoundResponse {
+	response := archivedRoundResponse{
+		RoundID: round.ID, MediaID: round.MediaID, SeasonNumber: round.SeasonNumber,
+		RoundNumber: round.RoundNumber, Status: round.Status, Note: round.Note,
+		ViewingMethod: round.ViewingMethod, WatchedAt: round.CompletedAt, ArchivedAt: round.ArchivedAt,
 	}
 	if round.Rating != nil {
 		rating := records.RatingToTen(*round.Rating)

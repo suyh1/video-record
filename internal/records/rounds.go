@@ -12,6 +12,8 @@ var (
 	ErrInvalidRoundScope = errors.New("invalid round scope")
 	ErrInvalidWatchedAt  = errors.New("invalid watched at")
 	ErrRoundArchived     = errors.New("round archived")
+	ErrRoundNotCompleted = errors.New("round not completed")
+	ErrRoundNotFound     = errors.New("round not found")
 )
 
 type RoundScope struct {
@@ -52,6 +54,30 @@ type UpdateRoundInput struct {
 	CompletedAt      *time.Time
 	Source           Source
 	ExpectedVersion  int
+}
+
+type RewatchInput struct {
+	Scope           RoundScope
+	ExpectedVersion int
+}
+
+type RewatchResult struct {
+	Archived WatchRound
+	Current  WatchRound
+}
+
+type RoundSummary struct {
+	ID           string
+	MediaID      string
+	SeasonNumber *int
+	RoundNumber  int
+	CompletedAt  *time.Time
+	Rating       *int
+}
+
+type RoundDetail struct {
+	Round    WatchRound
+	Episodes []Episode
 }
 
 func (service *Service) CurrentRound(ctx context.Context, scope RoundScope) (WatchRound, error) {
@@ -163,6 +189,47 @@ func (service *Service) UpdateRound(ctx context.Context, input UpdateRoundInput)
 		return current, ErrVersionConflict
 	}
 	return service.attachProfileVersion(ctx, next)
+}
+
+func (service *Service) StartRewatch(ctx context.Context, input RewatchInput) (RewatchResult, error) {
+	if input.ExpectedVersion < 1 {
+		return RewatchResult{}, ErrVersionConflict
+	}
+	if err := service.repository.ValidateRoundScope(ctx, input.Scope); err != nil {
+		return RewatchResult{}, err
+	}
+	result, err := service.repository.ArchiveCurrentRound(
+		ctx, input.Scope, input.ExpectedVersion, service.now().UTC(),
+	)
+	if err != nil {
+		return RewatchResult{}, err
+	}
+	result.Current, err = service.attachProfileVersion(ctx, result.Current)
+	return result, err
+}
+
+func (service *Service) RoundHistory(ctx context.Context, scope RoundScope) ([]RoundSummary, error) {
+	if err := service.repository.ValidateRoundScope(ctx, scope); err != nil {
+		return nil, err
+	}
+	return service.repository.ArchivedRounds(ctx, scope)
+}
+
+func (service *Service) RoundDetail(ctx context.Context, scope RoundScope, roundID string) (RoundDetail, error) {
+	if roundID == "" {
+		return RoundDetail{}, ErrRoundNotFound
+	}
+	if err := service.repository.ValidateRoundScope(ctx, scope); err != nil {
+		return RoundDetail{}, err
+	}
+	detail, exists, err := service.repository.FindArchivedRoundDetail(ctx, scope, roundID)
+	if err != nil {
+		return RoundDetail{}, err
+	}
+	if !exists {
+		return RoundDetail{}, ErrRoundNotFound
+	}
+	return detail, nil
 }
 
 func (service *Service) attachProfileVersion(ctx context.Context, round WatchRound) (WatchRound, error) {

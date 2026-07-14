@@ -70,6 +70,7 @@ var protectedWriteRoutes = []struct {
 }{
 	{http.MethodPut, "/api/v1/records/{mediaID}"},
 	{http.MethodPut, "/api/v1/records/{mediaID}/rounds/current"},
+	{http.MethodPost, "/api/v1/records/{mediaID}/rounds/current/rewatch"},
 	{http.MethodPut, "/api/v1/records/{mediaID}/tags"},
 	{http.MethodPost, "/api/v1/collections"},
 	{http.MethodPost, "/api/v1/collections/{collectionID}/items"},
@@ -221,6 +222,7 @@ func TestContractProvidesConcreteGeneratedTypesAndRealFileMedia(t *testing.T) {
 		http.MethodPost + " /api/v1/data/import":                                 {},
 		http.MethodPut + " /api/v1/records/{mediaID}":                            {},
 		http.MethodPut + " /api/v1/records/{mediaID}/rounds/current":             {},
+		http.MethodPost + " /api/v1/records/{mediaID}/rounds/current/rewatch":    {},
 		http.MethodPut + " /api/v1/records/{mediaID}/tags":                       {},
 		http.MethodPost + " /api/v1/records/{mediaID}/events":                    {},
 		http.MethodPost + " /api/v1/records/{mediaID}/progress":                  {},

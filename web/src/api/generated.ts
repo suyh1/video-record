@@ -345,6 +345,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/records/{mediaID}/rounds": {
+        parameters: {
+            query?: {
+                seasonNumber?: number;
+            };
+            header?: never;
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        /** List the current user's archived movie or season viewing rounds */
+        get: operations["listArchivedRounds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/records/{mediaID}/rounds/{roundID}": {
+        parameters: {
+            query?: {
+                seasonNumber?: number;
+            };
+            header?: never;
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+                roundID: string;
+            };
+            cookie?: never;
+        };
+        /** Read one private archived viewing round */
+        get: operations["getArchivedRound"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/records/{mediaID}/rounds/current/rewatch": {
+        parameters: {
+            query?: {
+                seasonNumber?: number;
+            };
+            header?: never;
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a completed round and start a blank watching round */
+        post: operations["startRewatchRound"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/records/{mediaID}/tags": {
         parameters: {
             query?: never;
@@ -1097,6 +1161,45 @@ export interface components {
             /** Format: date-time */
             watchedAt?: string;
         };
+        ArchivedRound: {
+            /** Format: uuid */
+            roundId: string;
+            /** Format: uuid */
+            mediaId: string;
+            seasonNumber: number | null;
+            roundNumber: number;
+            status: components["schemas"]["RecordStatus"];
+            rating: number | null;
+            note: string | null;
+            viewingMethod: string | null;
+            /** Format: date-time */
+            watchedAt: string | null;
+            /** Format: date-time */
+            archivedAt: string | null;
+        };
+        RoundSummary: {
+            /** Format: uuid */
+            roundId: string;
+            /** Format: uuid */
+            mediaId: string;
+            seasonNumber: number | null;
+            roundNumber: number;
+            /** Format: date-time */
+            watchedAt: string | null;
+            rating: number | null;
+        };
+        RoundHistory: {
+            rounds: components["schemas"]["RoundSummary"][];
+        };
+        ArchivedRoundDetail: {
+            round: components["schemas"]["ArchivedRound"];
+            episodes: components["schemas"]["EpisodeProgressItem"][];
+        };
+        RewatchRoundResponse: {
+            archived: components["schemas"]["ArchivedRound"];
+            current: components["schemas"]["CurrentRound"];
+        };
+        RewatchRoundRequest: Record<string, never>;
         TagsRequest: {
             tags: string[];
         };
@@ -2194,6 +2297,91 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CurrentRound"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listArchivedRounds: {
+        parameters: {
+            query?: {
+                seasonNumber?: number;
+            };
+            header?: never;
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Private archived viewing rounds. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoundHistory"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getArchivedRound: {
+        parameters: {
+            query?: {
+                seasonNumber?: number;
+            };
+            header?: never;
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+                roundID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read-only archived round detail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchivedRoundDetail"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    startRewatchRound: {
+        parameters: {
+            query?: {
+                seasonNumber?: number;
+            };
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RewatchRoundRequest"];
+            };
+        };
+        responses: {
+            /** @description Archived previous round and new current round. */
+            200: {
+                headers: {
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RewatchRoundResponse"];
                 };
             };
             default: components["responses"]["Problem"];

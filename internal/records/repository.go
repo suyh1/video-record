@@ -17,6 +17,9 @@ type Repository interface {
 	ValidateRoundScope(context.Context, RoundScope) error
 	FindCurrentRound(context.Context, RoundScope) (WatchRound, bool, error)
 	FindLatestRound(context.Context, RoundScope) (WatchRound, bool, error)
+	ArchiveCurrentRound(context.Context, RoundScope, int, time.Time) (RewatchResult, error)
+	ArchivedRounds(context.Context, RoundScope) ([]RoundSummary, error)
+	FindArchivedRoundDetail(context.Context, RoundScope, string) (RoundDetail, bool, error)
 	FindProfile(context.Context, string, string) (MediaProfile, bool, error)
 	InsertRound(context.Context, WatchRound) error
 	UpdateRound(context.Context, WatchRound, int) (bool, error)

@@ -70,6 +70,28 @@ func TestIdempotencyRejectsMissingOrConflictingKeys(t *testing.T) {
 	require.Contains(t, conflict.Body.String(), `"code":"idempotency_key_conflict"`)
 }
 
+func TestIdempotencyIncludesQueryScope(t *testing.T) {
+	router, cookie, csrfToken, _, _, _ := newRecordsTestRouter(t)
+	headers := map[string]string{
+		"Cookie": cookie.String(), "Origin": "http://example.test",
+		"X-CSRF-Token": csrfToken, "Idempotency-Key": "query-scope-key",
+	}
+	body := map[string]any{"action": "next", "expectedVersion": 0}
+	first := performJSONRequest(
+		router, http.MethodPost,
+		"http://example.test/api/v1/records/missing/progress?seasonNumber=1",
+		body, headers,
+	)
+	require.NotEqual(t, http.StatusConflict, first.Code)
+	second := performJSONRequest(
+		router, http.MethodPost,
+		"http://example.test/api/v1/records/missing/progress?seasonNumber=2",
+		body, headers,
+	)
+	require.Equal(t, http.StatusConflict, second.Code)
+	require.Contains(t, second.Body.String(), `"code":"idempotency_key_conflict"`)
+}
+
 func TestIdempotencyExpiresStoredResponses(t *testing.T) {
 	router, cookie, csrfToken, mediaID, recordService, db := newRecordsTestRouter(t)
 	userID := currentUserID(t, router, cookie)

@@ -415,6 +415,72 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CurrentRound' }
         default: { $ref: '#/components/responses/Problem' }
+  /api/v1/records/{mediaID}/rounds:
+    parameters:
+      - $ref: '#/components/parameters/MediaID'
+      - name: seasonNumber
+        in: query
+        required: false
+        schema: { type: integer, minimum: 1 }
+    get:
+      operationId: listArchivedRounds
+      summary: List the current user's archived movie or season viewing rounds
+      responses:
+        '200':
+          description: Private archived viewing rounds.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoundHistory' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/records/{mediaID}/rounds/{roundID}:
+    parameters:
+      - $ref: '#/components/parameters/MediaID'
+      - name: roundID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: seasonNumber
+        in: query
+        required: false
+        schema: { type: integer, minimum: 1 }
+    get:
+      operationId: getArchivedRound
+      summary: Read one private archived viewing round
+      responses:
+        '200':
+          description: Read-only archived round detail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArchivedRoundDetail' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/records/{mediaID}/rounds/current/rewatch:
+    parameters:
+      - $ref: '#/components/parameters/MediaID'
+      - name: seasonNumber
+        in: query
+        required: false
+        schema: { type: integer, minimum: 1 }
+    post:
+      operationId: startRewatchRound
+      summary: Archive a completed round and start a blank watching round
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RewatchRoundRequest' }
+      responses:
+        '200':
+          description: Archived previous round and new current round.
+          headers:
+            ETag: { required: true, schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RewatchRoundResponse' }
+        default: { $ref: '#/components/responses/Problem' }
   /api/v1/records/{mediaID}/tags:
     parameters:
       - $ref: '#/components/parameters/MediaID'
@@ -1303,6 +1369,60 @@ components:
         note: { type: [string, 'null'] }
         viewingMethod: { type: [string, 'null'], maxLength: 80 }
         watchedAt: { type: string, format: date-time }
+    ArchivedRound:
+      type: object
+      additionalProperties: false
+      required: [roundId, mediaId, seasonNumber, roundNumber, status, rating, note, viewingMethod, watchedAt, archivedAt]
+      properties:
+        roundId: { type: string, format: uuid }
+        mediaId: { type: string, format: uuid }
+        seasonNumber: { type: [integer, 'null'], minimum: 1 }
+        roundNumber: { type: integer, minimum: 1 }
+        status: { $ref: '#/components/schemas/RecordStatus' }
+        rating: { type: [number, 'null'], minimum: 0, maximum: 10 }
+        note: { type: [string, 'null'] }
+        viewingMethod: { type: [string, 'null'] }
+        watchedAt: { type: [string, 'null'], format: date-time }
+        archivedAt: { type: [string, 'null'], format: date-time }
+    RoundSummary:
+      type: object
+      additionalProperties: false
+      required: [roundId, mediaId, seasonNumber, roundNumber, watchedAt, rating]
+      properties:
+        roundId: { type: string, format: uuid }
+        mediaId: { type: string, format: uuid }
+        seasonNumber: { type: [integer, 'null'], minimum: 1 }
+        roundNumber: { type: integer, minimum: 1 }
+        watchedAt: { type: [string, 'null'], format: date-time }
+        rating: { type: [number, 'null'], minimum: 0, maximum: 10 }
+    RoundHistory:
+      type: object
+      additionalProperties: false
+      required: [rounds]
+      properties:
+        rounds:
+          type: array
+          items: { $ref: '#/components/schemas/RoundSummary' }
+    ArchivedRoundDetail:
+      type: object
+      additionalProperties: false
+      required: [round, episodes]
+      properties:
+        round: { $ref: '#/components/schemas/ArchivedRound' }
+        episodes:
+          type: array
+          items: { $ref: '#/components/schemas/EpisodeProgressItem' }
+    RewatchRoundResponse:
+      type: object
+      additionalProperties: false
+      required: [archived, current]
+      properties:
+        archived: { $ref: '#/components/schemas/ArchivedRound' }
+        current: { $ref: '#/components/schemas/CurrentRound' }
+    RewatchRoundRequest:
+      type: object
+      additionalProperties: false
+      properties: {}
     TagsRequest:
       type: object
       additionalProperties: false

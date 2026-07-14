@@ -482,3 +482,6 @@
 - Task 5 完成：分集进度已按所选季和当前轮次隔离；单集标记、`set_time`、撤销、未来时间回滚、季完成投影和跨季隔离领域测试通过。
 - Task 5 HTTP GET/POST 强制正整数 `seasonNumber`，响应返回 `roundId`/季号，OpenAPI 生成与漂移检查通过；旧媒体级进度测试已替换为季级契约。
 - Task 5 定向验证通过：records 7 个季级/稀疏进度测试、HTTP 2 个进度处理器测试、HTTP OpenAPI/contract 测试和 `npm --prefix web run api:check`。
+- Task 6 完成：电影与季再刷会在单事务内归档已完成轮次并创建状态为 `watching` 的空白下一轮；注入下一轮插入失败时归档完整回滚。
+- Task 6 归档列表/详情严格按用户、媒体和季作用域读取；剧集归档详情保留逐集秒级时间，其他季当前轮次不变，其他用户无法读取私人历史。
+- Task 6 新增历史、详情和再刷 HTTP/OpenAPI 合约；再刷受 If-Match、同源、CSRF 和幂等保护，幂等路径已包含查询参数以隔离不同季。
