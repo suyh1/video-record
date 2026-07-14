@@ -75,11 +75,12 @@
 
 ## 服务端接口
 
-新增或调整以下受会话保护的接口：
+调整以下受会话保护的接口：
 
-- `GET /api/v1/media/{id}/external-details`：按本地媒体 ID 解析 TMDB 身份，返回实时电影或剧集展示资料与季摘要。
-- `GET /api/v1/media/{id}/credits`：返回排序后的主要演员；不持久化演员。
-- `GET /api/v1/media/{id}/seasons/{seasonNumber}`：按需返回一个季的分集资料。
+- `GET /api/v1/media/{id}`：在本地兜底资料中增加可空的 `tmdbId`，供前端选择性加载外部资料。
+- `GET /api/v1/tmdb/movie/{id}` 与 `GET /api/v1/tmdb/tv/{id}`：复用现有代理并扩展完整展示资料；剧集响应包含季摘要。
+- `GET /api/v1/tmdb/{mediaType}/{id}/credits`：新增主要演员读取；不持久化演员。
+- `GET /api/v1/tmdb/tv/{id}/season/{seasonNumber}`：扩展现有单季响应，按需返回该季分集资料。
 - `GET /api/v1/records/{mediaID}/progress`：返回本地已看分集引用、版本、状态和计数，不再要求本地存在完整目录。
 - `POST /api/v1/records/{mediaID}/progress`：接受由当前远端目录选择出的分集引用，继续使用 CSRF、幂等键与乐观版本控制。
 

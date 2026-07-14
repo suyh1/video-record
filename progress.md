@@ -12,6 +12,9 @@
 - 已准备三种刷新方向及推荐的 stale-while-revalidate 方案，待用户确认整体设计后进入设计文档和实施计划。
 - 用户否决完整季集入库并确认最小离线兜底边界；已将设计调整为 TMDB 数据加载时按需获取、6 小时缓存，本地只保存项目数据和被标记分集的最小身份。
 - 已写入 `docs/plans/2026-07-14-media-details-redesign-design.md`，覆盖数据边界、接口、页面结构、失败降级和测试策略。
+- 设计提交 `afd6714` 已写入 `main`；当前正在用 writing-plans 工作流细化实施步骤。
+- 已确认不需要重建 watch event 外键模型：仅在用户实际标记分集时创建最小 season/episode 身份桩，并让详情页与首页共用远端季集目录合并逻辑。
+- 已写入 `docs/plans/2026-07-14-media-details-redesign-implementation.md`，拆分为 11 个 TDD、契约、界面、E2E 和最终审计任务。
 
 ## 2026-07-13：Task 27 恢复与 v1 MUST 审计
 
