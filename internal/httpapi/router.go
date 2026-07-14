@@ -189,6 +189,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protected.Get("/tmdb/tv/{id}", tmdbAPI.tv)
 					protected.Get("/tmdb/tv/{id}/season/{season}", tmdbAPI.season)
 					protected.Get("/tmdb/tv/{id}/season/{season}/episode/{episode}", tmdbAPI.episode)
+					protected.Get("/tmdb/{mediaType}/{id}/credits", tmdbAPI.credits)
 				}
 				if dependencies.Media != nil && dependencies.TMDB != nil {
 					mediaAPI := mediaHandlers{service: dependencies.Media, tmdb: dependencies.TMDB}

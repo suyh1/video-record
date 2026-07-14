@@ -92,11 +92,21 @@ func TestTMDBDetailsRoutesReturnCamelCaseSnapshots(t *testing.T) {
 		case "/movie/329865":
 			_, _ = w.Write([]byte(`{"id":329865,"title":"降临","original_title":"Arrival","release_date":"2016-11-10","runtime":116}`))
 		case "/tv/1399":
-			_, _ = w.Write([]byte(`{"id":1399,"name":"权力的游戏","original_name":"Game of Thrones","first_air_date":"2011-04-17","number_of_seasons":8,"number_of_episodes":73}`))
+			_, _ = w.Write([]byte(`{
+				"id":1399,"name":"权力的游戏","original_name":"Game of Thrones",
+				"first_air_date":"2011-04-17","number_of_seasons":8,"number_of_episodes":73,
+				"episode_run_time":[57],"genres":[{"id":18,"name":"剧情"}],
+				"seasons":[{"id":3624,"name":"第 1 季","overview":"冬天将至","poster_path":"/season.jpg","air_date":"2011-04-17","season_number":1,"episode_count":10}]
+			}`))
 		case "/tv/1399/season/1":
-			_, _ = w.Write([]byte(`{"id":3624,"name":"第 1 季","season_number":1,"episodes":[]}`))
+			_, _ = w.Write([]byte(`{
+				"id":3624,"name":"第 1 季","overview":"冬天将至","poster_path":"/season.jpg","air_date":"2011-04-17","season_number":1,
+				"episodes":[{"id":63056,"name":"凛冬将至","season_number":1,"episode_number":1,"runtime":62,"still_path":"/winter.jpg"}]
+			}`))
 		case "/tv/1399/season/1/episode/1":
-			_, _ = w.Write([]byte(`{"id":63056,"name":"凛冬将至","season_number":1,"episode_number":1,"runtime":62}`))
+			_, _ = w.Write([]byte(`{"id":63056,"name":"凛冬将至","season_number":1,"episode_number":1,"runtime":62,"still_path":"/winter.jpg"}`))
+		case "/tv/1399/credits":
+			_, _ = w.Write([]byte(`{"cast":[{"id":1,"name":"肖恩·宾","character":"艾德·史塔克","profile_path":"/sean.jpg","order":0},{"id":2,"name":"米歇尔·菲尔利","character":"凯特琳·史塔克","profile_path":"","order":1}]}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -107,9 +117,10 @@ func TestTMDBDetailsRoutesReturnCamelCaseSnapshots(t *testing.T) {
 		expected string
 	}{
 		{path: "/api/v1/tmdb/movie/329865", expected: `"originalTitle":"Arrival"`},
-		{path: "/api/v1/tmdb/tv/1399", expected: `"numberOfEpisodes":73`},
-		{path: "/api/v1/tmdb/tv/1399/season/1", expected: `"seasonNumber":1`},
-		{path: "/api/v1/tmdb/tv/1399/season/1/episode/1", expected: `"episodeNumber":1`},
+		{path: "/api/v1/tmdb/tv/1399", expected: `"seasons":[{"id":3624,"name":"第 1 季","overview":"冬天将至","posterPath":"/season.jpg","airDate":"2011-04-17","seasonNumber":1,"episodeCount":10}]`},
+		{path: "/api/v1/tmdb/tv/1399/season/1", expected: `"stillPath":"/winter.jpg"`},
+		{path: "/api/v1/tmdb/tv/1399/season/1/episode/1", expected: `"stillPath":"/winter.jpg"`},
+		{path: "/api/v1/tmdb/tv/1399/credits", expected: `"character":"艾德·史塔克"`},
 	} {
 		response := performJSONRequest(router, http.MethodGet, "http://example.test"+test.path, nil, map[string]string{
 			"Cookie": cookie.String(),
@@ -117,6 +128,12 @@ func TestTMDBDetailsRoutesReturnCamelCaseSnapshots(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.Code)
 		require.Contains(t, response.Body.String(), test.expected)
 	}
+
+	invalidCredits := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/tmdb/person/1399/credits", nil, map[string]string{
+		"Cookie": cookie.String(),
+	})
+	require.Equal(t, http.StatusBadRequest, invalidCredits.Code)
+	require.Contains(t, invalidCredits.Body.String(), `"code":"invalid_media_type"`)
 }
 
 func newTMDBTestRouter(t *testing.T, token string, upstream http.Handler) (http.Handler, *http.Cookie) {

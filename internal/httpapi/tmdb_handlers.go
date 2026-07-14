@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -34,31 +35,48 @@ type tmdbSearchResult struct {
 }
 
 type tmdbMovieResponse struct {
-	ID            int    `json:"id"`
-	Title         string `json:"title"`
-	OriginalTitle string `json:"originalTitle"`
-	ReleaseDate   string `json:"releaseDate"`
-	PosterPath    string `json:"posterPath"`
-	BackdropPath  string `json:"backdropPath"`
-	Overview      string `json:"overview"`
-	Runtime       int    `json:"runtime"`
+	ID            int      `json:"id"`
+	Title         string   `json:"title"`
+	OriginalTitle string   `json:"originalTitle"`
+	ReleaseDate   string   `json:"releaseDate"`
+	PosterPath    string   `json:"posterPath"`
+	BackdropPath  string   `json:"backdropPath"`
+	Overview      string   `json:"overview"`
+	Runtime       int      `json:"runtime"`
+	Genres        []string `json:"genres"`
 }
 
 type tmdbTVResponse struct {
-	ID             int    `json:"id"`
-	Name           string `json:"name"`
-	OriginalName   string `json:"originalName"`
-	FirstAirDate   string `json:"firstAirDate"`
-	PosterPath     string `json:"posterPath"`
-	BackdropPath   string `json:"backdropPath"`
-	Overview       string `json:"overview"`
-	NumberSeasons  int    `json:"numberOfSeasons"`
-	NumberEpisodes int    `json:"numberOfEpisodes"`
+	ID             int                         `json:"id"`
+	Name           string                      `json:"name"`
+	OriginalName   string                      `json:"originalName"`
+	FirstAirDate   string                      `json:"firstAirDate"`
+	PosterPath     string                      `json:"posterPath"`
+	BackdropPath   string                      `json:"backdropPath"`
+	Overview       string                      `json:"overview"`
+	NumberSeasons  int                         `json:"numberOfSeasons"`
+	NumberEpisodes int                         `json:"numberOfEpisodes"`
+	EpisodeRuntime []int                       `json:"episodeRuntime"`
+	Genres         []string                    `json:"genres"`
+	Seasons        []tmdbSeasonSummaryResponse `json:"seasons"`
+}
+
+type tmdbSeasonSummaryResponse struct {
+	ID           int    `json:"id"`
+	Name         string `json:"name"`
+	Overview     string `json:"overview"`
+	PosterPath   string `json:"posterPath"`
+	AirDate      string `json:"airDate"`
+	SeasonNumber int    `json:"seasonNumber"`
+	EpisodeCount int    `json:"episodeCount"`
 }
 
 type tmdbSeasonResponse struct {
 	ID           int                   `json:"id"`
 	Name         string                `json:"name"`
+	Overview     string                `json:"overview"`
+	PosterPath   string                `json:"posterPath"`
+	AirDate      string                `json:"airDate"`
 	SeasonNumber int                   `json:"seasonNumber"`
 	Episodes     []tmdbEpisodeResponse `json:"episodes"`
 }
@@ -71,6 +89,19 @@ type tmdbEpisodeResponse struct {
 	SeasonNumber  int    `json:"seasonNumber"`
 	EpisodeNumber int    `json:"episodeNumber"`
 	Runtime       int    `json:"runtime"`
+	StillPath     string `json:"stillPath"`
+}
+
+type tmdbCreditsResponse struct {
+	Cast []tmdbCastResponse `json:"cast"`
+}
+
+type tmdbCastResponse struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Character   string `json:"character"`
+	ProfilePath string `json:"profilePath"`
+	Order       int    `json:"order"`
 }
 
 func (handlers tmdbHandlers) status(w http.ResponseWriter, _ *http.Request) {
@@ -126,6 +157,7 @@ func (handlers tmdbHandlers) movie(w http.ResponseWriter, r *http.Request) {
 		ID: item.ID, Title: item.Title, OriginalTitle: item.OriginalTitle,
 		ReleaseDate: item.ReleaseDate, PosterPath: item.PosterPath,
 		BackdropPath: item.BackdropPath, Overview: item.Overview, Runtime: item.Runtime,
+		Genres: genreNames(item.Genres),
 	})
 }
 
@@ -139,11 +171,20 @@ func (handlers tmdbHandlers) tv(w http.ResponseWriter, r *http.Request) {
 		writeTMDBError(w, r, err)
 		return
 	}
+	seasons := make([]tmdbSeasonSummaryResponse, 0, len(item.Seasons))
+	for _, season := range item.Seasons {
+		seasons = append(seasons, tmdbSeasonSummaryResponse{
+			ID: season.ID, Name: season.Name, Overview: season.Overview,
+			PosterPath: season.PosterPath, AirDate: season.AirDate,
+			SeasonNumber: season.SeasonNumber, EpisodeCount: season.EpisodeCount,
+		})
+	}
 	writeJSON(w, http.StatusOK, tmdbTVResponse{
 		ID: item.ID, Name: item.Name, OriginalName: item.OriginalName,
 		FirstAirDate: item.FirstAirDate, PosterPath: item.PosterPath,
 		BackdropPath: item.BackdropPath, Overview: item.Overview,
 		NumberSeasons: item.NumberSeasons, NumberEpisodes: item.NumberEpisodes,
+		EpisodeRuntime: item.EpisodeRunTime, Genres: genreNames(item.Genres), Seasons: seasons,
 	})
 }
 
@@ -166,7 +207,9 @@ func (handlers tmdbHandlers) season(w http.ResponseWriter, r *http.Request) {
 		episodes = append(episodes, newTMDBEpisodeResponse(episode))
 	}
 	writeJSON(w, http.StatusOK, tmdbSeasonResponse{
-		ID: item.ID, Name: item.Name, SeasonNumber: item.SeasonNumber, Episodes: episodes,
+		ID: item.ID, Name: item.Name, Overview: item.Overview,
+		PosterPath: item.PosterPath, AirDate: item.AirDate,
+		SeasonNumber: item.SeasonNumber, Episodes: episodes,
 	})
 }
 
@@ -194,8 +237,46 @@ func (handlers tmdbHandlers) episode(w http.ResponseWriter, r *http.Request) {
 func newTMDBEpisodeResponse(item tmdb.EpisodeDetails) tmdbEpisodeResponse {
 	return tmdbEpisodeResponse{
 		ID: item.ID, Name: item.Name, Overview: item.Overview, AirDate: item.AirDate,
-		SeasonNumber: item.SeasonNumber, EpisodeNumber: item.EpisodeNumber, Runtime: item.Runtime,
+		SeasonNumber: item.SeasonNumber, EpisodeNumber: item.EpisodeNumber,
+		Runtime: item.Runtime, StillPath: item.StillPath,
 	}
+}
+
+func (handlers tmdbHandlers) credits(w http.ResponseWriter, r *http.Request) {
+	mediaType := chi.URLParam(r, "mediaType")
+	if mediaType != "movie" && mediaType != "tv" {
+		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_media_type")
+		return
+	}
+	id, ok := positiveURLInt(w, r, "id")
+	if !ok {
+		return
+	}
+	credits, err := handlers.client.Credits(r.Context(), mediaType, id, "zh-CN")
+	if err != nil {
+		writeTMDBError(w, r, err)
+		return
+	}
+	sort.SliceStable(credits.Cast, func(i, j int) bool { return credits.Cast[i].Order < credits.Cast[j].Order })
+	if len(credits.Cast) > 20 {
+		credits.Cast = credits.Cast[:20]
+	}
+	cast := make([]tmdbCastResponse, 0, len(credits.Cast))
+	for _, member := range credits.Cast {
+		cast = append(cast, tmdbCastResponse{
+			ID: member.ID, Name: member.Name, Character: member.Character,
+			ProfilePath: member.ProfilePath, Order: member.Order,
+		})
+	}
+	writeJSON(w, http.StatusOK, tmdbCreditsResponse{Cast: cast})
+}
+
+func genreNames(genres []tmdb.Genre) []string {
+	names := make([]string, 0, len(genres))
+	for _, genre := range genres {
+		names = append(names, genre.Name)
+	}
+	return names
 }
 
 func positiveURLInt(w http.ResponseWriter, r *http.Request, name string) (int, bool) {
