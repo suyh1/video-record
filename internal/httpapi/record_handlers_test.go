@@ -184,6 +184,7 @@ func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
 	require.Contains(t, library.Body.String(), mediaID)
 	require.Contains(t, library.Body.String(), `"title":"测试电影"`)
 	require.Contains(t, library.Body.String(), `"status":"completed"`)
+	require.Contains(t, library.Body.String(), `"tmdbId":329865`)
 
 	search := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/media/search?q=测试", nil, map[string]string{
 		"Cookie": cookie.String(),
@@ -211,6 +212,10 @@ func newRecordsTestRouter(t *testing.T) (http.Handler, *http.Cookie, string, str
 	mediaService := media.NewService(media.NewRepository(db))
 	item, err := mediaService.CreateCustom(context.Background(), media.CreateCustomInput{
 		MediaType: media.MediaTypeMovie, Title: "测试电影",
+	})
+	require.NoError(t, err)
+	item, err = mediaService.LinkExternal(context.Background(), item.ID, media.ExternalSnapshot{
+		Source: "tmdb", SourceID: "329865", MediaType: media.MediaTypeMovie, Title: "测试电影",
 	})
 	require.NoError(t, err)
 	recordService := records.NewService(records.NewRepository(db))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -189,24 +190,34 @@ func findItem(ctx context.Context, query interface {
 }, id string) (Item, error) {
 	var item Item
 	var runtime sql.NullInt64
+	var tmdbID sql.NullString
 	err := query.QueryRowContext(ctx, `
 		SELECT
 			id, media_type,
 			COALESCE(custom_title, external_title),
 			COALESCE(custom_overview, external_overview),
 			external_title, external_overview, original_title, release_date,
-			poster_path, backdrop_path, runtime_minutes
+			poster_path, backdrop_path, runtime_minutes,
+			(SELECT source_id FROM media_external_ids
+			 WHERE media_id = media_items.id AND source = 'tmdb')
 		FROM media_items WHERE id = ?
 	`, id).Scan(
 		&item.ID, &item.MediaType, &item.Title, &item.Overview,
 		&item.ExternalTitle, &item.ExternalOverview, &item.OriginalTitle,
-		&item.ReleaseDate, &item.PosterPath, &item.BackdropPath, &runtime,
+		&item.ReleaseDate, &item.PosterPath, &item.BackdropPath, &runtime, &tmdbID,
 	)
 	if err != nil {
 		return Item{}, err
 	}
 	if runtime.Valid {
 		item.RuntimeMinutes = int(runtime.Int64)
+	}
+	if tmdbID.Valid {
+		value, err := strconv.Atoi(tmdbID.String)
+		if err != nil || value < 1 {
+			return Item{}, ErrInvalidMedia
+		}
+		item.TMDBID = &value
 	}
 	rows, err := query.QueryContext(ctx, `
 		SELECT genre.name

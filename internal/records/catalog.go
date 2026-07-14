@@ -7,6 +7,7 @@ import (
 
 type CatalogItem struct {
 	ID            string
+	TMDBID        *int
 	MediaType     string
 	Title         string
 	OriginalTitle string

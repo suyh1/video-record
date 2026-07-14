@@ -13,6 +13,10 @@ func TestCatalogLibrarySearchAndUserIsolation(t *testing.T) {
 	service, db, firstUserID, firstMediaID := newTestRecordsService(t)
 	ctx := context.Background()
 	mediaService := media.NewService(media.NewRepository(db))
+	_, err := mediaService.LinkExternal(ctx, firstMediaID, media.ExternalSnapshot{
+		Source: "tmdb", SourceID: "329865", MediaType: media.MediaTypeMovie, Title: "测试电影",
+	})
+	require.NoError(t, err)
 	secondItem, err := mediaService.CreateCustom(ctx, media.CreateCustomInput{
 		MediaType: media.MediaTypeTV, Title: "漫长的季节", Year: "2023",
 	})
@@ -47,6 +51,8 @@ func TestCatalogLibrarySearchAndUserIsolation(t *testing.T) {
 	require.Len(t, completed, 1)
 	require.Equal(t, firstMediaID, completed[0].ID)
 	require.Equal(t, StatusCompleted, completed[0].Status)
+	require.NotNil(t, completed[0].TMDBID)
+	require.Equal(t, 329865, *completed[0].TMDBID)
 
 	firstSearch, err := service.SearchMedia(ctx, firstUserID, "测试电影")
 	require.NoError(t, err)
@@ -61,6 +67,7 @@ func TestCatalogLibrarySearchAndUserIsolation(t *testing.T) {
 	require.Len(t, symbolSearch, 1)
 	require.Equal(t, symbolItem.ID, symbolSearch[0].ID)
 	require.Equal(t, StatusNone, symbolSearch[0].Status)
+	require.Nil(t, symbolSearch[0].TMDBID)
 }
 
 func TestCatalogValidatesCurrentUserStatusAndQuery(t *testing.T) {

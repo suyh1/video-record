@@ -9,6 +9,7 @@ const (
 
 type Item struct {
 	ID               string
+	TMDBID           *int
 	MediaType        MediaType
 	Title            string
 	Overview         string

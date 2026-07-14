@@ -28,13 +28,16 @@ func TestMediaHandlersCreateReadAndLinkTMDBItems(t *testing.T) {
 	created := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/media/tmdb/movie/329865", nil, headers)
 	require.Equal(t, http.StatusOK, created.Code)
 	var createdBody struct {
-		ID    string `json:"id"`
-		Title string `json:"title"`
+		ID     string `json:"id"`
+		Title  string `json:"title"`
+		TMDBID *int   `json:"tmdbId"`
 	}
 	require.NoError(t, json.Unmarshal(created.Body.Bytes(), &createdBody))
 	require.NotEmpty(t, createdBody.ID)
 	require.NotEqual(t, "329865", createdBody.ID)
 	require.Equal(t, "降临", createdBody.Title)
+	require.NotNil(t, createdBody.TMDBID)
+	require.Equal(t, 329865, *createdBody.TMDBID)
 	require.Contains(t, created.Body.String(), `"runtimeMinutes":116`)
 	require.Contains(t, created.Body.String(), `"genres":["剧情"]`)
 
@@ -53,6 +56,7 @@ func TestMediaHandlersCreateReadAndLinkTMDBItems(t *testing.T) {
 		"year":      "2016",
 	}, customHeaders)
 	require.Equal(t, http.StatusCreated, custom.Code)
+	require.Contains(t, custom.Body.String(), `"tmdbId":null`)
 	var customBody struct {
 		ID string `json:"id"`
 	}
@@ -64,6 +68,7 @@ func TestMediaHandlersCreateReadAndLinkTMDBItems(t *testing.T) {
 	require.Equal(t, http.StatusOK, linked.Code)
 	require.Contains(t, linked.Body.String(), `"title":"我的译名"`)
 	require.Contains(t, linked.Body.String(), `"externalTitle":"外部更新"`)
+	require.Contains(t, linked.Body.String(), `"tmdbId":329866`)
 }
 
 func newMediaTestRouter(t *testing.T) (http.Handler, *http.Cookie, string) {

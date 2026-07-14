@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -323,9 +324,10 @@ func (repository *SQLiteRepository) Library(ctx context.Context, userID string, 
 		SELECT media.id, media.media_type,
 		       COALESCE(media.custom_title, media.external_title), media.original_title,
 		       SUBSTR(COALESCE(NULLIF(media.release_date, ''), media.custom_year, ''), 1, 4),
-		       media.poster_path, state.status
+		       media.poster_path, state.status, tmdb.source_id
 		FROM user_media_states state
 		JOIN media_items media ON media.id = state.media_id
+		LEFT JOIN media_external_ids tmdb ON tmdb.media_id = media.id AND tmdb.source = 'tmdb'
 		WHERE state.user_id = ?`
 	arguments := []any{userID}
 	if status != "" && status != StatusNone {
@@ -342,9 +344,10 @@ func (repository *SQLiteRepository) SearchMedia(ctx context.Context, userID, que
 		SELECT media.id, media.media_type,
 		       COALESCE(media.custom_title, media.external_title), media.original_title,
 		       SUBSTR(COALESCE(NULLIF(media.release_date, ''), media.custom_year, ''), 1, 4),
-		       media.poster_path, COALESCE(state.status, 'none')
+		       media.poster_path, COALESCE(state.status, 'none'), tmdb.source_id
 		FROM media_items media
 		LEFT JOIN user_media_states state ON state.media_id = media.id AND state.user_id = ?
+		LEFT JOIN media_external_ids tmdb ON tmdb.media_id = media.id AND tmdb.source = 'tmdb'
 		WHERE COALESCE(media.custom_title, media.external_title) LIKE ? ESCAPE '\'
 		   OR media.original_title LIKE ? ESCAPE '\'
 		ORDER BY CASE WHEN COALESCE(media.custom_title, media.external_title) = ? THEN 0 ELSE 1 END,
@@ -362,11 +365,19 @@ func (repository *SQLiteRepository) catalogItems(ctx context.Context, query stri
 	items := make([]CatalogItem, 0)
 	for rows.Next() {
 		var item CatalogItem
+		var tmdbID sql.NullString
 		if err := rows.Scan(
 			&item.ID, &item.MediaType, &item.Title, &item.OriginalTitle,
-			&item.Year, &item.PosterPath, &item.Status,
+			&item.Year, &item.PosterPath, &item.Status, &tmdbID,
 		); err != nil {
 			return nil, err
+		}
+		if tmdbID.Valid {
+			value, err := strconv.Atoi(tmdbID.String)
+			if err != nil || value < 1 {
+				return nil, ErrInvalidRecord
+			}
+			item.TMDBID = &value
 		}
 		items = append(items, item)
 	}

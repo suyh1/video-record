@@ -21,6 +21,8 @@ func TestUpsertExternalUsesLocalUUIDAndUniqueExternalIdentity(t *testing.T) {
 
 	first, err := service.UpsertExternal(context.Background(), snapshot)
 	require.NoError(t, err)
+	require.NotNil(t, first.TMDBID)
+	require.Equal(t, 329865, *first.TMDBID)
 	_, err = uuid.Parse(first.ID)
 	require.NoError(t, err)
 	require.NotEqual(t, snapshot.SourceID, first.ID)
@@ -34,6 +36,12 @@ func TestUpsertExternalUsesLocalUUIDAndUniqueExternalIdentity(t *testing.T) {
 	require.NoError(t, db.Reader().QueryRowContext(context.Background(), "SELECT COUNT(*) FROM media_external_ids").Scan(&identities))
 	require.Equal(t, 1, items)
 	require.Equal(t, 1, identities)
+
+	custom, err := service.CreateCustom(context.Background(), CreateCustomInput{
+		MediaType: MediaTypeMovie, Title: "本地条目",
+	})
+	require.NoError(t, err)
+	require.Nil(t, custom.TMDBID)
 }
 
 func TestExternalIdentityIncludesMediaType(t *testing.T) {

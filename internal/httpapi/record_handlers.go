@@ -406,6 +406,7 @@ func newRecordResponse(state records.State, event *records.WatchEvent) recordRes
 
 type catalogItemResponse struct {
 	ID            string         `json:"id"`
+	TMDBID        *int           `json:"tmdbId"`
 	Source        string         `json:"source"`
 	MediaType     string         `json:"mediaType"`
 	Title         string         `json:"title"`
@@ -424,7 +425,7 @@ func newCatalogResponses(items []records.CatalogItem) []catalogItemResponse {
 			posterPath = &value
 		}
 		response = append(response, catalogItemResponse{
-			ID: item.ID, Source: "local", MediaType: item.MediaType, Title: item.Title,
+			ID: item.ID, TMDBID: item.TMDBID, Source: "local", MediaType: item.MediaType, Title: item.Title,
 			OriginalTitle: item.OriginalTitle, Year: item.Year, PosterPath: posterPath, Status: item.Status,
 		})
 	}

@@ -27,6 +27,7 @@ type customMediaRequest struct {
 
 type mediaItemResponse struct {
 	ID               string          `json:"id"`
+	TMDBID           *int            `json:"tmdbId"`
 	MediaType        media.MediaType `json:"mediaType"`
 	Title            string          `json:"title"`
 	Overview         string          `json:"overview"`
@@ -146,7 +147,7 @@ func (handlers mediaHandlers) tmdbSnapshot(w http.ResponseWriter, r *http.Reques
 
 func newMediaItemResponse(item media.Item) mediaItemResponse {
 	return mediaItemResponse{
-		ID: item.ID, MediaType: item.MediaType, Title: item.Title, Overview: item.Overview,
+		ID: item.ID, TMDBID: item.TMDBID, MediaType: item.MediaType, Title: item.Title, Overview: item.Overview,
 		ExternalTitle: item.ExternalTitle, ExternalOverview: item.ExternalOverview,
 		OriginalTitle: item.OriginalTitle, ReleaseDate: item.ReleaseDate,
 		PosterPath: item.PosterPath, BackdropPath: item.BackdropPath,
