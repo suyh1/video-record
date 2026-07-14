@@ -494,3 +494,7 @@
 - Task 9 完成：前端新增 Current/Archived Round、历史摘要/详情、再刷结果和季级 SeriesProgress 类型，以及当前轮次读写、历史、详情、再刷客户端。
 - Task 9 分集客户端的新签名强制携带季号并支持 `set_time`；旧组件的临时重载保留到 Task 10-12 删除，最终页面不会调用无季号路径。
 - Task 9 新增本地秒级时间工具，使用 `Intl.DateTimeFormat` 显示并通过本地日期分量转换 `datetime-local`；8 个定向测试、typecheck 和 lint 通过。
+- Task 10 完成：新增电影/季级 `RoundRecordForm`，电影完成使用必填的本地秒级 `datetime-local`，剧集季状态由分集进度只读投影；评分、笔记、观看方式和电影参与者写入当前轮次。
+- Task 10 保留冲突 ETag 重试、网络失败草稿保留和保存反馈；外部切换到下一轮时按媒体/季/轮次号重置表单，组件内部不再包含任何“再刷/再看一次”动作。
+- Task 10 的 7 个组件测试与 3 个本地时间测试、前端 typecheck、lint 和 `git diff --check` 通过；JSDOM 会把秒级原生值规范化为 `.000`，转换器现只额外接受零毫秒形式，仍拒绝非秒级值。
+- `QuickRecordForm` 的删除延后到季工作区和详情页接入新轮次表单时执行，避免 Task 10 单独提交期间让剧集详情绑定到错误的固定季。

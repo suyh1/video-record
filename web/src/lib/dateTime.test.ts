@@ -17,6 +17,7 @@ describe('local second-precision date time helpers', () => {
     const value = toDateTimeLocalValue(date)
     expect(value).toMatch(/^2026-07-14T12:30:45$/)
     expect(fromDateTimeLocalValue(value)?.getTime()).toBe(date.getTime())
+    expect(fromDateTimeLocalValue(`${value}.000`)?.getTime()).toBe(date.getTime())
     expect(fromDateTimeLocalValue('')).toBeNull()
   })
 

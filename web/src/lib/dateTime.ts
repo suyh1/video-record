@@ -30,14 +30,15 @@ export function toDateTimeLocalValue(date: Date) {
 }
 
 export function fromDateTimeLocalValue(value: string) {
-	const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/.exec(value)
+	const normalized = value.endsWith('.000') ? value.slice(0, -4) : value
+	const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/.exec(normalized)
 	if (!match) return null
 	const [, yearValue, monthValue, dayValue, hourValue, minuteValue, secondValue] = match
 	const values = [yearValue, monthValue, dayValue, hourValue, minuteValue, secondValue].map(Number)
 	if (values.some((item) => !Number.isInteger(item))) return null
 	const [year, month, day, hour, minute, second] = values as [number, number, number, number, number, number]
 	const date = new Date(year, month - 1, day, hour, minute, second)
-	if (toDateTimeLocalValue(date) !== value) return null
+	if (toDateTimeLocalValue(date) !== normalized) return null
 	return date
 }
 

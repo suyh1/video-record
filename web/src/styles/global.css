@@ -3490,8 +3490,32 @@ a {
   background: var(--bg);
 }
 
-.quick-record-form {
+.quick-record-form,
+.round-record-form {
   max-width: 720px;
+}
+
+.round-record-heading {
+  margin-bottom: var(--space-4);
+}
+
+.round-status-summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.round-status-summary span {
+  color: var(--muted);
+}
+
+.watched-at-field {
+  max-width: 320px;
 }
 
 .record-tags-editor {
@@ -3611,13 +3635,15 @@ a {
   }
 }
 
-.quick-record-form fieldset {
+.quick-record-form fieldset,
+.round-record-form fieldset {
   margin: 0;
   padding: 0;
   border: 0;
 }
 
-.quick-record-form legend {
+.quick-record-form legend,
+.round-record-form legend {
   margin-bottom: var(--space-2);
   font-weight: 650;
 }
@@ -3718,7 +3744,8 @@ a {
   gap: 0 var(--space-4);
 }
 
-.quick-record-form .participant-fieldset {
+.quick-record-form .participant-fieldset,
+.round-record-form .participant-fieldset {
   grid-column: 1 / -1;
   margin-top: var(--space-4);
 }
