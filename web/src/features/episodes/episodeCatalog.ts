@@ -1,4 +1,5 @@
 import type {
+  CurrentRound,
   EpisodeProgressItem,
   SeriesProgress,
   TMDBEpisodeDetails,
@@ -26,6 +27,20 @@ export function regularSeasons(seasons: TMDBSeasonSummary[]) {
 
 export function totalEpisodeCount(seasons: TMDBSeasonSummary[]) {
   return regularSeasons(seasons).reduce((total, season) => total + season.episodeCount, 0)
+}
+
+export function selectActiveSeason(
+  seasons: TMDBSeasonSummary[],
+  rounds: Array<Pick<CurrentRound, 'seasonNumber' | 'status'>>,
+) {
+  const available = regularSeasons(seasons)
+  if (available.length === 0) return null
+  const availableNumbers = new Set(available.map((season) => season.seasonNumber))
+  const watching = rounds
+    .filter((round) => round.status === 'watching' && round.seasonNumber !== null && availableNumbers.has(round.seasonNumber))
+    .map((round) => round.seasonNumber as number)
+    .sort((left, right) => right - left)
+  return watching[0] ?? available[0]?.seasonNumber ?? null
 }
 
 export function mergeSeason(

@@ -14,7 +14,7 @@ import {
 } from '../../api/client'
 import type { RecordState, TMDBMovieDetails, TMDBTVDetails } from '../../api/types'
 import { CollectionPicker } from '../collections/CollectionPicker'
-import { EpisodeProgress } from '../episodes/EpisodeProgress'
+import { SeasonRecordWorkspace } from '../episodes/SeasonRecordWorkspace'
 import { HouseholdSharedRecords } from '../records/HouseholdSharedRecords'
 import { QuickRecordForm } from '../records/QuickRecordForm'
 import { RecordSharingEditor } from '../records/RecordSharingEditor'
@@ -41,7 +41,7 @@ export function MediaDetailsPage() {
   const events = useQuery({
     queryKey: ['watch-events', mediaId],
     queryFn: ({ signal }) => getWatchEvents(mediaId, signal),
-    enabled: Boolean(mediaId),
+    enabled: Boolean(mediaId && media.data?.mediaType === 'movie'),
   })
   const participants = useQuery({
     queryKey: ['household-participants'],
@@ -63,8 +63,10 @@ export function MediaDetailsPage() {
     enabled: Boolean(tmdbID && mediaType),
   })
 
-  if (media.isPending || record.isPending || events.isPending) return <DetailsSkeleton />
-  if (media.isError || record.isError || events.isError) {
+  const eventsPending = media.data?.mediaType === 'movie' && events.isPending
+  const eventsError = media.data?.mediaType === 'movie' && events.isError
+  if (media.isPending || record.isPending || eventsPending) return <DetailsSkeleton />
+  if (media.isError || record.isError || eventsError) {
     return (
       <div className="page page-error" role="alert">
         <h1>无法打开影视详情</h1>
@@ -81,6 +83,27 @@ export function MediaDetailsPage() {
     ['record', mediaId],
     (current) => current ? { ...current, version } : current,
   )
+  const updateProfileVersion = (version: number) => {
+    updateVersion(version)
+    queryClient.setQueriesData({ queryKey: ['current-round', mediaId] }, (current: unknown) => {
+      if (!current || typeof current !== 'object') return current
+      return { ...current, profileVersion: version }
+    })
+  }
+  const organizing = (profileVersion: number) => (
+    <details className="record-organizing" onToggle={(event) => setOrganizingOpen(event.currentTarget.open)}>
+      <summary>家庭与整理</summary>
+      {organizingOpen ? (
+        <div className="record-organizing-content">
+          <RecordTagsEditor mediaID={mediaId} version={profileVersion} onVersionChange={updateProfileVersion} />
+          <CollectionPicker mediaID={mediaId} />
+          <RecordSharingEditor mediaID={mediaId} version={profileVersion} onVersionChange={updateProfileVersion} />
+          <HouseholdSharedRecords mediaID={mediaId} members={participants.data ?? []} />
+        </div>
+      ) : null}
+    </details>
+  )
+  const movieEvents = events.data ?? []
 
   return (
     <div className="page media-details-page">
@@ -99,7 +122,14 @@ export function MediaDetailsPage() {
         onRetry={() => void credits.refetch()}
       />
 
-      <div className="media-details-layout">
+      {media.data.mediaType === 'tv' ? (
+        <SeasonRecordWorkspace
+          mediaId={mediaId}
+          tmdbId={tmdbID}
+          participants={participants.data ?? []}
+          organizing={organizing}
+        />
+      ) : <div className="media-details-layout">
         <aside className="personal-record-panel" aria-labelledby="personal-record-heading">
           <div className="details-section-heading">
             <div><h2 id="personal-record-heading">个人记录</h2><p>评分和私人笔记仅自己可见</p></div>
@@ -116,29 +146,18 @@ export function MediaDetailsPage() {
             onRewatched={() => void queryClient.invalidateQueries({ queryKey: ['watch-events', mediaId] })}
           />
 
-          <details className="record-organizing" onToggle={(event) => setOrganizingOpen(event.currentTarget.open)}>
-            <summary>家庭与整理</summary>
-            {organizingOpen ? (
-              <div className="record-organizing-content">
-                <RecordTagsEditor mediaID={mediaId} version={record.data.version} onVersionChange={updateVersion} />
-                <CollectionPicker mediaID={mediaId} />
-                <RecordSharingEditor mediaID={mediaId} version={record.data.version} onVersionChange={updateVersion} />
-                <HouseholdSharedRecords mediaID={mediaId} members={participants.data ?? []} />
-              </div>
-            ) : null}
-          </details>
+          {organizing(record.data.version)}
         </aside>
 
         <div className="media-details-primary">
-          {media.data.mediaType === 'tv' ? <EpisodeProgress mediaId={mediaId} tmdbId={tmdbID} /> : null}
           <section className="details-section" aria-labelledby="history-heading">
             <div className="details-section-heading">
-              <div><h2 id="history-heading">观看历史</h2><p>{events.data.length} 次记录</p></div>
+              <div><h2 id="history-heading">观看历史</h2><p>{movieEvents.length} 次记录</p></div>
             </div>
-            <WatchHistory mediaID={mediaId} events={events.data} />
+            <WatchHistory mediaID={mediaId} events={movieEvents} />
           </section>
         </div>
-      </div>
+      </div>}
     </div>
   )
 }

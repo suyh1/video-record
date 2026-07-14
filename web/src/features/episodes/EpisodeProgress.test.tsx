@@ -1,26 +1,26 @@
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, expect, it } from 'vitest'
 
-import type { SeriesProgress } from '../../api/types'
+import type { EpisodeProgressItem, SeriesProgress } from '../../api/types'
+import { formatLocalSeconds } from '../../lib/dateTime'
 import { renderWithQueryClient } from '../../test/render'
 import { server } from '../../test/server'
 import { EpisodeProgress } from './EpisodeProgress'
 
-const sparseProgress: SeriesProgress = {
-  roundId: 'round-1',
-  mediaId: 'series-1',
-  seasonNumber: 1,
-  status: 'watching',
-  version: 1,
-  watchedEpisodes: 1,
-  totalEpisodes: 1,
-  lastWatched: { id: 'local-101', sourceId: '101', seasonId: 'season-1', seasonNumber: 1, episodeNumber: 1, absoluteNumber: 1, name: '', watched: true, watchedAt: '2026-07-12T12:00:00Z' },
-  nextEpisode: null,
-  episodes: [
-    { id: 'local-101', sourceId: '101', seasonId: 'season-1', seasonNumber: 1, episodeNumber: 1, absoluteNumber: 1, name: '', watched: true, watchedAt: '2026-07-12T12:00:00Z' },
-  ],
+const now = new Date(2026, 6, 14, 17, 8, 9)
+const watchedAt = '2026-07-13T12:00:01Z'
+
+const watchedEpisode: EpisodeProgressItem = {
+  id: 'local-201', sourceId: '201', seasonId: 'season-2', seasonNumber: 2, episodeNumber: 1,
+  absoluteNumber: 4, name: '', watched: true, watchedAt,
+}
+
+const progress: SeriesProgress = {
+  roundId: 'round-season-2', mediaId: 'series-1', seasonNumber: 2, status: 'watching', version: 3,
+  watchedEpisodes: 1, totalEpisodes: 3, lastWatched: watchedEpisode, nextEpisode: null,
+  episodes: [watchedEpisode],
 }
 
 const tvDetails = {
@@ -33,110 +33,103 @@ const tvDetails = {
   ],
 }
 
-const liveSeasons = {
-  1: {
-    id: 11, name: '第 1 季', overview: '', posterPath: '', airDate: '2026-01-01', seasonNumber: 1,
-    episodes: [
-      { id: 101, name: '第一集', overview: '', airDate: '2026-01-01', seasonNumber: 1, episodeNumber: 1, runtime: 45, stillPath: '' },
-      { id: 102, name: '第二集', overview: '', airDate: '2026-01-08', seasonNumber: 1, episodeNumber: 2, runtime: 45, stillPath: '' },
-      { id: 103, name: '第三集', overview: '', airDate: '2026-01-15', seasonNumber: 1, episodeNumber: 3, runtime: 45, stillPath: '' },
-    ],
-  },
-  2: {
-    id: 12, name: '第 2 季', overview: '', posterPath: '', airDate: '2026-07-01', seasonNumber: 2,
-    episodes: [
-      { id: 201, name: '第四集', overview: '', airDate: '2026-07-01', seasonNumber: 2, episodeNumber: 1, runtime: 45, stillPath: '' },
-      { id: 202, name: '第五集', overview: '', airDate: '2026-07-08', seasonNumber: 2, episodeNumber: 2, runtime: 45, stillPath: '' },
-      { id: 203, name: '第六集', overview: '', airDate: '2026-07-15', seasonNumber: 2, episodeNumber: 3, runtime: 45, stillPath: '' },
-    ],
-  },
+const seasonDetails = {
+  id: 12, name: '第 2 季', overview: '', posterPath: '', airDate: '2026-07-01', seasonNumber: 2,
+  episodes: [
+    { id: 201, name: '第四集', overview: '', airDate: '2026-07-01', seasonNumber: 2, episodeNumber: 1, runtime: 45, stillPath: '' },
+    { id: 202, name: '第五集', overview: '', airDate: '2026-07-08', seasonNumber: 2, episodeNumber: 2, runtime: 45, stillPath: '' },
+    { id: 203, name: '第六集', overview: '', airDate: '2026-07-15', seasonNumber: 2, episodeNumber: 3, runtime: 45, stillPath: '' },
+  ],
 }
 
-beforeEach(() => sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token'))
-
-function useLiveCatalog() {
+beforeEach(() => {
+  sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token')
   server.use(
-    http.get('*/api/v1/records/series-1/progress', () => HttpResponse.json(sparseProgress)),
     http.get('*/api/v1/tmdb/tv/1399', () => HttpResponse.json(tvDetails)),
-    http.get('*/api/v1/tmdb/tv/1399/season/:season', ({ params }) =>
-      HttpResponse.json(liveSeasons[Number(params.season) as 1 | 2])),
+    http.get('*/api/v1/tmdb/tv/1399/season/2', () => HttpResponse.json(seasonDetails)),
+    http.get('*/api/v1/records/series-1/progress', ({ request }) => {
+      expect(new URL(request.url).searchParams.get('seasonNumber')).toBe('2')
+      return HttpResponse.json(progress)
+    }),
   )
-}
-
-it('loads one live season, shows absolute labels, and switches seasons', async () => {
-  useLiveCatalog()
-  const user = userEvent.setup()
-  renderWithQueryClient(<EpisodeProgress mediaId="series-1" tmdbId={1399} />)
-
-  expect(await screen.findByRole('button', { name: '标记 S01E02 已看' })).toHaveTextContent('全剧第 2 集')
-  expect(screen.getByText('1 / 6 集')).toBeVisible()
-  await user.selectOptions(screen.getByRole('combobox', { name: '选择季' }), '2')
-  expect(await screen.findByRole('button', { name: '标记 S02E02 已看' })).toHaveTextContent('全剧第 5 集')
-  expect(screen.queryByText('第二集')).not.toBeInTheDocument()
 })
 
-it('advances a live next episode and sends only sparse identity data', async () => {
-  useLiveCatalog()
-  let savedBody: Record<string, unknown> | undefined
+it('renders separate toggle and second-precision time controls for the selected season', async () => {
+  renderWithQueryClient(<EpisodeProgress mediaId="series-1" tmdbId={1399} seasonNumber={2} now={() => now} />)
+
+  const watchedRow = (await screen.findByText('第四集')).closest('li')
+  expect(watchedRow).not.toBeNull()
+  expect(within(watchedRow!).getByRole('button', { name: '将 S02E01 标为未看' })).toBeVisible()
+  expect(within(watchedRow!).getByRole('button', { name: /修改 S02E01 观看时间/ })).toHaveTextContent(formatLocalSeconds(watchedAt))
+
+  const unwatchedRow = screen.getByText('第五集').closest('li')
+  expect(within(unwatchedRow!).getByRole('button', { name: '标记 S02E02 已看' })).toBeVisible()
+  expect(within(unwatchedRow!).getByRole('button', { name: '设置 S02E02 观看时间' })).toBeVisible()
+})
+
+it('records current time from an unwatched circle and undoes only the selected row', async () => {
+  const bodies: Array<Record<string, unknown>> = []
+  let current = progress
   server.use(http.post('*/api/v1/records/series-1/progress', async ({ request }) => {
-    savedBody = await request.json() as Record<string, unknown>
-    expect(request.headers.get('Idempotency-Key')).toBeTruthy()
-    expect(request.headers.get('X-CSRF-Token')).toBe('csrf-test-token')
+    expect(new URL(request.url).searchParams.get('seasonNumber')).toBe('2')
+    const body = await request.json() as Record<string, unknown>
+    bodies.push(body)
+    const reference = (body.episodeRefs as Array<{ sourceId: string }>)[0]
+    expect(reference).toBeDefined()
+    if (!reference) return HttpResponse.json({ code: 'invalid_request' }, { status: 400 })
+    if (body.action === 'single') {
+      const episode = { ...watchedEpisode, id: 'local-202', sourceId: reference.sourceId, episodeNumber: 2, absoluteNumber: 5, watchedAt: now.toISOString() }
+      current = { ...current, version: 4, watchedEpisodes: 2, episodes: [...current.episodes, episode] }
+    } else {
+      current = { ...current, version: 5, watchedEpisodes: 1, episodes: current.episodes.filter((item) => item.sourceId !== reference.sourceId) }
+    }
+    return HttpResponse.json(current)
+  }))
+  const user = userEvent.setup()
+  renderWithQueryClient(<EpisodeProgress mediaId="series-1" tmdbId={1399} seasonNumber={2} now={() => now} />)
+
+  await user.click(await screen.findByRole('button', { name: '标记 S02E02 已看' }))
+  await waitFor(() => expect(bodies[0]).toMatchObject({
+    action: 'single', expectedVersion: 3, watchedAt: now.toISOString(),
+    episodeRefs: [{ sourceId: '202', seasonNumber: 2, episodeNumber: 2, absoluteNumber: 5 }],
+    totalEpisodes: 3,
+  }))
+
+  await user.click(await screen.findByRole('button', { name: '将 S02E02 标为未看' }))
+  await waitFor(() => expect(bodies[1]).toMatchObject({ action: 'undo', expectedVersion: 4 }))
+})
+
+it('sets an unwatched episode time and then edits the watched time in place', async () => {
+  const bodies: Array<Record<string, unknown>> = []
+  let version = 3
+  server.use(http.post('*/api/v1/records/series-1/progress', async ({ request }) => {
+    const body = await request.json() as Record<string, unknown>
+    bodies.push(body)
+    version += 1
+    const episode = {
+      ...watchedEpisode,
+      id: 'local-202', sourceId: '202', episodeNumber: 2, absoluteNumber: 5,
+      watchedAt: body.watchedAt as string,
+    }
     return HttpResponse.json({
-      ...sparseProgress,
-      version: 2,
-      watchedEpisodes: 2,
-      totalEpisodes: 6,
-      lastWatched: { id: 'local-102', sourceId: '102', seasonId: 'season-1', seasonNumber: 1, episodeNumber: 2, absoluteNumber: 2, name: '', watched: true, watchedAt: '2026-07-14T12:00:00Z' },
-      episodes: [
-        ...sparseProgress.episodes,
-        { id: 'local-102', sourceId: '102', seasonId: 'season-1', seasonNumber: 1, episodeNumber: 2, absoluteNumber: 2, name: '', watched: true, watchedAt: '2026-07-14T12:00:00Z' },
-      ],
+      ...progress, version, watchedEpisodes: 2, lastWatched: episode,
+      episodes: [watchedEpisode, episode],
     })
   }))
   const user = userEvent.setup()
-  renderWithQueryClient(<EpisodeProgress mediaId="series-1" tmdbId={1399} />)
+  renderWithQueryClient(<EpisodeProgress mediaId="series-1" tmdbId={1399} seasonNumber={2} now={() => now} />)
 
-  await user.click(await screen.findByRole('button', { name: '推进下一集 S01E02' }))
-
-  await waitFor(() => expect(savedBody).toMatchObject({
-    action: 'next', expectedVersion: 1, totalEpisodes: 6,
-    episodeRefs: [{ sourceId: '102', seasonNumber: 1, episodeNumber: 2, absoluteNumber: 2 }],
+  await user.click(await screen.findByRole('button', { name: '设置 S02E02 观看时间' }))
+  fireEvent.change(screen.getByLabelText('S02E02 观看时间'), { target: { value: '2026-07-12T11:10:12' } })
+  await user.click(screen.getByRole('button', { name: '确定 S02E02 观看时间' }))
+  await waitFor(() => expect(bodies[0]).toMatchObject({
+    action: 'set_time', expectedVersion: 3, watchedAt: new Date(2026, 6, 12, 11, 10, 12).toISOString(),
   }))
-  expect(savedBody).not.toHaveProperty('name')
-  expect(await screen.findByRole('status')).toHaveTextContent('已推进至 S01E02')
-  expect(screen.getByRole('button', { name: '撤销 S01E02' })).toBeVisible()
-})
+  expect(await screen.findByRole('button', { name: /修改 S02E02 观看时间/ })).toHaveTextContent('2026-07-12 11:10:12')
 
-it('retries a failed live season without hiding saved progress', async () => {
-  let requests = 0
-  server.use(
-    http.get('*/api/v1/records/series-1/progress', () => HttpResponse.json(sparseProgress)),
-    http.get('*/api/v1/tmdb/tv/1399', () => HttpResponse.json(tvDetails)),
-    http.get('*/api/v1/tmdb/tv/1399/season/1', () => {
-      requests += 1
-      return requests === 1 ? HttpResponse.json({ code: 'tmdb_unavailable' }, { status: 502 }) : HttpResponse.json(liveSeasons[1])
-    }),
-  )
-  const user = userEvent.setup()
-  renderWithQueryClient(<EpisodeProgress mediaId="series-1" tmdbId={1399} />)
-
-  expect(await screen.findByRole('alert')).toHaveTextContent('无法获取第 1 季分集资料')
-  expect(screen.getByText('已记录 1 集')).toBeVisible()
-  await user.click(screen.getByRole('button', { name: '重新获取分集资料' }))
-  expect(await screen.findByText('第二集')).toBeVisible()
-})
-
-it('keeps a local compatibility path for an unlinked series', async () => {
-  server.use(http.get('*/api/v1/records/series-1/progress', () => HttpResponse.json({
-    ...sparseProgress,
-    totalEpisodes: 2,
-    episodes: [
-      sparseProgress.episodes[0],
-      { id: 'local-102', seasonId: 'season-1', seasonNumber: 1, episodeNumber: 2, absoluteNumber: 2, name: '本地第二集', watched: false, watchedAt: null },
-    ],
-  })))
-  renderWithQueryClient(<EpisodeProgress mediaId="series-1" tmdbId={null} />)
-
-  expect(await screen.findByRole('button', { name: '标记 S01E02 已看' })).toHaveTextContent('本地第二集')
+  await user.click(screen.getByRole('button', { name: /修改 S02E02 观看时间/ }))
+  fireEvent.change(screen.getByLabelText('S02E02 观看时间'), { target: { value: '2026-07-13T09:08:07' } })
+  await user.click(screen.getByRole('button', { name: '确定 S02E02 观看时间' }))
+  await waitFor(() => expect(bodies[1]).toMatchObject({ action: 'set_time', expectedVersion: 4 }))
+  expect(await screen.findByRole('button', { name: /修改 S02E02 观看时间/ })).toHaveTextContent('2026-07-13 09:08:07')
 })

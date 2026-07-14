@@ -9,6 +9,64 @@ import { server } from '../../test/server'
 import { HomePage } from './HomePage'
 
 describe('HomePage', () => {
+  it('loads the next episode only from the active current season round', async () => {
+    const progressScopes: Array<string | null> = []
+    server.use(
+      http.get('*/api/v1/library', ({ request }) => {
+        const item = {
+          id: 'series-1', tmdbId: 1399, source: 'local', mediaType: 'tv', title: '漫长的季节',
+          originalTitle: 'The Long Season', year: '2023', posterPath: null, status: 'watching',
+        }
+        return HttpResponse.json({
+          items: new URL(request.url).searchParams.get('status') === 'watching' ? [item] : [item],
+          nextCursor: null,
+        })
+      }),
+      http.get('*/api/v1/tmdb/tv/1399', () => HttpResponse.json({
+        id: 1399, name: '漫长的季节', originalName: 'The Long Season', firstAirDate: '2023-04-22',
+        posterPath: '', backdropPath: '', overview: '', numberOfSeasons: 2, numberOfEpisodes: 4,
+        episodeRuntime: [45], genres: ['剧情'],
+        seasons: [
+          { id: 11, name: '第 1 季', overview: '', posterPath: '', airDate: '2023-04-22', seasonNumber: 1, episodeCount: 2 },
+          { id: 12, name: '第 2 季', overview: '', posterPath: '', airDate: '2026-07-01', seasonNumber: 2, episodeCount: 2 },
+        ],
+      })),
+      http.get('*/api/v1/records/series-1/rounds/current', ({ request }) => {
+        const seasonNumber = Number(new URL(request.url).searchParams.get('seasonNumber'))
+        return HttpResponse.json({
+          roundId: `round-${seasonNumber}`, mediaId: 'series-1', seasonNumber, roundNumber: 1,
+          status: seasonNumber === 2 ? 'watching' : 'completed', rating: null, note: null,
+          viewingMethod: null, watchedAt: null, version: 1, profileVersion: 1,
+        })
+      }),
+      http.get('*/api/v1/records/series-1/progress', ({ request }) => {
+        const scope = new URL(request.url).searchParams.get('seasonNumber')
+        progressScopes.push(scope)
+        if (scope !== '2') return HttpResponse.json({ code: 'invalid_round_scope' }, { status: 400 })
+        return HttpResponse.json({
+          roundId: 'round-2', mediaId: 'series-1', seasonNumber: 2, status: 'watching', version: 1,
+          watchedEpisodes: 1, totalEpisodes: 2, lastWatched: null, nextEpisode: null,
+          episodes: [{
+            id: 'episode-201', sourceId: '201', seasonId: 'season-2', seasonNumber: 2, episodeNumber: 1,
+            absoluteNumber: 3, name: '', watched: true, watchedAt: '2026-07-12T12:00:00Z',
+          }],
+        })
+      }),
+      http.get('*/api/v1/tmdb/tv/1399/season/2', () => HttpResponse.json({
+        id: 12, name: '第 2 季', overview: '', posterPath: '', airDate: '2026-07-01', seasonNumber: 2,
+        episodes: [
+          { id: 201, name: '第三集', overview: '', airDate: '2026-07-01', seasonNumber: 2, episodeNumber: 1, runtime: 45, stillPath: '' },
+          { id: 202, name: '第四集', overview: '', airDate: '2026-07-08', seasonNumber: 2, episodeNumber: 2, runtime: 45, stillPath: '' },
+        ],
+      })),
+    )
+
+    renderWithQueryClient(<MemoryRouter><HomePage /></MemoryRouter>)
+
+    expect(await screen.findByRole('button', { name: '推进 漫长的季节 下一集 S02E02' })).toBeVisible()
+    expect(progressScopes).toEqual(['2'])
+  })
+
   it('shows continuing titles and recently updated private records', async () => {
     sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token')
     const firstEpisode = {
@@ -38,8 +96,9 @@ describe('HomePage', () => {
         return HttpResponse.json({ items: status === 'watching' ? continuing : recent, nextCursor: null })
       }),
       http.get('*/api/v1/records/series-1/progress', () => HttpResponse.json({
-        mediaId: 'series-1', status: 'watching', version: progressVersion,
-        watchedEpisodes: progressVersion === 1 ? 1 : 2, totalEpisodes: 4,
+        roundId: 'round-1', mediaId: 'series-1', seasonNumber: 1,
+        status: progressVersion === 1 ? 'watching' : 'completed', version: progressVersion,
+        watchedEpisodes: progressVersion === 1 ? 1 : 2, totalEpisodes: 2,
         lastWatched: progressVersion === 1 ? firstEpisode : secondEpisode,
         nextEpisode: null,
         episodes: progressVersion === 1 ? [firstEpisode] : [firstEpisode, secondEpisode],
@@ -60,6 +119,14 @@ describe('HomePage', () => {
           { id: 102, name: '第二集', overview: '', airDate: '2023-04-29', seasonNumber: 1, episodeNumber: 2, runtime: 45, stillPath: '' },
         ],
       })),
+      http.get('*/api/v1/records/series-1/rounds/current', ({ request }) => {
+        const seasonNumber = Number(new URL(request.url).searchParams.get('seasonNumber'))
+        return HttpResponse.json({
+          roundId: `round-${seasonNumber}`, mediaId: 'series-1', seasonNumber, roundNumber: 1,
+          status: seasonNumber === 1 ? 'watching' : 'none', rating: null, note: null,
+          viewingMethod: null, watchedAt: null, version: 1, profileVersion: 1,
+        })
+      }),
       http.post('*/api/v1/records/series-1/progress', async ({ request }) => {
         expect(request.headers.get('X-CSRF-Token')).toBe('csrf-test-token')
         expect(request.headers.get('Idempotency-Key')).toBeTruthy()
@@ -68,13 +135,15 @@ describe('HomePage', () => {
         if (body.action === 'next') {
           progressVersion = 2
           return HttpResponse.json({
-            mediaId: 'series-1', status: 'watching', version: 2, watchedEpisodes: 2, totalEpisodes: 4,
+            roundId: 'round-1', mediaId: 'series-1', seasonNumber: 1,
+            status: 'completed', version: 2, watchedEpisodes: 2, totalEpisodes: 2,
             lastWatched: secondEpisode, nextEpisode: null, episodes: [firstEpisode, secondEpisode],
           })
         }
         progressVersion = 3
         return HttpResponse.json({
-          mediaId: 'series-1', status: 'watching', version: 3, watchedEpisodes: 1, totalEpisodes: 4,
+          roundId: 'round-1', mediaId: 'series-1', seasonNumber: 1,
+          status: 'watching', version: 3, watchedEpisodes: 1, totalEpisodes: 2,
           lastWatched: firstEpisode, nextEpisode: null, episodes: [firstEpisode],
         })
       }),
@@ -92,13 +161,13 @@ describe('HomePage', () => {
 
     await user.click(await screen.findByRole('button', { name: '推进 漫长的季节 下一集 S01E02' }))
     await waitFor(() => expect(progressBodies[0]).toMatchObject({
-      action: 'next', expectedVersion: 1, totalEpisodes: 4,
+      action: 'next', expectedVersion: 1, totalEpisodes: 2,
       episodeRefs: [{ sourceId: '102', seasonNumber: 1, episodeNumber: 2, absoluteNumber: 2 }],
     }))
     const undo = await screen.findByRole('button', { name: '撤销 漫长的季节 S01E02' })
     await user.click(undo)
     await waitFor(() => expect(progressBodies[1]).toMatchObject({
-      action: 'undo', expectedVersion: 2, totalEpisodes: 4,
+      action: 'undo', expectedVersion: 2, totalEpisodes: 2,
       episodeRefs: [{ sourceId: '102', seasonNumber: 1, episodeNumber: 2, absoluteNumber: 2 }],
     }))
   })

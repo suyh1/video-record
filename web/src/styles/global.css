@@ -328,21 +328,46 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-.episode-list li button {
+.episode-row {
   display: grid;
   width: 100%;
-  min-height: 52px;
-  grid-template-columns: 20px 72px 92px minmax(0, 1fr);
+  min-height: 60px;
+  grid-template-columns: 44px 72px 92px minmax(0, 1fr) minmax(172px, auto);
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2);
-  border: 0;
-  background: transparent;
-  text-align: left;
 }
 
-.live-episode-list li button {
-  grid-template-columns: 20px 72px 92px minmax(0, 1fr) auto;
+.episode-toggle,
+.episode-time-button {
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: inherit;
+}
+
+.episode-toggle {
+  display: inline-flex;
+  width: 44px;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+}
+
+.episode-time-button {
+  padding: 0 var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.episode-toggle:hover,
+.episode-time-button:hover,
+.episode-time-button[aria-expanded="true"] {
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .episode-watch-state {
@@ -351,11 +376,8 @@ body {
   font-weight: 650;
 }
 
-.episode-list li button:hover {
-  background: var(--surface);
-}
-
-.episode-list li.watched button {
+.episode-list li.watched .episode-code,
+.episode-list li.watched .episode-absolute {
   color: var(--muted);
 }
 
@@ -376,6 +398,128 @@ body {
   font-weight: 550;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.episode-time-editor {
+  display: grid;
+  min-height: 96px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-2) var(--space-3);
+  margin: 0 var(--space-2) var(--space-3) 60px;
+  padding: var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.episode-time-editor label {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.episode-time-editor input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.episode-time-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.episode-time-actions button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.episode-time-actions .primary-button {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.episode-time-editor small {
+  grid-column: 1 / -1;
+  color: var(--error);
+}
+
+.season-record-workspace {
+  margin-top: var(--space-8);
+}
+
+.season-workspace-toolbar {
+  display: flex;
+  min-height: 64px;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.season-workspace-toolbar h2,
+.season-workspace-toolbar p {
+  margin: 0;
+}
+
+.season-workspace-toolbar h2 {
+  font-size: var(--text-lg);
+}
+
+.season-workspace-toolbar p {
+  margin-top: var(--space-1);
+  color: var(--muted);
+}
+
+.season-workspace-toolbar .episode-season-select {
+  min-width: min(320px, 42%);
+  margin: 0;
+}
+
+.season-workspace-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
+  align-items: start;
+  gap: var(--space-12);
+}
+
+.season-workspace-primary {
+  min-width: 0;
+}
+
+.season-record-panel {
+  grid-area: auto;
+}
+
+.season-workspace-toolbar-skeleton {
+  width: 100%;
+  height: 64px;
+}
+
+.season-workspace-content-skeleton,
+.season-record-skeleton {
+  width: 100%;
+  height: 240px;
+  margin-top: var(--space-6);
 }
 
 .episode-progress-title-skeleton {
@@ -415,12 +559,45 @@ body {
     min-width: 0;
   }
 
-  .episode-list li button {
-    grid-template-columns: 20px 64px minmax(0, 1fr);
+  .episode-row {
+    grid-template-areas:
+      "toggle code title"
+      ". time time";
+    grid-template-columns: 44px 64px minmax(0, 1fr);
+    gap: 0 var(--space-2);
   }
 
-  .live-episode-list li button {
-    grid-template-columns: 20px 64px minmax(0, 1fr) auto;
+  .episode-toggle {
+    grid-area: toggle;
+  }
+
+  .episode-code {
+    grid-area: code;
+  }
+
+  .episode-row strong {
+    grid-area: title;
+  }
+
+  .episode-time-button {
+    width: 100%;
+    grid-area: time;
+    padding: 0;
+    text-align: left;
+  }
+
+  .episode-time-editor {
+    grid-template-columns: minmax(0, 1fr);
+    margin-left: var(--space-2);
+  }
+
+  .episode-time-actions,
+  .episode-time-actions button {
+    width: 100%;
+  }
+
+  .episode-time-actions button {
+    flex: 1;
   }
 
   .episode-season-select {
@@ -435,6 +612,17 @@ body {
 
   .episode-absolute {
     display: none;
+  }
+
+  .season-workspace-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .season-workspace-toolbar .episode-season-select {
+    width: 100%;
+    min-width: 0;
   }
 }
 
@@ -4175,6 +4363,11 @@ a {
     grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
     gap: var(--space-8);
   }
+
+  .season-workspace-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
+    gap: var(--space-8);
+  }
 }
 
 @media (max-width: 900px) {
@@ -4189,6 +4382,16 @@ a {
   .personal-record-panel {
     position: static;
     margin-top: var(--space-8);
+  }
+
+  .season-workspace-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .season-record-panel {
+    position: static;
+    margin-top: var(--space-4);
   }
 }
 

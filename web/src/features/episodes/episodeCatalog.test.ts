@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { SeriesProgress, TMDBSeasonDetails, TMDBSeasonSummary } from '../../api/types'
-import { findNextEpisode, mergeSeason, selectDefaultSeason, totalEpisodeCount } from './episodeCatalog'
+import { findNextEpisode, mergeSeason, selectActiveSeason, selectDefaultSeason, totalEpisodeCount } from './episodeCatalog'
 
 const seasons: TMDBSeasonSummary[] = [
   { id: 10, name: '特别篇', overview: '', posterPath: '', airDate: '', seasonNumber: 0, episodeCount: 2 },
@@ -38,6 +38,14 @@ function progress(episodes: SeriesProgress['episodes']): SeriesProgress {
 }
 
 describe('episodeCatalog', () => {
+  it('selects the highest currently watching season before other rounds', () => {
+    expect(selectActiveSeason(seasons, [
+      { seasonNumber: 1, status: 'completed' },
+      { seasonNumber: 2, status: 'watching' },
+    ])).toBe(2)
+    expect(selectActiveSeason(seasons, [])).toBe(1)
+  })
+
   it('merges a live season with sparse progress by source id and legacy numbers', () => {
     const merged = mergeSeason(season, seasons, progress([
       { id: 'local-201', sourceId: '201', seasonId: 'season-2', seasonNumber: 2, episodeNumber: 1, absoluteNumber: 4, name: '', watched: true, watchedAt: '2026-07-01T12:00:00Z' },
