@@ -26,6 +26,7 @@ const (
 
 var (
 	ErrNotConfigured       = errors.New("tmdb is not configured")
+	ErrUnauthorized        = errors.New("tmdb credentials were rejected")
 	ErrRateLimited         = errors.New("tmdb rate limited")
 	ErrUpstreamTimeout     = errors.New("tmdb request timed out")
 	ErrUpstreamUnavailable = errors.New("tmdb is unavailable")
@@ -91,6 +92,11 @@ func NewClient(options ClientOptions) *Client {
 
 func (client *Client) Configured() bool {
 	return client.token != ""
+}
+
+func (client *Client) TestConnectivity(ctx context.Context) error {
+	var response map[string]any
+	return client.fetch(ctx, "/configuration", nil, &response)
 }
 
 func (client *Client) Search(ctx context.Context, query, language string) (SearchResponse, error) {
@@ -177,6 +183,22 @@ func (client *Client) get(
 			}
 		}
 	}
+	if err := client.fetch(ctx, path, query, destination); err != nil {
+		return err
+	}
+	if client.cache != nil {
+		normalized, err := json.Marshal(destination)
+		if err != nil {
+			return &ClientError{Kind: ErrUpstreamUnavailable}
+		}
+		if err := client.cache.Put(ctx, key, normalized, ttl); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (client *Client) fetch(ctx context.Context, path string, query url.Values, destination any) error {
 	if client.token == "" {
 		return &ClientError{Kind: ErrNotConfigured}
 	}
@@ -210,6 +232,10 @@ func (client *Client) get(
 		client.logFailure(ctx, "rate_limited", response.StatusCode)
 		return &ClientError{Kind: ErrRateLimited, RetryAfter: retryAfter}
 	}
+	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
+		client.logFailure(ctx, "unauthorized", response.StatusCode)
+		return &ClientError{Kind: ErrUnauthorized}
+	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		client.logFailure(ctx, "unavailable", response.StatusCode)
 		return &ClientError{Kind: ErrUpstreamUnavailable}
@@ -219,15 +245,6 @@ func (client *Client) get(
 	if err != nil || len(contents) > maxResponseBytes || json.Unmarshal(contents, destination) != nil {
 		client.logFailure(ctx, "invalid_response", response.StatusCode)
 		return &ClientError{Kind: ErrUpstreamUnavailable}
-	}
-	if client.cache != nil {
-		normalized, err := json.Marshal(destination)
-		if err != nil {
-			return &ClientError{Kind: ErrUpstreamUnavailable}
-		}
-		if err := client.cache.Put(ctx, key, normalized, ttl); err != nil {
-			return err
-		}
 	}
 	return nil
 }

@@ -215,6 +215,57 @@ func TestClientMapsRetryAfterAndTimeoutToStableErrors(t *testing.T) {
 	require.Equal(t, 8*time.Second, client.timeout)
 }
 
+func TestClientConnectivityChecksConfigurationWithoutCache(t *testing.T) {
+	const token = "synthetic-connectivity-token"
+	cache := newTestCache(t, time.Now)
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		require.Equal(t, "/configuration", r.URL.Path)
+		require.Empty(t, r.URL.RawQuery)
+		require.Equal(t, "Bearer "+token, r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"images":{"secure_base_url":"https://image.tmdb.org/t/p/"}}`))
+	}))
+	t.Cleanup(server.Close)
+	client := NewClient(ClientOptions{BaseURL: server.URL, Token: token, Cache: cache})
+
+	require.NoError(t, client.TestConnectivity(context.Background()))
+	require.NoError(t, client.TestConnectivity(context.Background()))
+	require.Equal(t, int32(2), requests.Load())
+
+	var cachedResponses int
+	require.NoError(t, cache.db.Reader().QueryRowContext(
+		context.Background(),
+		"SELECT COUNT(*) FROM tmdb_cache",
+	).Scan(&cachedResponses))
+	require.Zero(t, cachedResponses)
+}
+
+func TestClientConnectivitySeparatesRejectedCredentials(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		statusCode int
+		expected   error
+	}{
+		{name: "unauthorized", statusCode: http.StatusUnauthorized, expected: ErrUnauthorized},
+		{name: "forbidden", statusCode: http.StatusForbidden, expected: ErrUnauthorized},
+		{name: "upstream failure", statusCode: http.StatusInternalServerError, expected: ErrUpstreamUnavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(test.statusCode)
+			}))
+			t.Cleanup(server.Close)
+			client := NewClient(ClientOptions{BaseURL: server.URL, Token: "synthetic-token"})
+
+			err := client.TestConnectivity(context.Background())
+
+			require.ErrorIs(t, err, test.expected)
+		})
+	}
+}
+
 func newTestCache(t *testing.T, now func() time.Time) *Cache {
 	t.Helper()
 	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "video-record.db"))
