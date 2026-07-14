@@ -17,6 +17,15 @@ environment:
 docker compose up -d --force-recreate video-record
 ```
 
+设置页的“测试连通”会从 video-record 服务端向 TMDB 发起一次不使用缓存的实时请求，因此验证的是容器当前使用的令牌、网络和出站代理链路。若部署网络必须通过代理访问 TMDB，可在 `docker-compose.yml` 的 `environment` 中取消注释并修改：
+
+```yaml
+HTTPS_PROXY: "http://host.docker.internal:7890"
+NO_PROXY: "localhost,127.0.0.1"
+```
+
+代理地址必须能从 video-record 容器内访问。容器中的 `localhost` 指容器自身，不是宿主机；Docker Desktop 可使用 `host.docker.internal` 访问宿主机代理，其他 Docker 环境应改为容器可达的代理主机名或地址。代理或网络不可用时，设置页会提示检查服务端代理或网络设置；令牌被 TMDB 拒绝、请求超时和请求受限会显示各自的原因。修改后需要重新创建容器，使环境变量生效。
+
 设置页只显示“已配置/未配置”，不会回显令牌。搜索缓存默认 6 小时，详情与季集快照缓存默认 7 天；已经记录的本地数据不依赖 TMDB 实时可用。
 
 TMDB 要求的归属说明：

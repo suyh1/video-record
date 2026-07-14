@@ -73,6 +73,8 @@ require_pattern docs/deployment.md '18080:8080' 'host port changes through the C
 require_pattern docs/deployment.md '(amd64|x86_64)' 'amd64 deployment support'
 require_pattern docs/deployment.md '(arm64|aarch64)' 'arm64 deployment support'
 require_pattern docs/integrations.md 'TMDB_READ_ACCESS_TOKEN' 'the server-only TMDB token environment variable'
+require_pattern docs/integrations.md 'HTTPS_PROXY' 'the optional outbound HTTPS proxy for TMDB requests'
+require_pattern docs/integrations.md 'NO_PROXY' 'the proxy bypass list for local services'
 require_pattern docs/integrations.md '(The Movie Database|TMDB)' 'TMDB attribution'
 require_pattern docs/integrations.md '(Jellyfin|Emby|Plex)' 'supported playback-history providers'
 require_pattern docs/backup-restore.md '(演练|rehears)' 'a backup and restore rehearsal'

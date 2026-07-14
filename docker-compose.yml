@@ -21,6 +21,9 @@ services:
       # Generate with `openssl rand -base64 32` before enabling media server integrations.
       APP_ENCRYPTION_KEY: ""
       TMDB_READ_ACCESS_TOKEN: ""
+      # Optional when TMDB must be reached through an outbound proxy accessible from this container.
+      # HTTPS_PROXY: "http://host.docker.internal:7890"
+      # NO_PROXY: "localhost,127.0.0.1"
     volumes:
       - video_record_data:/data
     healthcheck:
