@@ -2532,6 +2532,14 @@ a {
   font-size: var(--text-lg);
 }
 
+.integration-status-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
 .status-label {
   display: inline-flex;
   min-height: 36px;
@@ -2558,6 +2566,44 @@ a {
   color: var(--warning);
 }
 
+.tmdb-connectivity-button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.tmdb-connectivity-button:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--surface-strong);
+}
+
+.integration-connectivity-result {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.integration-connectivity-result.success {
+  color: var(--success);
+}
+
+.integration-connectivity-result.error {
+  color: var(--error);
+}
+
 .integration-guidance,
 .attribution {
   margin: var(--space-4) 0 0;
@@ -2578,6 +2624,16 @@ a {
   color: var(--primary);
   font-weight: 650;
   text-underline-offset: 3px;
+}
+
+@media (max-width: 479px) {
+  .integration-heading {
+    flex-direction: column;
+  }
+
+  .integration-status-actions {
+    justify-content: flex-start;
+  }
 }
 
 .mobile-navigation {

@@ -96,6 +96,10 @@ export async function searchTMDB(query: string, signal?: AbortSignal): Promise<M
   }))
 }
 
+export function testTMDBConnectivity() {
+  return requestJSON<{ connected: boolean }>('/api/v1/tmdb/connectivity')
+}
+
 export function getTMDBMovie(id: number, signal?: AbortSignal) {
   return requestJSON<TMDBMovieDetails>(`/api/v1/tmdb/movie/${id}`, signal ? { signal } : undefined)
 }
