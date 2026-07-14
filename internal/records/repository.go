@@ -21,8 +21,8 @@ type Repository interface {
 	ArchivedRounds(context.Context, RoundScope) ([]RoundSummary, error)
 	FindArchivedRoundDetail(context.Context, RoundScope, string) (RoundDetail, bool, error)
 	FindProfile(context.Context, string, string) (MediaProfile, bool, error)
-	InsertRound(context.Context, WatchRound) error
-	UpdateRound(context.Context, WatchRound, int) (bool, error)
+	InsertRound(context.Context, WatchRound, []string) error
+	UpdateRound(context.Context, WatchRound, int, []string) (bool, error)
 	FindState(context.Context, string, string) (State, bool, error)
 	InsertState(context.Context, State) error
 	UpdateState(context.Context, State, int) (bool, error)

@@ -54,6 +54,7 @@ type UpdateRoundInput struct {
 	CompletedAt      *time.Time
 	Source           Source
 	ExpectedVersion  int
+	ParticipantIDs   []string
 }
 
 type RewatchInput struct {
@@ -176,12 +177,12 @@ func (service *Service) UpdateRound(ctx context.Context, input UpdateRoundInput)
 	if !exists {
 		next.ID = uuid.NewString()
 		next.RoundNumber = 1
-		if err := service.repository.InsertRound(ctx, next); err != nil {
+		if err := service.repository.InsertRound(ctx, next, input.ParticipantIDs); err != nil {
 			return WatchRound{}, err
 		}
 		return service.attachProfileVersion(ctx, next)
 	}
-	updated, err := service.repository.UpdateRound(ctx, next, current.Version)
+	updated, err := service.repository.UpdateRound(ctx, next, current.Version, input.ParticipantIDs)
 	if err != nil {
 		return WatchRound{}, err
 	}

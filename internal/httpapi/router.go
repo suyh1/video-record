@@ -105,7 +105,6 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protected.Get("/records/{mediaID}/rounds/current", recordAPI.currentRound)
 					protected.Get("/records/{mediaID}/rounds", recordAPI.roundHistory)
 					protected.Get("/records/{mediaID}/rounds/{roundID}", recordAPI.archivedRoundDetail)
-					protected.Get("/records/{mediaID}/events", recordAPI.watchEvents)
 					protected.Get("/records/{mediaID}/progress", recordAPI.episodeProgress)
 					protected.Get("/records/{mediaID}/tags", recordAPI.tags)
 					protected.With(protectedWriteMiddleware...).Put(
@@ -137,11 +136,6 @@ func NewRouter(dependencies Dependencies) http.Handler {
 							RequireSameOrigin,
 							RequireCSRF(dependencies.Auth),
 							idempotency.Handle,
-						).Post("/records/{mediaID}/events", recordAPI.createWatchEvent)
-						protected.With(
-							RequireSameOrigin,
-							RequireCSRF(dependencies.Auth),
-							idempotency.Handle,
 						).Post("/records/{mediaID}/progress", recordAPI.updateEpisodeProgress)
 						protected.With(
 							RequireSameOrigin,
@@ -149,9 +143,6 @@ func NewRouter(dependencies Dependencies) http.Handler {
 							idempotency.Handle,
 						).Post("/records/{mediaID}/rounds/current/rewatch", recordAPI.startRewatch)
 					}
-					protected.With(protectedWriteMiddleware...).Delete(
-						"/records/{mediaID}/events/{eventID}", recordAPI.deleteWatchEvent,
-					)
 				}
 				if dependencies.Stats != nil {
 					statsAPI := statsHandlers{service: dependencies.Stats}

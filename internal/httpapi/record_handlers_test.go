@@ -200,6 +200,23 @@ func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
 	require.Contains(t, events.Body.String(), `"viewingMethod":"家庭投影"`)
 }
 
+func TestWatchEventRoutesAreRemovedFromRecordDetails(t *testing.T) {
+	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
+	url := "http://example.test/api/v1/records/" + mediaID + "/events"
+	get := performJSONRequest(router, http.MethodGet, url, nil, map[string]string{"Cookie": cookie.String()})
+	require.Equal(t, http.StatusNotFound, get.Code)
+	post := performJSONRequest(router, http.MethodPost, url, map[string]any{}, map[string]string{
+		"Cookie": cookie.String(), "Origin": "http://example.test",
+		"X-CSRF-Token": csrfToken, "Idempotency-Key": "removed-event-route",
+	})
+	require.Equal(t, http.StatusNotFound, post.Code)
+	deleted := performJSONRequest(router, http.MethodDelete, url+"/missing", nil, map[string]string{
+		"Cookie": cookie.String(), "Origin": "http://example.test",
+		"X-CSRF-Token": csrfToken, "Idempotency-Key": "removed-event-delete",
+	})
+	require.Equal(t, http.StatusNotFound, deleted.Code)
+}
+
 func newRecordsTestRouter(t *testing.T) (http.Handler, *http.Cookie, string, string, *records.Service, *storage.DB) {
 	t.Helper()
 	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "video-record.db"))

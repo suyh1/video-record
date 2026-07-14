@@ -35,6 +35,7 @@ type updateCurrentRoundRequest struct {
 	ViewingMethod    *string
 	ViewingMethodSet bool
 	WatchedAt        *time.Time
+	ParticipantIDs   []string
 }
 
 type archivedRoundResponse struct {
@@ -118,6 +119,7 @@ func (handlers recordHandlers) updateCurrentRound(w http.ResponseWriter, r *http
 		ViewingMethod: request.ViewingMethod, ViewingMethodSet: request.ViewingMethodSet,
 		CompletedAt: request.WatchedAt, Source: records.SourceManual,
 		ExpectedVersion: expectedVersion,
+		ParticipantIDs:  request.ParticipantIDs,
 	})
 	if err != nil {
 		writeRecordError(w, r, err, round.Version)
@@ -231,16 +233,19 @@ func roundScopeFromRequest(w http.ResponseWriter, r *http.Request, userID string
 
 func decodeUpdateCurrentRoundRequest(r *http.Request) (updateCurrentRoundRequest, error) {
 	var raw struct {
-		Status        records.Status  `json:"status"`
-		Rating        json.RawMessage `json:"rating"`
-		Note          json.RawMessage `json:"note"`
-		ViewingMethod json.RawMessage `json:"viewingMethod"`
-		WatchedAt     *time.Time      `json:"watchedAt"`
+		Status         records.Status  `json:"status"`
+		Rating         json.RawMessage `json:"rating"`
+		Note           json.RawMessage `json:"note"`
+		ViewingMethod  json.RawMessage `json:"viewingMethod"`
+		WatchedAt      *time.Time      `json:"watchedAt"`
+		ParticipantIDs []string        `json:"participantIds"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 		return updateCurrentRoundRequest{}, err
 	}
-	request := updateCurrentRoundRequest{Status: raw.Status, WatchedAt: raw.WatchedAt}
+	request := updateCurrentRoundRequest{
+		Status: raw.Status, WatchedAt: raw.WatchedAt, ParticipantIDs: raw.ParticipantIDs,
+	}
 	if raw.Rating != nil {
 		request.RatingSet = true
 		if string(raw.Rating) != "null" {

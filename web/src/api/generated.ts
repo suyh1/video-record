@@ -429,46 +429,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/records/{mediaID}/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                mediaID: components["parameters"]["MediaID"];
-            };
-            cookie?: never;
-        };
-        /** List immutable watch events for a media record */
-        get: operations["listWatchEvents"];
-        put?: never;
-        /** Create an immutable rewatch event */
-        post: operations["createWatchEvent"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/records/{mediaID}/events/{eventID}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                mediaID: components["parameters"]["MediaID"];
-                eventID: string;
-            };
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete an owned watch event */
-        delete: operations["deleteWatchEvent"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/records/{mediaID}/progress": {
         parameters: {
             query: {
@@ -1160,6 +1120,7 @@ export interface components {
             viewingMethod?: string | null;
             /** Format: date-time */
             watchedAt?: string;
+            participantIds?: string[];
         };
         ArchivedRound: {
             /** Format: uuid */
@@ -1202,28 +1163,6 @@ export interface components {
         RewatchRoundRequest: Record<string, never>;
         TagsRequest: {
             tags: string[];
-        };
-        WatchEvent: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            mediaId: string;
-            /** Format: uuid */
-            episodeId?: string;
-            /** Format: date-time */
-            watchedAt: string;
-            viewingMethod?: string;
-            source: components["schemas"]["RecordSource"];
-            externalEventId?: string;
-            completion: number;
-            note?: string;
-        };
-        WatchEventList: components["schemas"]["WatchEvent"][];
-        CreateWatchEventRequest: {
-            /** Format: date-time */
-            watchedAt: string;
-            viewingMethod?: string;
-            note?: string;
         };
         EpisodeProgressItem: {
             /** Format: uuid */
@@ -2434,84 +2373,6 @@ export interface operations {
             204: {
                 headers: {
                     ETag: string;
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    listWatchEvents: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                mediaID: components["parameters"]["MediaID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Watch events. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WatchEventList"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    createWatchEvent: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CSRFToken"];
-            };
-            path: {
-                mediaID: components["parameters"]["MediaID"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateWatchEventRequest"];
-            };
-        };
-        responses: {
-            /** @description Watch event created. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WatchEvent"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    deleteWatchEvent: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CSRFToken"];
-            };
-            path: {
-                mediaID: components["parameters"]["MediaID"];
-                eventID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Watch event deleted. */
-            204: {
-                headers: {
                     [name: string]: unknown;
                 };
                 content?: never;

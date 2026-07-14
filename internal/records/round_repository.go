@@ -56,13 +56,16 @@ func (repository *SQLiteRepository) findRound(
 	return round, err == nil, err
 }
 
-func (repository *SQLiteRepository) InsertRound(ctx context.Context, round WatchRound) error {
+func (repository *SQLiteRepository) InsertRound(ctx context.Context, round WatchRound, participantIDs []string) error {
 	tx, err := repository.db.Writer().BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 	if err := insertRound(ctx, tx, round); err != nil {
+		return err
+	}
+	if err := syncMovieRoundEvent(ctx, tx, round, participantIDs); err != nil {
 		return err
 	}
 	if err := projectMediaProfile(ctx, tx, round.UserID, round.MediaID); err != nil {
@@ -86,7 +89,12 @@ func insertRound(ctx context.Context, executor sqlExecutor, round WatchRound) er
 	return err
 }
 
-func (repository *SQLiteRepository) UpdateRound(ctx context.Context, round WatchRound, expectedVersion int) (bool, error) {
+func (repository *SQLiteRepository) UpdateRound(
+	ctx context.Context,
+	round WatchRound,
+	expectedVersion int,
+	participantIDs []string,
+) (bool, error) {
 	tx, err := repository.db.Writer().BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
@@ -110,6 +118,9 @@ func (repository *SQLiteRepository) UpdateRound(ctx context.Context, round Watch
 	if err != nil || rows != 1 {
 		return false, err
 	}
+	if err := syncMovieRoundEvent(ctx, tx, round, participantIDs); err != nil {
+		return false, err
+	}
 	if err := projectMediaProfile(ctx, tx, round.UserID, round.MediaID); err != nil {
 		return false, err
 	}
@@ -117,6 +128,72 @@ func (repository *SQLiteRepository) UpdateRound(ctx context.Context, round Watch
 		return false, err
 	}
 	return true, nil
+}
+
+func syncMovieRoundEvent(
+	ctx context.Context,
+	tx *sql.Tx,
+	round WatchRound,
+	participantIDs []string,
+) error {
+	if round.SeasonNumber != nil {
+		return nil
+	}
+	var eventID string
+	err := tx.QueryRowContext(ctx, `
+		SELECT id FROM watch_events
+		WHERE round_id = ? AND episode_id IS NULL
+		ORDER BY id LIMIT 1
+	`, round.ID).Scan(&eventID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if round.Status != StatusCompleted {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		_, err = tx.ExecContext(ctx, "DELETE FROM watch_events WHERE id = ? AND round_id = ?", eventID, round.ID)
+		return err
+	}
+	if round.CompletedAt == nil {
+		return ErrInvalidWatchedAt
+	}
+	viewingMethod := ""
+	if round.ViewingMethod != nil {
+		viewingMethod = *round.ViewingMethod
+	}
+	event, createErr := newWatchEvent(CreateWatchEventInput{
+		RoundID: round.ID, UserID: round.UserID, MediaID: round.MediaID,
+		WatchedAt: *round.CompletedAt, ViewingMethod: viewingMethod,
+		Source: round.StatusSource, Completion: 100, ParticipantIDs: participantIDs,
+	})
+	if createErr != nil {
+		return createErr
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return insertWatchEvent(ctx, tx, event)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE watch_events
+		SET watched_at = ?, viewing_method = ?, source = ?
+		WHERE id = ? AND round_id = ?
+	`, formatEventTime(event.WatchedAt), nullableString(event.ViewingMethod), event.Source, eventID, round.ID); err != nil {
+		return err
+	}
+	if participantIDs == nil {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM watch_event_participants WHERE event_id = ?", eventID); err != nil {
+		return err
+	}
+	for _, participantID := range event.ParticipantIDs {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO watch_event_participants (event_id, user_id) VALUES (?, ?)
+		`, eventID, participantID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (repository *SQLiteRepository) ArchiveCurrentRound(

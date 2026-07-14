@@ -44,15 +44,14 @@ func TestHouseholdMembersPrivacySharingAndSharedEvents(t *testing.T) {
 	recordService := records.NewService(records.NewRepository(db))
 	rating := 91
 	privateNote := "只有我能看到的长笔记"
-	recordState, event, err := recordService.RecordStatus(ctx, records.RecordStatusInput{
-		UpdateStateInput: records.UpdateStateInput{
-			UserID: member.ID, MediaID: movie.ID, Status: records.StatusCompleted,
-			Rating: &rating, Note: &privateNote, Source: records.SourceManual, ExpectedVersion: 0,
-		},
-		WatchedAt: time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC),
+	completedAt := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	recordState, err := recordService.UpdateRound(ctx, records.UpdateRoundInput{
+		Scope:  records.RoundScope{UserID: member.ID, MediaID: movie.ID},
+		Status: records.StatusCompleted, Rating: &rating, RatingSet: true,
+		Note: &privateNote, NoteSet: true, CompletedAt: &completedAt,
+		Source: records.SourceManual, ParticipantIDs: []string{admin.ID},
 	})
 	require.NoError(t, err)
-	require.NotNil(t, event)
 	sharing, err := service.Sharing(ctx, member.ID, member.ID, movie.ID)
 	require.NoError(t, err)
 	require.Equal(t, recordState.Version, sharing.Version)
@@ -63,11 +62,6 @@ func TestHouseholdMembersPrivacySharingAndSharedEvents(t *testing.T) {
 	require.ErrorIs(t, err, ErrForbidden)
 	_, err = service.Sharing(ctx, member.ID, member.ID, "missing")
 	require.ErrorIs(t, err, ErrRecordNotFound)
-	_, err = db.Writer().ExecContext(ctx, `
-		INSERT INTO watch_event_participants (event_id, user_id) VALUES (?, ?)
-	`, event.ID, admin.ID)
-	require.NoError(t, err)
-
 	private, err := service.VisibleRecord(ctx, admin.ID, member.ID, movie.ID)
 	require.NoError(t, err)
 	require.Nil(t, private.Rating)
@@ -206,10 +200,11 @@ func TestHouseholdValidationAuthorizationAndSharingConflicts(t *testing.T) {
 	require.NoError(t, err)
 	recordService := records.NewService(records.NewRepository(db))
 	rating := 88
-	state, _, err := recordService.RecordStatus(ctx, records.RecordStatusInput{UpdateStateInput: records.UpdateStateInput{
-		UserID: member.ID, MediaID: movie.ID, Status: records.StatusWishlist,
-		Rating: &rating, Source: records.SourceManual, ExpectedVersion: 0,
-	}})
+	state, err := recordService.UpdateRound(ctx, records.UpdateRoundInput{
+		Scope:  records.RoundScope{UserID: member.ID, MediaID: movie.ID},
+		Status: records.StatusWishlist, Rating: &rating, RatingSet: true,
+		Source: records.SourceManual,
+	})
 	require.NoError(t, err)
 
 	_, err = service.UpdateSharing(ctx, member.ID, member.ID, "", SharingInput{ExpectedVersion: state.Version})
@@ -243,4 +238,64 @@ func TestHouseholdValidationAuthorizationAndSharingConflicts(t *testing.T) {
 
 	require.NoError(t, service.DeactivateMember(ctx, admin.ID, member.ID))
 	require.ErrorIs(t, service.ResetPassword(ctx, admin.ID, member.ID, "replacement password 456"), ErrMemberNotFound)
+}
+
+func TestRoundPrivacyUsesCurrentRoundAndPreservesProfileSharing(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.Open(ctx, filepath.Join(t.TempDir(), "video-record.db"))
+	require.NoError(t, err)
+	require.NoError(t, storage.Migrate(ctx, db))
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	authService := auth.NewService(auth.NewRepository(db), auth.ServiceOptions{})
+	admin, err := authService.Initialize(ctx, "owner", "correct horse battery staple")
+	require.NoError(t, err)
+	service := NewService(NewRepository(db))
+	member, err := service.CreateMember(ctx, admin.ID, "round-family", "family password 123")
+	require.NoError(t, err)
+	mediaService := media.NewService(media.NewRepository(db))
+	movie, err := mediaService.CreateCustom(ctx, media.CreateCustomInput{
+		MediaType: media.MediaTypeMovie, Title: "轮次家庭电影",
+	})
+	require.NoError(t, err)
+	recordService := records.NewService(records.NewRepository(db))
+	rating := 91
+	note := "归档后不能泄露"
+	completedAt := time.Date(2026, 7, 13, 12, 0, 1, 0, time.UTC)
+	round, err := recordService.UpdateRound(ctx, records.UpdateRoundInput{
+		Scope:  records.RoundScope{UserID: member.ID, MediaID: movie.ID},
+		Status: records.StatusCompleted, Rating: &rating, RatingSet: true,
+		Note: &note, NoteSet: true, CompletedAt: &completedAt, Source: records.SourceManual,
+	})
+	require.NoError(t, err)
+	sharing, err := service.Sharing(ctx, member.ID, member.ID, movie.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, sharing.Version)
+	sharing, err = service.UpdateSharing(ctx, member.ID, member.ID, movie.ID, SharingInput{
+		ShareRating: true, ShareReview: true, SharedReview: "适合一起看",
+		ExpectedVersion: sharing.Version,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 2, sharing.Version)
+
+	visible, err := service.VisibleRecord(ctx, admin.ID, member.ID, movie.ID)
+	require.NoError(t, err)
+	require.Equal(t, rating, *visible.Rating)
+	require.Nil(t, visible.PrivateNote)
+	require.Equal(t, "适合一起看", *visible.SharedReview)
+	_, err = recordService.StartRewatch(ctx, records.RewatchInput{
+		Scope:           records.RoundScope{UserID: member.ID, MediaID: movie.ID},
+		ExpectedVersion: round.Version,
+	})
+	require.NoError(t, err)
+
+	visible, err = service.VisibleRecord(ctx, admin.ID, member.ID, movie.ID)
+	require.NoError(t, err)
+	require.Nil(t, visible.Rating)
+	require.Nil(t, visible.PrivateNote)
+	require.Equal(t, "适合一起看", *visible.SharedReview)
+	preserved, err := service.Sharing(ctx, member.ID, member.ID, movie.ID)
+	require.NoError(t, err)
+	require.True(t, preserved.ShareRating)
+	require.True(t, preserved.ShareReview)
+	require.Equal(t, 2, preserved.Version)
 }

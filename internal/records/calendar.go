@@ -93,24 +93,24 @@ func (repository *SQLiteRepository) CalendarEvents(
 		               (counted_season.season_number = season.season_number AND counted_episode.episode_number <= episode.episode_number)
 		             )
 		       ) END,
-		       we.watched_at, we.viewing_method, COALESCE(state.status, 'none'), participant_user.username
+		       we.watched_at, we.viewing_method, round.status, participant_user.username
 		FROM watch_events we
+		JOIN watch_rounds round ON round.id = we.round_id
 		JOIN watch_event_participants viewer
 		  ON viewer.event_id = we.id AND viewer.user_id = ?
 		JOIN media_items media ON media.id = we.media_id
 		LEFT JOIN episodes episode ON episode.id = we.episode_id
 		LEFT JOIN seasons season ON season.id = episode.season_id
-		LEFT JOIN user_media_states state ON state.media_id = we.media_id AND state.user_id = ?
 		JOIN watch_event_participants participant ON participant.event_id = we.id
 		JOIN users participant_user ON participant_user.id = participant.user_id
 		WHERE we.watched_at >= ? AND we.watched_at < ?`
-	arguments := []any{userID, userID, formatEventTime(start), formatEventTime(end)}
+	arguments := []any{userID, formatEventTime(start), formatEventTime(end)}
 	switch filter {
 	case CalendarFilterCompleted:
-		query += " AND state.status = ?"
+		query += " AND round.status = ?"
 		arguments = append(arguments, StatusCompleted)
 	case CalendarFilterInProgress:
-		query += " AND state.status = ?"
+		query += " AND round.status = ?"
 		arguments = append(arguments, StatusWatching)
 	}
 	query += " ORDER BY we.watched_at, we.id, participant_user.username"

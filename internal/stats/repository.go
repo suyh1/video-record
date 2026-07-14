@@ -64,9 +64,9 @@ func (repository *SQLiteRepository) GenreCounts(ctx context.Context, userID stri
 
 func (repository *SQLiteRepository) Ratings(ctx context.Context, userID string) ([]int, error) {
 	rows, err := repository.db.Reader().QueryContext(ctx, `
-		SELECT rating FROM user_media_states
+		SELECT rating FROM watch_rounds
 		WHERE user_id = ? AND rating IS NOT NULL
-		ORDER BY rating
+		ORDER BY completed_at, round_number, rating
 	`, userID)
 	if err != nil {
 		return nil, err

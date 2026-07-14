@@ -514,53 +514,6 @@ paths:
           headers:
             ETag: { required: true, schema: { type: string } }
         default: { $ref: '#/components/responses/Problem' }
-  /api/v1/records/{mediaID}/events:
-    parameters:
-      - $ref: '#/components/parameters/MediaID'
-    get:
-      operationId: listWatchEvents
-      summary: List immutable watch events for a media record
-      responses:
-        '200':
-          description: Watch events.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WatchEventList' }
-        default: { $ref: '#/components/responses/Problem' }
-    post:
-      operationId: createWatchEvent
-      summary: Create an immutable rewatch event
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/CSRFToken'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/CreateWatchEventRequest' }
-      responses:
-        '201':
-          description: Watch event created.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WatchEvent' }
-        default: { $ref: '#/components/responses/Problem' }
-  /api/v1/records/{mediaID}/events/{eventID}:
-    parameters:
-      - $ref: '#/components/parameters/MediaID'
-      - name: eventID
-        in: path
-        required: true
-        schema: { type: string, format: uuid }
-    delete:
-      operationId: deleteWatchEvent
-      summary: Delete an owned watch event
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/CSRFToken'
-      responses:
-        '204': { description: Watch event deleted. }
-        default: { $ref: '#/components/responses/Problem' }
   /api/v1/records/{mediaID}/progress:
     parameters:
       - $ref: '#/components/parameters/MediaID'
@@ -1369,6 +1322,10 @@ components:
         note: { type: [string, 'null'] }
         viewingMethod: { type: [string, 'null'], maxLength: 80 }
         watchedAt: { type: string, format: date-time }
+        participantIds:
+          type: array
+          uniqueItems: true
+          items: { type: string, format: uuid }
     ArchivedRound:
       type: object
       additionalProperties: false
@@ -1431,31 +1388,6 @@ components:
         tags:
           type: array
           items: { type: string }
-    WatchEvent:
-      type: object
-      additionalProperties: false
-      required: [id, mediaId, watchedAt, source, completion]
-      properties:
-        id: { type: string, format: uuid }
-        mediaId: { type: string, format: uuid }
-        episodeId: { type: string, format: uuid }
-        watchedAt: { type: string, format: date-time }
-        viewingMethod: { type: string }
-        source: { $ref: '#/components/schemas/RecordSource' }
-        externalEventId: { type: string }
-        completion: { type: integer, minimum: 0, maximum: 100 }
-        note: { type: string }
-    WatchEventList:
-      type: array
-      items: { $ref: '#/components/schemas/WatchEvent' }
-    CreateWatchEventRequest:
-      type: object
-      additionalProperties: false
-      required: [watchedAt]
-      properties:
-        watchedAt: { type: string, format: date-time }
-        viewingMethod: { type: string }
-        note: { type: string }
     EpisodeProgressItem:
       type: object
       additionalProperties: false

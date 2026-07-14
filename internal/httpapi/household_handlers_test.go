@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -34,14 +35,13 @@ func TestPolicyHandlersNeverExposePrivateNotesAndRequireExplicitSharing(t *testi
 	recordService := records.NewService(records.NewRepository(db))
 	rating := 91
 	note := "管理员也不能读取"
-	state, event, err := recordService.RecordStatus(ctx, records.RecordStatusInput{
-		UpdateStateInput: records.UpdateStateInput{
-			UserID: member.ID, MediaID: movie.ID, Status: records.StatusCompleted,
-			Rating: &rating, Note: &note, Source: records.SourceManual, ExpectedVersion: 0,
-		},
+	completedAt := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	state, err := recordService.UpdateRound(ctx, records.UpdateRoundInput{
+		Scope:  records.RoundScope{UserID: member.ID, MediaID: movie.ID},
+		Status: records.StatusCompleted, Rating: &rating, RatingSet: true,
+		Note: &note, NoteSet: true, CompletedAt: &completedAt,
+		Source: records.SourceManual, ParticipantIDs: []string{admin.ID},
 	})
-	require.NoError(t, err)
-	_, err = db.Writer().ExecContext(ctx, "INSERT INTO watch_event_participants (event_id, user_id) VALUES (?, ?)", event.ID, admin.ID)
 	require.NoError(t, err)
 
 	router := NewRouter(Dependencies{

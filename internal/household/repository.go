@@ -151,8 +151,17 @@ func (repository *SQLiteRepository) RecordPrivacy(ctx context.Context, ownerID, 
 	var note, sharedReview sql.NullString
 	var shareRating, shareReview int
 	err := repository.db.Reader().QueryRowContext(ctx, `
-		SELECT rating, note, share_rating, share_review, shared_review, version
-		FROM user_media_states WHERE user_id = ? AND media_id = ?
+		SELECT current.rating, current.note,
+		       profile.share_rating, profile.share_review, profile.shared_review, profile.version
+		FROM user_media_profiles profile
+		LEFT JOIN watch_rounds current ON current.id = (
+			SELECT candidate.id FROM watch_rounds candidate
+			WHERE candidate.user_id = profile.user_id AND candidate.media_id = profile.media_id
+			  AND candidate.archived_at IS NULL
+			ORDER BY candidate.updated_at DESC, candidate.season_number DESC, candidate.id DESC
+			LIMIT 1
+		)
+		WHERE profile.user_id = ? AND profile.media_id = ?
 	`, ownerID, mediaID).Scan(&rating, &note, &shareRating, &shareReview, &sharedReview, &record.Version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return recordPrivacy{}, ErrRecordNotFound
@@ -187,7 +196,7 @@ func (repository *SQLiteRepository) UpdateSharing(
 		review = input.SharedReview
 	}
 	result, err := repository.db.Writer().ExecContext(ctx, `
-		UPDATE user_media_states SET
+		UPDATE user_media_profiles SET
 			share_rating = ?, share_review = ?, shared_review = ?,
 			version = version + 1, updated_at = strftime('%s', 'now') * 1000
 		WHERE user_id = ? AND media_id = ? AND version = ?
@@ -202,7 +211,7 @@ func (repository *SQLiteRepository) UpdateSharing(
 	if rows != 1 {
 		var exists int
 		if err := repository.db.Reader().QueryRowContext(ctx, `
-			SELECT COUNT(*) FROM user_media_states WHERE user_id = ? AND media_id = ?
+			SELECT COUNT(*) FROM user_media_profiles WHERE user_id = ? AND media_id = ?
 		`, ownerID, mediaID).Scan(&exists); err != nil {
 			return recordPrivacy{}, err
 		}
