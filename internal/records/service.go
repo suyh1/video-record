@@ -48,10 +48,19 @@ type Collection struct {
 
 type Service struct {
 	repository Repository
+	now        func() time.Time
 }
 
-func NewService(repository Repository) *Service {
-	return &Service{repository: repository}
+type ServiceOptions struct {
+	Now func() time.Time
+}
+
+func NewService(repository Repository, options ...ServiceOptions) *Service {
+	now := time.Now
+	if len(options) > 0 && options[0].Now != nil {
+		now = options[0].Now
+	}
+	return &Service{repository: repository, now: now}
 }
 
 func (service *Service) UpdateState(ctx context.Context, input UpdateStateInput) (State, error) {

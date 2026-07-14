@@ -14,6 +14,11 @@ import (
 )
 
 type Repository interface {
+	ValidateRoundScope(context.Context, RoundScope) error
+	FindCurrentRound(context.Context, RoundScope) (WatchRound, bool, error)
+	FindLatestRound(context.Context, RoundScope) (WatchRound, bool, error)
+	InsertRound(context.Context, WatchRound) error
+	UpdateRound(context.Context, WatchRound, int) (bool, error)
 	FindState(context.Context, string, string) (State, bool, error)
 	InsertState(context.Context, State) error
 	UpdateState(context.Context, State, int) (bool, error)
