@@ -208,6 +208,89 @@ func TestDeletingEpisodeWatchEventReprojectsSeriesProgress(t *testing.T) {
 	require.Equal(t, 2, progress.Version)
 }
 
+func TestSparseExternalEpisodeProgressStoresOnlySelectedIdentities(t *testing.T) {
+	service, db, userID, movieID := newTestRecordsService(t)
+	ctx := context.Background()
+	require.NoError(t, func() error {
+		_, err := db.Writer().ExecContext(ctx, "DELETE FROM media_items WHERE id = ?", movieID)
+		return err
+	}())
+	mediaService := media.NewService(media.NewRepository(db))
+	series, err := mediaService.UpsertExternal(ctx, media.ExternalSnapshot{
+		Source: "tmdb", SourceID: "1399", MediaType: media.MediaTypeTV, Title: "权力的游戏",
+	})
+	require.NoError(t, err)
+	watchedAt := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	references := []EpisodeReference{
+		{SourceID: "63056", SeasonNumber: 1, EpisodeNumber: 1, AbsoluteNumber: 1},
+		{SourceID: "63057", SeasonNumber: 1, EpisodeNumber: 2, AbsoluteNumber: 2},
+	}
+
+	progress, err := service.UpdateEpisodeProgress(ctx, EpisodeProgressInput{
+		UserID: userID, MediaID: series.ID, Action: EpisodeProgressRange,
+		EpisodeRefs: references, TotalEpisodes: 12,
+		WatchedAt: watchedAt, Source: SourceManual,
+	})
+	require.NoError(t, err)
+	require.Equal(t, StatusWatching, progress.Status)
+	require.Equal(t, 2, progress.WatchedEpisodes)
+	require.Equal(t, 12, progress.TotalEpisodes)
+	require.Len(t, progress.Episodes, 2)
+	require.Equal(t, "63056", progress.Episodes[0].SourceID)
+	require.Equal(t, 1, progress.Episodes[0].AbsoluteNumber)
+
+	var seasonCount, episodeCount int
+	require.NoError(t, db.Reader().QueryRowContext(ctx, "SELECT COUNT(*) FROM seasons WHERE media_id = ?", series.ID).Scan(&seasonCount))
+	require.NoError(t, db.Reader().QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM episodes episode
+		JOIN seasons season ON season.id = episode.season_id
+		WHERE season.media_id = ?
+	`, series.ID).Scan(&episodeCount))
+	require.Equal(t, 1, seasonCount)
+	require.Equal(t, 2, episodeCount)
+	var name, overview, stillPath, airDate string
+	require.NoError(t, db.Reader().QueryRowContext(ctx, `
+		SELECT name, overview, still_path, air_date FROM episodes WHERE source_id = '63056'
+	`).Scan(&name, &overview, &stillPath, &airDate))
+	require.Empty(t, name)
+	require.Empty(t, overview)
+	require.Empty(t, stillPath)
+	require.Empty(t, airDate)
+	require.Len(t, mustWatchEvents(t, service, userID, series.ID), 2)
+
+	replayed, err := service.UpdateEpisodeProgress(ctx, EpisodeProgressInput{
+		UserID: userID, MediaID: series.ID, Action: EpisodeProgressRange,
+		EpisodeRefs: references, TotalEpisodes: 12,
+		WatchedAt: watchedAt, Source: SourceManual, ExpectedVersion: progress.Version,
+	})
+	require.NoError(t, err)
+	require.Equal(t, progress.Version, replayed.Version)
+	require.Len(t, mustWatchEvents(t, service, userID, series.ID), 2)
+
+	undone, err := service.UpdateEpisodeProgress(ctx, EpisodeProgressInput{
+		UserID: userID, MediaID: series.ID, Action: EpisodeProgressUndo,
+		EpisodeRefs: []EpisodeReference{references[1]}, TotalEpisodes: 12,
+		Source: SourceManual, ExpectedVersion: replayed.Version,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, undone.WatchedEpisodes)
+	require.Equal(t, StatusWatching, undone.Status)
+	require.Len(t, mustWatchEvents(t, service, userID, series.ID), 1)
+}
+
+func TestSparseExternalEpisodeProgressRejectsInvalidReferences(t *testing.T) {
+	service, _, userID, mediaID, _ := newTestSeriesService(t)
+	for _, input := range []EpisodeProgressInput{
+		{UserID: userID, MediaID: mediaID, Action: EpisodeProgressSingle, Source: SourceManual, EpisodeRefs: []EpisodeReference{{SeasonNumber: 1, EpisodeNumber: 1, AbsoluteNumber: 1}}, TotalEpisodes: 1},
+		{UserID: userID, MediaID: mediaID, Action: EpisodeProgressSingle, Source: SourceManual, EpisodeRefs: []EpisodeReference{{SourceID: "1", EpisodeNumber: 1, AbsoluteNumber: 1}}, TotalEpisodes: 1},
+		{UserID: userID, MediaID: mediaID, Action: EpisodeProgressSingle, Source: SourceManual, EpisodeRefs: []EpisodeReference{{SourceID: "1", SeasonNumber: 1, EpisodeNumber: 1, AbsoluteNumber: 2}}, TotalEpisodes: 1},
+		{UserID: userID, MediaID: mediaID, Action: EpisodeProgressSingle, Source: SourceManual, EpisodeRefs: []EpisodeReference{{SourceID: "1", SeasonNumber: 1, EpisodeNumber: 1, AbsoluteNumber: 1}, {SourceID: "1", SeasonNumber: 1, EpisodeNumber: 1, AbsoluteNumber: 1}}, TotalEpisodes: 1},
+	} {
+		_, err := service.UpdateEpisodeProgress(context.Background(), input)
+		require.ErrorIs(t, err, ErrInvalidEpisodeProgress)
+	}
+}
+
 func newTestSeriesService(t *testing.T) (*Service, *storage.DB, string, string, [][]string) {
 	t.Helper()
 	service, db, userID, movieID := newTestRecordsService(t)

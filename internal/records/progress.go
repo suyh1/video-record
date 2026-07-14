@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var (
@@ -32,10 +34,20 @@ type EpisodeProgressInput struct {
 	WatchedAt        time.Time
 	Source           Source
 	ExpectedVersion  int
+	EpisodeRefs      []EpisodeReference
+	TotalEpisodes    int
+}
+
+type EpisodeReference struct {
+	SourceID       string
+	SeasonNumber   int
+	EpisodeNumber  int
+	AbsoluteNumber int
 }
 
 type Episode struct {
 	ID             string
+	SourceID       string
 	SeasonID       string
 	SeasonNumber   int
 	EpisodeNumber  int
@@ -74,18 +86,67 @@ func (service *Service) UpdateEpisodeProgress(ctx context.Context, input Episode
 	if current.Version != input.ExpectedVersion {
 		return current, ErrVersionConflict
 	}
-	targets, watched, err := selectProgressTargets(current.Episodes, input)
-	if err != nil {
-		return current, err
-	}
+	var changed bool
 	if input.WatchedAt.IsZero() {
 		input.WatchedAt = time.Now().UTC()
 	}
-	_, err = service.repository.ApplyEpisodeProgress(ctx, input, targets, watched)
+	if len(input.EpisodeRefs) > 0 {
+		if err := validateEpisodeReferences(input); err != nil {
+			return current, err
+		}
+		changed, err = service.repository.ApplyExternalEpisodeProgress(
+			ctx, input, input.EpisodeRefs, input.Action != EpisodeProgressUndo,
+		)
+	} else {
+		targets, watched, selectErr := selectProgressTargets(current.Episodes, input)
+		if selectErr != nil {
+			return current, selectErr
+		}
+		changed, err = service.repository.ApplyEpisodeProgress(ctx, input, targets, watched)
+	}
 	if err != nil {
 		return current, err
 	}
-	return service.repository.Episodes(ctx, input.UserID, input.MediaID)
+	if !changed {
+		return current, nil
+	}
+	progress, err := service.repository.Episodes(ctx, input.UserID, input.MediaID)
+	if err == nil && input.TotalEpisodes > progress.TotalEpisodes {
+		progress.TotalEpisodes = input.TotalEpisodes
+	}
+	return progress, err
+}
+
+func validateEpisodeReferences(input EpisodeProgressInput) error {
+	switch input.Action {
+	case EpisodeProgressSingle, EpisodeProgressRange, EpisodeProgressSeason, EpisodeProgressNext, EpisodeProgressUndo:
+	default:
+		return ErrInvalidEpisodeProgress
+	}
+	if input.TotalEpisodes < 1 {
+		return ErrInvalidEpisodeProgress
+	}
+	if (input.Action == EpisodeProgressSingle || input.Action == EpisodeProgressNext || input.Action == EpisodeProgressUndo) && len(input.EpisodeRefs) != 1 {
+		return ErrInvalidEpisodeProgress
+	}
+	seenSources := make(map[string]struct{}, len(input.EpisodeRefs))
+	seenNumbers := make(map[[2]int]struct{}, len(input.EpisodeRefs))
+	for _, episode := range input.EpisodeRefs {
+		if episode.SourceID == "" || episode.SeasonNumber < 1 || episode.EpisodeNumber < 1 ||
+			episode.AbsoluteNumber < 1 || episode.AbsoluteNumber > input.TotalEpisodes {
+			return ErrInvalidEpisodeProgress
+		}
+		if _, exists := seenSources[episode.SourceID]; exists {
+			return ErrInvalidEpisodeProgress
+		}
+		seenSources[episode.SourceID] = struct{}{}
+		number := [2]int{episode.SeasonNumber, episode.EpisodeNumber}
+		if _, exists := seenNumbers[number]; exists {
+			return ErrInvalidEpisodeProgress
+		}
+		seenNumbers[number] = struct{}{}
+	}
+	return nil
 }
 
 func selectProgressTargets(episodes []Episode, input EpisodeProgressInput) ([]string, bool, error) {
@@ -138,8 +199,8 @@ func selectProgressTargets(episodes []Episode, input EpisodeProgressInput) ([]st
 
 func (repository *SQLiteRepository) Episodes(ctx context.Context, userID, mediaID string) (SeriesProgress, error) {
 	rows, err := repository.db.Reader().QueryContext(ctx, `
-		SELECT episode.id, season.id, season.season_number, episode.episode_number,
-		       ROW_NUMBER() OVER (ORDER BY season.season_number, episode.episode_number),
+		SELECT episode.id, COALESCE(episode.source_id, ''), season.id, season.season_number, episode.episode_number,
+		       COALESCE(episode.absolute_number, ROW_NUMBER() OVER (ORDER BY season.season_number, episode.episode_number)),
 		       episode.name, progress.watched_at
 		FROM episodes episode
 		JOIN seasons season ON season.id = episode.season_id
@@ -157,7 +218,7 @@ func (repository *SQLiteRepository) Episodes(ctx context.Context, userID, mediaI
 		var episode Episode
 		var watchedAt sql.NullString
 		if err := rows.Scan(
-			&episode.ID, &episode.SeasonID, &episode.SeasonNumber, &episode.EpisodeNumber,
+			&episode.ID, &episode.SourceID, &episode.SeasonID, &episode.SeasonNumber, &episode.EpisodeNumber,
 			&episode.AbsoluteNumber, &episode.Name, &watchedAt,
 		); err != nil {
 			return SeriesProgress{}, err
@@ -201,6 +262,28 @@ func (repository *SQLiteRepository) ApplyEpisodeProgress(
 	episodeIDs []string,
 	watched bool,
 ) (bool, error) {
+	return repository.applyEpisodeProgress(ctx, input, watched, func(_ *sql.Tx) ([]string, error) {
+		return episodeIDs, nil
+	})
+}
+
+func (repository *SQLiteRepository) ApplyExternalEpisodeProgress(
+	ctx context.Context,
+	input EpisodeProgressInput,
+	episodes []EpisodeReference,
+	watched bool,
+) (bool, error) {
+	return repository.applyEpisodeProgress(ctx, input, watched, func(tx *sql.Tx) ([]string, error) {
+		return ensureEpisodeIdentities(ctx, tx, input.MediaID, episodes)
+	})
+}
+
+func (repository *SQLiteRepository) applyEpisodeProgress(
+	ctx context.Context,
+	input EpisodeProgressInput,
+	watched bool,
+	resolveEpisodeIDs func(*sql.Tx) ([]string, error),
+) (bool, error) {
 	tx, err := repository.db.Writer().BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
@@ -212,6 +295,10 @@ func (repository *SQLiteRepository) ApplyEpisodeProgress(
 	}
 	if current.Version != input.ExpectedVersion {
 		return false, ErrVersionConflict
+	}
+	episodeIDs, err := resolveEpisodeIDs(tx)
+	if err != nil {
+		return false, err
 	}
 
 	changed := false
@@ -288,6 +375,9 @@ func (repository *SQLiteRepository) ApplyEpisodeProgress(
 	`, input.UserID, input.MediaID).Scan(&watchedCount, &totalCount); err != nil {
 		return false, err
 	}
+	if input.TotalEpisodes > totalCount {
+		totalCount = input.TotalEpisodes
+	}
 	next := current
 	if !exists {
 		next = State{
@@ -318,6 +408,62 @@ func (repository *SQLiteRepository) ApplyEpisodeProgress(
 		return false, err
 	}
 	return true, nil
+}
+
+func ensureEpisodeIdentities(
+	ctx context.Context,
+	tx *sql.Tx,
+	mediaID string,
+	episodes []EpisodeReference,
+) ([]string, error) {
+	var validSeries int
+	if err := tx.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM media_items WHERE id = ? AND media_type = 'tv'
+	`, mediaID).Scan(&validSeries); err != nil {
+		return nil, err
+	}
+	if validSeries != 1 {
+		return nil, ErrInvalidEpisodeProgress
+	}
+	ids := make([]string, 0, len(episodes))
+	for _, episode := range episodes {
+		seasonID := uuid.NewString()
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO seasons (id, media_id, season_number, name, overview, poster_path, air_date)
+			VALUES (?, ?, ?, '', '', '', '')
+			ON CONFLICT(media_id, season_number) DO NOTHING
+		`, seasonID, mediaID, episode.SeasonNumber); err != nil {
+			return nil, err
+		}
+		if err := tx.QueryRowContext(ctx, `
+			SELECT id FROM seasons WHERE media_id = ? AND season_number = ?
+		`, mediaID, episode.SeasonNumber).Scan(&seasonID); err != nil {
+			return nil, err
+		}
+
+		episodeID := uuid.NewString()
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO episodes (
+				id, season_id, source_id, episode_number, absolute_number,
+				name, overview, still_path, air_date
+			) VALUES (?, ?, ?, ?, ?, '', '', '', '')
+			ON CONFLICT(season_id, episode_number) DO UPDATE SET
+				source_id = CASE
+					WHEN episodes.source_id IS NULL OR episodes.source_id = '' THEN excluded.source_id
+					ELSE episodes.source_id
+				END,
+				absolute_number = excluded.absolute_number
+		`, episodeID, seasonID, episode.SourceID, episode.EpisodeNumber, episode.AbsoluteNumber); err != nil {
+			return nil, err
+		}
+		if err := tx.QueryRowContext(ctx, `
+			SELECT id FROM episodes WHERE season_id = ? AND episode_number = ?
+		`, seasonID, episode.EpisodeNumber).Scan(&episodeID); err != nil {
+			return nil, err
+		}
+		ids = append(ids, episodeID)
+	}
+	return ids, nil
 }
 
 func projectedSeriesStatus(watched, total int) Status {

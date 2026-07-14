@@ -26,6 +26,7 @@ type Repository interface {
 	CalendarEvents(context.Context, string, time.Time, time.Time, CalendarFilter) ([]CalendarEvent, error)
 	Episodes(context.Context, string, string) (SeriesProgress, error)
 	ApplyEpisodeProgress(context.Context, EpisodeProgressInput, []string, bool) (bool, error)
+	ApplyExternalEpisodeProgress(context.Context, EpisodeProgressInput, []EpisodeReference, bool) (bool, error)
 	SetTags(context.Context, string, string, []string) error
 	SetTagsVersioned(context.Context, string, string, []string, int) (bool, error)
 	Tags(context.Context, string, string) ([]string, error)

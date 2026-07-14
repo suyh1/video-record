@@ -107,6 +107,33 @@ func TestMigrateStopsBeforeUpgradeWhenBackupFails(t *testing.T) {
 	require.Equal(t, previousVersion, version)
 }
 
+func TestEpisodeIdentityMigrationBackfillsAbsoluteNumbers(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "video-record.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	migrateToPreviousEmbeddedVersion(t, ctx, db)
+	_, err = db.Writer().ExecContext(ctx, `
+		INSERT INTO media_items (
+			id, media_type, external_title, original_title, release_date,
+			external_overview, poster_path, backdrop_path, created_at, updated_at
+		) VALUES ('series', 'tv', '剧集', '', '', '', '', '', 1, 1);
+		INSERT INTO seasons (id, media_id, season_number, name, overview, poster_path, air_date)
+		VALUES ('season-1', 'series', 1, '第 1 季', '', '', '');
+		INSERT INTO episodes (id, season_id, episode_number, name, overview, still_path, air_date)
+		VALUES ('episode-1', 'season-1', 1, '', '', '', ''),
+		       ('episode-2', 'season-1', 2, '', '', '', '');
+	`)
+	require.NoError(t, err)
+
+	require.NoError(t, Migrate(ctx, db))
+	var first, second int
+	require.NoError(t, db.Reader().QueryRowContext(ctx, "SELECT absolute_number FROM episodes WHERE id = 'episode-1'").Scan(&first))
+	require.NoError(t, db.Reader().QueryRowContext(ctx, "SELECT absolute_number FROM episodes WHERE id = 'episode-2'").Scan(&second))
+	require.Equal(t, 1, first)
+	require.Equal(t, 2, second)
+}
+
 func migrateToPreviousEmbeddedVersion(t *testing.T, ctx context.Context, db *DB) int {
 	t.Helper()
 	migrationFS, err := fs.Sub(embeddedMigrations, "migrations")
