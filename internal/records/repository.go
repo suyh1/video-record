@@ -31,6 +31,8 @@ type Repository interface {
 	SearchMedia(context.Context, string, string) ([]CatalogItem, error)
 	CalendarEvents(context.Context, string, time.Time, time.Time, CalendarFilter) ([]CalendarEvent, error)
 	Episodes(context.Context, string, string) (SeriesProgress, error)
+	SeasonEpisodes(context.Context, string, string, int) (SeriesProgress, error)
+	ApplySeasonEpisodeProgress(context.Context, EpisodeProgressInput, []string) (bool, error)
 	ApplyEpisodeProgress(context.Context, EpisodeProgressInput, []string, bool) (bool, error)
 	ApplyExternalEpisodeProgress(context.Context, EpisodeProgressInput, []EpisodeReference, bool) (bool, error)
 	SetTags(context.Context, string, string, []string) error
@@ -185,10 +187,10 @@ func (repository *SQLiteRepository) CreateWatchEvent(ctx context.Context, event 
 func insertWatchEvent(ctx context.Context, tx *sql.Tx, event WatchEvent) error {
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO watch_events (
-			id, created_by_user_id, media_id, episode_id, watched_at,
+			id, round_id, created_by_user_id, media_id, episode_id, watched_at,
 			viewing_method, source, external_event_id, completion, note, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now') * 1000)
-	`, event.ID, event.UserID, event.MediaID, nullableString(event.EpisodeID), formatEventTime(event.WatchedAt),
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now') * 1000)
+	`, event.ID, event.RoundID, event.UserID, event.MediaID, nullableString(event.EpisodeID), formatEventTime(event.WatchedAt),
 		nullableString(event.ViewingMethod), event.Source, nullableString(event.ExternalEventID),
 		event.Completion, nullableString(event.Note)); err != nil {
 		return err
@@ -205,7 +207,7 @@ func insertWatchEvent(ctx context.Context, tx *sql.Tx, event WatchEvent) error {
 
 func (repository *SQLiteRepository) WatchEvents(ctx context.Context, userID, mediaID string) ([]WatchEvent, error) {
 	rows, err := repository.db.Reader().QueryContext(ctx, `
-		SELECT we.id, we.created_by_user_id, we.media_id, we.episode_id, we.watched_at,
+		SELECT we.id, we.round_id, we.created_by_user_id, we.media_id, we.episode_id, we.watched_at,
 		       we.viewing_method, we.source, we.external_event_id, we.completion, we.note
 		FROM watch_events we
 		JOIN watch_event_participants participant ON participant.event_id = we.id
@@ -222,7 +224,7 @@ func (repository *SQLiteRepository) WatchEvents(ctx context.Context, userID, med
 		var episodeID, viewingMethod, externalEventID, note sql.NullString
 		var watchedAt string
 		if err := rows.Scan(
-			&event.ID, &event.UserID, &event.MediaID, &episodeID, &watchedAt,
+			&event.ID, &event.RoundID, &event.UserID, &event.MediaID, &episodeID, &watchedAt,
 			&viewingMethod, &event.Source, &externalEventID, &event.Completion, &note,
 		); err != nil {
 			return nil, err

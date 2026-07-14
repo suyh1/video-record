@@ -32,11 +32,13 @@ func TestEpisodeProgressHandlersUseCurrentUserCSRFAndIdempotency(t *testing.T) {
 	`, episodeID, seasonID)
 	require.NoError(t, err)
 
-	read := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/records/"+series.ID+"/progress", nil, map[string]string{
+	progressURL := "http://example.test/api/v1/records/" + series.ID + "/progress?seasonNumber=2"
+	read := performJSONRequest(router, http.MethodGet, progressURL, nil, map[string]string{
 		"Cookie": cookie.String(),
 	})
 	require.Equal(t, http.StatusOK, read.Code)
 	require.Contains(t, read.Body.String(), `"seasonNumber":2`)
+	require.Contains(t, read.Body.String(), `"roundId":""`)
 	require.Contains(t, read.Body.String(), `"episodeNumber":3`)
 	require.Contains(t, read.Body.String(), `"absoluteNumber":1`)
 	require.NotContains(t, read.Body.String(), "UserID")
@@ -48,13 +50,14 @@ func TestEpisodeProgressHandlersUseCurrentUserCSRFAndIdempotency(t *testing.T) {
 	body := map[string]any{
 		"action": "next", "expectedVersion": 0, "watchedAt": "2026-07-13T12:00:00Z",
 	}
-	updated := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/records/"+series.ID+"/progress", body, headers)
+	updated := performJSONRequest(router, http.MethodPost, progressURL, body, headers)
 	require.Equal(t, http.StatusOK, updated.Code)
 	require.Equal(t, `"1"`, updated.Header().Get("ETag"))
 	require.Contains(t, updated.Body.String(), `"watchedEpisodes":1`)
 	require.Contains(t, updated.Body.String(), `"status":"completed"`)
+	require.NotContains(t, updated.Body.String(), `"roundId":""`)
 
-	replayed := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/records/"+series.ID+"/progress", body, headers)
+	replayed := performJSONRequest(router, http.MethodPost, progressURL, body, headers)
 	require.Equal(t, http.StatusOK, replayed.Code)
 	require.Equal(t, "true", replayed.Header().Get("Idempotency-Replayed"))
 	events, err := service.WatchEvents(context.Background(), currentUserID(t, router, cookie), series.ID)
@@ -62,10 +65,16 @@ func TestEpisodeProgressHandlersUseCurrentUserCSRFAndIdempotency(t *testing.T) {
 	require.Len(t, events, 1)
 	require.Equal(t, episodeID, events[0].EpisodeID)
 
-	withoutCSRF := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/records/"+series.ID+"/progress", body, map[string]string{
+	withoutCSRF := performJSONRequest(router, http.MethodPost, progressURL, body, map[string]string{
 		"Cookie": cookie.String(), "Origin": "http://example.test", "Idempotency-Key": "episode-next-2",
 	})
 	require.Equal(t, http.StatusForbidden, withoutCSRF.Code)
+
+	missingSeason := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/records/"+series.ID+"/progress", nil, map[string]string{
+		"Cookie": cookie.String(),
+	})
+	require.Equal(t, http.StatusBadRequest, missingSeason.Code)
+	require.Contains(t, missingSeason.Body.String(), `"code":"invalid_episode_progress"`)
 }
 
 func TestEpisodeProgressHandlersAcceptSparseExternalReferences(t *testing.T) {
@@ -88,7 +97,8 @@ func TestEpisodeProgressHandlersAcceptSparseExternalReferences(t *testing.T) {
 		},
 	}
 
-	updated := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/records/"+series.ID+"/progress", body, headers)
+	progressURL := "http://example.test/api/v1/records/" + series.ID + "/progress?seasonNumber=1"
+	updated := performJSONRequest(router, http.MethodPost, progressURL, body, headers)
 	require.Equal(t, http.StatusOK, updated.Code)
 	require.Equal(t, `"1"`, updated.Header().Get("ETag"))
 	require.Contains(t, updated.Body.String(), `"sourceId":"63056"`)
@@ -96,7 +106,7 @@ func TestEpisodeProgressHandlersAcceptSparseExternalReferences(t *testing.T) {
 	require.Contains(t, updated.Body.String(), `"totalEpisodes":12`)
 	require.Len(t, mustHTTPWatchEvents(t, service, currentUserID(t, router, cookie), series.ID), 2)
 
-	replayed := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/records/"+series.ID+"/progress", body, headers)
+	replayed := performJSONRequest(router, http.MethodPost, progressURL, body, headers)
 	require.Equal(t, http.StatusOK, replayed.Code)
 	require.Equal(t, "true", replayed.Header().Get("Idempotency-Replayed"))
 	require.Len(t, mustHTTPWatchEvents(t, service, currentUserID(t, router, cookie), series.ID), 2)
@@ -110,7 +120,7 @@ func TestEpisodeProgressHandlersAcceptSparseExternalReferences(t *testing.T) {
 			{"sourceId": "63058", "seasonNumber": 1, "episodeNumber": 3, "absoluteNumber": 3},
 		},
 	}
-	invalid := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/records/"+series.ID+"/progress", invalidBody, invalidHeaders)
+	invalid := performJSONRequest(router, http.MethodPost, progressURL, invalidBody, invalidHeaders)
 	require.Equal(t, http.StatusBadRequest, invalid.Code)
 	require.Contains(t, invalid.Body.String(), `"code":"invalid_episode_progress"`)
 }

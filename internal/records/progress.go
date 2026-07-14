@@ -17,16 +17,18 @@ var (
 type EpisodeProgressAction string
 
 const (
-	EpisodeProgressSingle EpisodeProgressAction = "single"
-	EpisodeProgressRange  EpisodeProgressAction = "range"
-	EpisodeProgressSeason EpisodeProgressAction = "season"
-	EpisodeProgressNext   EpisodeProgressAction = "next"
-	EpisodeProgressUndo   EpisodeProgressAction = "undo"
+	EpisodeProgressSingle  EpisodeProgressAction = "single"
+	EpisodeProgressRange   EpisodeProgressAction = "range"
+	EpisodeProgressSeason  EpisodeProgressAction = "season"
+	EpisodeProgressNext    EpisodeProgressAction = "next"
+	EpisodeProgressUndo    EpisodeProgressAction = "undo"
+	EpisodeProgressSetTime EpisodeProgressAction = "set_time"
 )
 
 type EpisodeProgressInput struct {
 	UserID           string
 	MediaID          string
+	SeasonNumber     int
 	Action           EpisodeProgressAction
 	EpisodeID        string
 	ThroughEpisodeID string
@@ -58,7 +60,9 @@ type Episode struct {
 }
 
 type SeriesProgress struct {
+	RoundID         string
 	MediaID         string
+	SeasonNumber    int
 	Status          Status
 	Version         int
 	WatchedEpisodes int
@@ -68,49 +72,63 @@ type SeriesProgress struct {
 	Episodes        []Episode
 }
 
-func (service *Service) EpisodeProgress(ctx context.Context, userID, mediaID string) (SeriesProgress, error) {
-	if userID == "" || mediaID == "" {
+func (service *Service) EpisodeProgress(ctx context.Context, userID, mediaID string, seasons ...int) (SeriesProgress, error) {
+	if userID == "" || mediaID == "" || len(seasons) != 1 || seasons[0] < 1 {
 		return SeriesProgress{}, ErrInvalidEpisodeProgress
 	}
-	return service.repository.Episodes(ctx, userID, mediaID)
+	seasonNumber := seasons[0]
+	if err := service.repository.ValidateRoundScope(ctx, RoundScope{
+		UserID: userID, MediaID: mediaID, SeasonNumber: &seasonNumber,
+	}); err != nil {
+		return SeriesProgress{}, ErrInvalidEpisodeProgress
+	}
+	return service.repository.SeasonEpisodes(ctx, userID, mediaID, seasonNumber)
 }
 
 func (service *Service) UpdateEpisodeProgress(ctx context.Context, input EpisodeProgressInput) (SeriesProgress, error) {
-	if input.UserID == "" || input.MediaID == "" || sourcePriority(input.Source) == 0 {
+	if input.UserID == "" || input.MediaID == "" || input.SeasonNumber < 1 || sourcePriority(input.Source) == 0 {
 		return SeriesProgress{}, ErrInvalidEpisodeProgress
 	}
-	current, err := service.repository.Episodes(ctx, input.UserID, input.MediaID)
+	if err := service.repository.ValidateRoundScope(ctx, RoundScope{
+		UserID: input.UserID, MediaID: input.MediaID, SeasonNumber: &input.SeasonNumber,
+	}); err != nil {
+		return SeriesProgress{}, ErrInvalidEpisodeProgress
+	}
+	current, err := service.repository.SeasonEpisodes(ctx, input.UserID, input.MediaID, input.SeasonNumber)
 	if err != nil {
 		return SeriesProgress{}, err
 	}
 	if current.Version != input.ExpectedVersion {
 		return current, ErrVersionConflict
 	}
-	var changed bool
-	if input.WatchedAt.IsZero() {
-		input.WatchedAt = time.Now().UTC()
+	if input.Action != EpisodeProgressUndo {
+		if input.WatchedAt.IsZero() {
+			input.WatchedAt = service.now().UTC()
+		}
+		if input.WatchedAt.After(service.now().UTC()) {
+			return current, ErrInvalidWatchedAt
+		}
 	}
+	var targets []string
 	if len(input.EpisodeRefs) > 0 {
 		if err := validateEpisodeReferences(input); err != nil {
 			return current, err
 		}
-		changed, err = service.repository.ApplyExternalEpisodeProgress(
-			ctx, input, input.EpisodeRefs, input.Action != EpisodeProgressUndo,
-		)
 	} else {
-		targets, watched, selectErr := selectProgressTargets(current.Episodes, input)
+		var selectErr error
+		targets, _, selectErr = selectProgressTargets(current.Episodes, input)
 		if selectErr != nil {
 			return current, selectErr
 		}
-		changed, err = service.repository.ApplyEpisodeProgress(ctx, input, targets, watched)
 	}
+	changed, err := service.repository.ApplySeasonEpisodeProgress(ctx, input, targets)
 	if err != nil {
 		return current, err
 	}
 	if !changed {
 		return current, nil
 	}
-	progress, err := service.repository.Episodes(ctx, input.UserID, input.MediaID)
+	progress, err := service.repository.SeasonEpisodes(ctx, input.UserID, input.MediaID, input.SeasonNumber)
 	if err == nil && input.TotalEpisodes > progress.TotalEpisodes {
 		progress.TotalEpisodes = input.TotalEpisodes
 	}
@@ -119,20 +137,20 @@ func (service *Service) UpdateEpisodeProgress(ctx context.Context, input Episode
 
 func validateEpisodeReferences(input EpisodeProgressInput) error {
 	switch input.Action {
-	case EpisodeProgressSingle, EpisodeProgressRange, EpisodeProgressSeason, EpisodeProgressNext, EpisodeProgressUndo:
+	case EpisodeProgressSingle, EpisodeProgressRange, EpisodeProgressSeason, EpisodeProgressNext, EpisodeProgressUndo, EpisodeProgressSetTime:
 	default:
 		return ErrInvalidEpisodeProgress
 	}
 	if input.TotalEpisodes < 1 {
 		return ErrInvalidEpisodeProgress
 	}
-	if (input.Action == EpisodeProgressSingle || input.Action == EpisodeProgressNext || input.Action == EpisodeProgressUndo) && len(input.EpisodeRefs) != 1 {
+	if (input.Action == EpisodeProgressSingle || input.Action == EpisodeProgressNext || input.Action == EpisodeProgressUndo || input.Action == EpisodeProgressSetTime) && len(input.EpisodeRefs) != 1 {
 		return ErrInvalidEpisodeProgress
 	}
 	seenSources := make(map[string]struct{}, len(input.EpisodeRefs))
 	seenNumbers := make(map[[2]int]struct{}, len(input.EpisodeRefs))
 	for _, episode := range input.EpisodeRefs {
-		if episode.SourceID == "" || episode.SeasonNumber < 1 || episode.EpisodeNumber < 1 ||
+		if episode.SourceID == "" || episode.SeasonNumber != input.SeasonNumber || episode.EpisodeNumber < 1 ||
 			episode.AbsoluteNumber < 1 || episode.AbsoluteNumber > input.TotalEpisodes {
 			return ErrInvalidEpisodeProgress
 		}
@@ -159,7 +177,7 @@ func selectProgressTargets(episodes []Episode, input EpisodeProgressInput) ([]st
 		return -1
 	}
 	switch input.Action {
-	case EpisodeProgressSingle, EpisodeProgressUndo:
+	case EpisodeProgressSingle, EpisodeProgressUndo, EpisodeProgressSetTime:
 		if indexOf(input.EpisodeID) < 0 {
 			return nil, false, ErrEpisodeNotFound
 		}
@@ -177,7 +195,7 @@ func selectProgressTargets(episodes []Episode, input EpisodeProgressInput) ([]st
 	case EpisodeProgressSeason:
 		targets := make([]string, 0)
 		for _, episode := range episodes {
-			if episode.SeasonID == input.SeasonID {
+			if input.SeasonID == "" || episode.SeasonID == input.SeasonID {
 				targets = append(targets, episode.ID)
 			}
 		}

@@ -16,6 +16,7 @@ var (
 
 type WatchEvent struct {
 	ID              string
+	RoundID         string
 	UserID          string
 	MediaID         string
 	EpisodeID       string
@@ -36,6 +37,7 @@ type RecordStatusInput struct {
 }
 
 type CreateWatchEventInput struct {
+	RoundID         string
 	UserID          string
 	MediaID         string
 	EpisodeID       string
@@ -116,7 +118,7 @@ func (service *Service) DeleteWatchEvent(ctx context.Context, userID, eventID st
 }
 
 func newWatchEvent(input CreateWatchEventInput) (WatchEvent, error) {
-	if input.UserID == "" || input.MediaID == "" || sourcePriority(input.Source) == 0 ||
+	if input.RoundID == "" || input.UserID == "" || input.MediaID == "" || sourcePriority(input.Source) == 0 ||
 		input.Completion < 0 || input.Completion > 100 {
 		return WatchEvent{}, ErrInvalidWatchEvent
 	}
@@ -141,7 +143,7 @@ func newWatchEvent(input CreateWatchEventInput) (WatchEvent, error) {
 		completion = 100
 	}
 	return WatchEvent{
-		ID: uuid.NewString(), UserID: input.UserID, MediaID: input.MediaID,
+		ID: uuid.NewString(), RoundID: input.RoundID, UserID: input.UserID, MediaID: input.MediaID,
 		EpisodeID: input.EpisodeID, WatchedAt: input.WatchedAt.UTC(),
 		ViewingMethod: input.ViewingMethod, Source: input.Source,
 		ExternalEventID: input.ExternalEventID, Completion: completion, Note: input.Note,

@@ -472,3 +472,13 @@
 - 已按 `writing-plans` 审计轮次改造的服务端、迁移、API、前端和测试消费者，正在编写逐任务实施计划。
 - 已补齐影视级 profile、家庭分享、同步/导入和 E2E 种子依赖，计划将按迁移、领域、API、消费者、前端和浏览器门禁分层执行。
 - 已生成 `docs/plans/2026-07-14-viewing-rounds-season-records-implementation.md`：13 个任务，全部包含 RED/GREEN、精确文件、验证命令和提交边界。
+- 开始执行 Task 1；已核对嵌入式迁移的事务边界和旧版本测试 helper，准备先加入缺少 0013 时必然失败的升级测试。
+- Task 1 首次测试补丁因工具脚本反引号解析失败，未产生文件修改；已改用安全占位符方案。
+- Task 1 定向 RED 符合预期；GREEN 后完整存储包暴露旧 0012 测试的相对版本漂移，已用稳定版本 11 夹具修正根因。
+- Task 1 完成：观看轮次迁移测试、0012 回填回归和完整 `internal/storage` 包通过；提交为 `6ee66eb`。
+- Task 2 完成：轮次空读/首次写入、电影/季作用域、用户隔离、未来时间和归档只读定向测试通过；提交为 `fbc1141`。
+- Task 3 完成：profile 投影、影库/搜索和独立标签版本定向测试通过；提交为 `bb0567e`。
+- Task 4 完成：当前轮次 HTTP、鉴权/并发边界、OpenAPI 与生成类型检查通过；提交为 `8971122`。
+- Task 5 完成：分集进度已按所选季和当前轮次隔离；单集标记、`set_time`、撤销、未来时间回滚、季完成投影和跨季隔离领域测试通过。
+- Task 5 HTTP GET/POST 强制正整数 `seasonNumber`，响应返回 `roundId`/季号，OpenAPI 生成与漂移检查通过；旧媒体级进度测试已替换为季级契约。
+- Task 5 定向验证通过：records 7 个季级/稀疏进度测试、HTTP 2 个进度处理器测试、HTTP OpenAPI/contract 测试和 `npm --prefix web run api:check`。

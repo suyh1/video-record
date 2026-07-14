@@ -407,7 +407,9 @@ export interface paths {
     };
     "/api/v1/records/{mediaID}/progress": {
         parameters: {
-            query?: never;
+            query: {
+                seasonNumber: number;
+            };
             header?: never;
             path: {
                 mediaID: components["parameters"]["MediaID"];
@@ -1135,8 +1137,10 @@ export interface components {
             watchedAt: string | null;
         };
         EpisodeProgress: {
+            roundId: string;
             /** Format: uuid */
             mediaId: string;
+            seasonNumber: number;
             status: components["schemas"]["RecordStatus"];
             version: number;
             watchedEpisodes: number;
@@ -1153,7 +1157,7 @@ export interface components {
         };
         UpdateEpisodeProgressRequest: {
             /** @enum {string} */
-            action: "single" | "range" | "season" | "next" | "undo";
+            action: "single" | "range" | "season" | "next" | "undo" | "set_time";
             /** Format: uuid */
             episodeId?: string;
             /** Format: uuid */
@@ -2329,7 +2333,9 @@ export interface operations {
     };
     getEpisodeProgress: {
         parameters: {
-            query?: never;
+            query: {
+                seasonNumber: number;
+            };
             header?: never;
             path: {
                 mediaID: components["parameters"]["MediaID"];
@@ -2353,7 +2359,9 @@ export interface operations {
     };
     updateEpisodeProgress: {
         parameters: {
-            query?: never;
+            query: {
+                seasonNumber: number;
+            };
             header: {
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 "X-CSRF-Token": components["parameters"]["CSRFToken"];

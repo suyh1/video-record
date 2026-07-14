@@ -498,6 +498,10 @@ paths:
   /api/v1/records/{mediaID}/progress:
     parameters:
       - $ref: '#/components/parameters/MediaID'
+      - name: seasonNumber
+        in: query
+        required: true
+        schema: { type: integer, minimum: 1 }
     get:
       operationId: getEpisodeProgress
       summary: Read episode progress for a series
@@ -1349,9 +1353,11 @@ components:
     EpisodeProgress:
       type: object
       additionalProperties: false
-      required: [mediaId, status, version, watchedEpisodes, totalEpisodes, lastWatched, nextEpisode, episodes]
+      required: [roundId, mediaId, seasonNumber, status, version, watchedEpisodes, totalEpisodes, lastWatched, nextEpisode, episodes]
       properties:
+        roundId: { type: string }
         mediaId: { type: string, format: uuid }
+        seasonNumber: { type: integer, minimum: 1 }
         status: { $ref: '#/components/schemas/RecordStatus' }
         version: { type: integer, minimum: 0 }
         watchedEpisodes: { type: integer, minimum: 0 }
@@ -1381,7 +1387,7 @@ components:
       additionalProperties: false
       required: [action, expectedVersion]
       properties:
-        action: { type: string, enum: [single, range, season, next, undo] }
+        action: { type: string, enum: [single, range, season, next, undo, set_time] }
         episodeId: { type: string, format: uuid }
         throughEpisodeId: { type: string, format: uuid }
         seasonId: { type: string, format: uuid }

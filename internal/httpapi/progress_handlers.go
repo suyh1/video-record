@@ -3,6 +3,8 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -29,7 +31,9 @@ type episodeReferenceRequest struct {
 }
 
 type episodeProgressResponse struct {
+	RoundID         string                `json:"roundId"`
 	MediaID         string                `json:"mediaId"`
+	SeasonNumber    int                   `json:"seasonNumber"`
 	Status          records.Status        `json:"status"`
 	Version         int                   `json:"version"`
 	WatchedEpisodes int                   `json:"watchedEpisodes"`
@@ -57,7 +61,13 @@ func (handlers recordHandlers) episodeProgress(w http.ResponseWriter, r *http.Re
 		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
 		return
 	}
-	progress, err := handlers.service.EpisodeProgress(r.Context(), identity.User.ID, chi.URLParam(r, "mediaID"))
+	seasonNumber, ok := episodeSeasonNumberFromRequest(w, r)
+	if !ok {
+		return
+	}
+	progress, err := handlers.service.EpisodeProgress(
+		r.Context(), identity.User.ID, chi.URLParam(r, "mediaID"), seasonNumber,
+	)
 	if err != nil {
 		writeRecordError(w, r, err, 0)
 		return
@@ -70,6 +80,10 @@ func (handlers recordHandlers) updateEpisodeProgress(w http.ResponseWriter, r *h
 	identity, ok := IdentityFromContext(r.Context())
 	if !ok {
 		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	seasonNumber, ok := episodeSeasonNumberFromRequest(w, r)
+	if !ok {
 		return
 	}
 	var request episodeProgressRequest
@@ -85,7 +99,7 @@ func (handlers recordHandlers) updateEpisodeProgress(w http.ResponseWriter, r *h
 		})
 	}
 	progress, err := handlers.service.UpdateEpisodeProgress(r.Context(), records.EpisodeProgressInput{
-		UserID: identity.User.ID, MediaID: chi.URLParam(r, "mediaID"),
+		UserID: identity.User.ID, MediaID: chi.URLParam(r, "mediaID"), SeasonNumber: seasonNumber,
 		Action: request.Action, EpisodeID: request.EpisodeID,
 		ThroughEpisodeID: request.ThroughEpisodeID, SeasonID: request.SeasonID,
 		WatchedAt: request.WatchedAt, Source: records.SourceManual,
@@ -102,7 +116,8 @@ func (handlers recordHandlers) updateEpisodeProgress(w http.ResponseWriter, r *h
 
 func newEpisodeProgressResponse(progress records.SeriesProgress) episodeProgressResponse {
 	response := episodeProgressResponse{
-		MediaID: progress.MediaID, Status: progress.Status, Version: progress.Version,
+		RoundID: progress.RoundID, MediaID: progress.MediaID, SeasonNumber: progress.SeasonNumber,
+		Status: progress.Status, Version: progress.Version,
 		WatchedEpisodes: progress.WatchedEpisodes, TotalEpisodes: progress.TotalEpisodes,
 		Episodes: make([]episodeProgressItem, 0, len(progress.Episodes)),
 	}
@@ -118,6 +133,20 @@ func newEpisodeProgressResponse(progress records.SeriesProgress) episodeProgress
 		response.NextEpisode = &item
 	}
 	return response
+}
+
+func episodeSeasonNumberFromRequest(w http.ResponseWriter, r *http.Request) (int, bool) {
+	values, exists := r.URL.Query()["seasonNumber"]
+	if !exists || len(values) != 1 {
+		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_episode_progress")
+		return 0, false
+	}
+	seasonNumber, err := strconv.Atoi(strings.TrimSpace(values[0]))
+	if err != nil || seasonNumber < 1 {
+		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_episode_progress")
+		return 0, false
+	}
+	return seasonNumber, true
 }
 
 func newEpisodeProgressItem(episode records.Episode) episodeProgressItem {
