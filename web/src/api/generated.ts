@@ -323,6 +323,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/records/{mediaID}/rounds/current": {
+        parameters: {
+            query?: {
+                seasonNumber?: number;
+            };
+            header?: never;
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        /** Read the current movie or season viewing round */
+        get: operations["getCurrentRound"];
+        /** Update the current movie or season viewing round */
+        put: operations["updateCurrentRound"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/records/{mediaID}/tags": {
         parameters: {
             query?: never;
@@ -1049,6 +1071,29 @@ export interface components {
             watchedAt?: string;
             viewingMethod?: string | null;
             participantIds?: string[];
+        };
+        CurrentRound: {
+            roundId: string;
+            /** Format: uuid */
+            mediaId: string;
+            seasonNumber: number | null;
+            roundNumber: number;
+            status: components["schemas"]["RecordStatus"];
+            rating: number | null;
+            note: string | null;
+            viewingMethod: string | null;
+            /** Format: date-time */
+            watchedAt: string | null;
+            version: number;
+            profileVersion: number;
+        };
+        UpdateCurrentRoundRequest: {
+            status: components["schemas"]["RecordStatus"];
+            rating?: number | null;
+            note?: string | null;
+            viewingMethod?: string | null;
+            /** Format: date-time */
+            watchedAt?: string;
         };
         TagsRequest: {
             tags: string[];
@@ -2085,6 +2130,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecordState"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getCurrentRound: {
+        parameters: {
+            query?: {
+                seasonNumber?: number;
+            };
+            header?: never;
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current scoped viewing round. */
+            200: {
+                headers: {
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentRound"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateCurrentRound: {
+        parameters: {
+            query?: {
+                seasonNumber?: number;
+            };
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCurrentRoundRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated scoped viewing round. */
+            200: {
+                headers: {
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentRound"];
                 };
             };
             default: components["responses"]["Problem"];

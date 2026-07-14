@@ -375,6 +375,46 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/RecordState' }
         default: { $ref: '#/components/responses/Problem' }
+  /api/v1/records/{mediaID}/rounds/current:
+    parameters:
+      - $ref: '#/components/parameters/MediaID'
+      - name: seasonNumber
+        in: query
+        required: false
+        schema: { type: integer, minimum: 1 }
+    get:
+      operationId: getCurrentRound
+      summary: Read the current movie or season viewing round
+      responses:
+        '200':
+          description: Current scoped viewing round.
+          headers:
+            ETag: { required: true, schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentRound' }
+        default: { $ref: '#/components/responses/Problem' }
+    put:
+      operationId: updateCurrentRound
+      summary: Update the current movie or season viewing round
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateCurrentRoundRequest' }
+      responses:
+        '200':
+          description: Updated scoped viewing round.
+          headers:
+            ETag: { required: true, schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentRound' }
+        default: { $ref: '#/components/responses/Problem' }
   /api/v1/records/{mediaID}/tags:
     parameters:
       - $ref: '#/components/parameters/MediaID'
@@ -1233,6 +1273,32 @@ components:
           type: array
           uniqueItems: true
           items: { type: string, format: uuid }
+    CurrentRound:
+      type: object
+      additionalProperties: false
+      required: [roundId, mediaId, seasonNumber, roundNumber, status, rating, note, viewingMethod, watchedAt, version, profileVersion]
+      properties:
+        roundId: { type: string }
+        mediaId: { type: string, format: uuid }
+        seasonNumber: { type: [integer, 'null'], minimum: 1 }
+        roundNumber: { type: integer, minimum: 1 }
+        status: { $ref: '#/components/schemas/RecordStatus' }
+        rating: { type: [number, 'null'], minimum: 0, maximum: 10 }
+        note: { type: [string, 'null'] }
+        viewingMethod: { type: [string, 'null'] }
+        watchedAt: { type: [string, 'null'], format: date-time }
+        version: { type: integer, minimum: 0 }
+        profileVersion: { type: integer, minimum: 0 }
+    UpdateCurrentRoundRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { $ref: '#/components/schemas/RecordStatus' }
+        rating: { type: [number, 'null'], minimum: 0, maximum: 10 }
+        note: { type: [string, 'null'] }
+        viewingMethod: { type: [string, 'null'], maxLength: 80 }
+        watchedAt: { type: string, format: date-time }
     TagsRequest:
       type: object
       additionalProperties: false

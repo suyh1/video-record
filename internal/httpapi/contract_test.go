@@ -69,6 +69,7 @@ var protectedWriteRoutes = []struct {
 	Path   string
 }{
 	{http.MethodPut, "/api/v1/records/{mediaID}"},
+	{http.MethodPut, "/api/v1/records/{mediaID}/rounds/current"},
 	{http.MethodPut, "/api/v1/records/{mediaID}/tags"},
 	{http.MethodPost, "/api/v1/collections"},
 	{http.MethodPost, "/api/v1/collections/{collectionID}/items"},
@@ -160,6 +161,11 @@ func TestContractDefinesCursorETagAndProtectedWriteShapes(t *testing.T) {
 		_, documentsETag := record.Responses["200"].Headers["ETag"]
 		require.True(t, documentsETag, "%s record response must document ETag", method)
 	}
+	for _, method := range []string{http.MethodGet, http.MethodPut} {
+		round := decodeOpenAPIOperation(t, contract, method, "/api/v1/records/{mediaID}/rounds/current")
+		_, documentsETag := round.Responses["200"].Headers["ETag"]
+		require.True(t, documentsETag, "%s current round response must document ETag", method)
+	}
 	for _, response := range []struct {
 		Method string
 		Path   string
@@ -214,6 +220,7 @@ func TestContractProvidesConcreteGeneratedTypesAndRealFileMedia(t *testing.T) {
 		http.MethodPost + " /api/v1/collections/{collectionID}/items":            {},
 		http.MethodPost + " /api/v1/data/import":                                 {},
 		http.MethodPut + " /api/v1/records/{mediaID}":                            {},
+		http.MethodPut + " /api/v1/records/{mediaID}/rounds/current":             {},
 		http.MethodPut + " /api/v1/records/{mediaID}/tags":                       {},
 		http.MethodPost + " /api/v1/records/{mediaID}/events":                    {},
 		http.MethodPost + " /api/v1/records/{mediaID}/progress":                  {},
