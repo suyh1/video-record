@@ -2,7 +2,7 @@ services:
   video-record:
     build:
       context: .
-    image: ${IMAGE_REPOSITORY:-video-record}:${IMAGE_TAG:-local}
+    image: video-record:local
     restart: unless-stopped
     user: "65532:65532"
     read_only: true
@@ -11,14 +11,14 @@ services:
     security_opt:
       - no-new-privileges:true
     ports:
-      - "${VIDEO_RECORD_PORT:-8080}:8080"
+      - "8080:8080"
     environment:
       APP_ENV: production
       APP_PORT: "8080"
-      APP_COOKIE_SECURE: ${APP_COOKIE_SECURE:-true}
+      APP_COOKIE_SECURE: "false"
       DATA_DIR: /data
-      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY to a Base64-encoded 32-byte value}
-      TMDB_READ_ACCESS_TOKEN: ${TMDB_READ_ACCESS_TOKEN:-}
+      APP_ENCRYPTION_KEY: ""
+      TMDB_READ_ACCESS_TOKEN: ""
     volumes:
       - video_record_data:/data
     healthcheck:
