@@ -24,6 +24,11 @@ import type {
   RestoreResult,
   SetupStatus,
   TMDBSearchResponse,
+  TMDBCastMember,
+  TMDBMovieDetails,
+  TMDBSeasonDetails,
+  TMDBTVDetails,
+  EpisodeReference,
   WatchEvent,
   VisibleHouseholdRecord,
   LoginResponse,
@@ -89,6 +94,29 @@ export async function searchTMDB(query: string, signal?: AbortSignal): Promise<M
     posterPath: item.posterPath,
     status: 'none',
   }))
+}
+
+export function getTMDBMovie(id: number, signal?: AbortSignal) {
+  return requestJSON<TMDBMovieDetails>(`/api/v1/tmdb/movie/${id}`, signal ? { signal } : undefined)
+}
+
+export function getTMDBTV(id: number, signal?: AbortSignal) {
+  return requestJSON<TMDBTVDetails>(`/api/v1/tmdb/tv/${id}`, signal ? { signal } : undefined)
+}
+
+export function getTMDBSeason(id: number, seasonNumber: number, signal?: AbortSignal) {
+  return requestJSON<TMDBSeasonDetails>(
+    `/api/v1/tmdb/tv/${id}/season/${seasonNumber}`,
+    signal ? { signal } : undefined,
+  )
+}
+
+export async function getTMDBCredits(mediaType: MediaType, id: number, signal?: AbortSignal) {
+  const response = await requestJSON<{ cast: TMDBCastMember[] }>(
+    `/api/v1/tmdb/${mediaType}/${id}/credits`,
+    signal ? { signal } : undefined,
+  )
+  return response.cast
 }
 
 export type UpdateRecordPayload = {
@@ -368,6 +396,8 @@ export type UpdateEpisodeProgressPayload = {
   throughEpisodeId?: string
   seasonId?: string
   watchedAt?: string
+  episodeRefs?: EpisodeReference[]
+  totalEpisodes?: number
 }
 
 export function updateEpisodeProgress(mediaID: string, payload: UpdateEpisodeProgressPayload) {

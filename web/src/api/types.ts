@@ -5,6 +5,7 @@ export type MediaSearchResult = {
   id: string
   source: 'local' | 'tmdb'
   externalId?: number
+  tmdbId?: number | null
   mediaType: MediaType
   title: string
   originalTitle: string
@@ -49,6 +50,7 @@ export type VisibleHouseholdRecord = {
 
 export type MediaDetails = {
   id: string
+  tmdbId: number | null
   mediaType: MediaType
   title: string
   externalTitle: string
@@ -76,6 +78,7 @@ export type WatchEvent = {
 
 export type EpisodeProgressItem = {
   id: string
+  sourceId?: string
   seasonId: string
   seasonNumber: number
   episodeNumber: number
@@ -94,6 +97,79 @@ export type SeriesProgress = {
   lastWatched: EpisodeProgressItem | null
   nextEpisode: EpisodeProgressItem | null
   episodes: EpisodeProgressItem[]
+}
+
+export type TMDBSeasonSummary = {
+  id: number
+  name: string
+  overview: string
+  posterPath: string
+  airDate: string
+  seasonNumber: number
+  episodeCount: number
+}
+
+export type TMDBEpisodeDetails = {
+  id: number
+  name: string
+  overview: string
+  airDate: string
+  seasonNumber: number
+  episodeNumber: number
+  runtime: number
+  stillPath: string
+}
+
+export type TMDBSeasonDetails = {
+  id: number
+  name: string
+  overview: string
+  posterPath: string
+  airDate: string
+  seasonNumber: number
+  episodes: TMDBEpisodeDetails[]
+}
+
+export type TMDBTVDetails = {
+  id: number
+  name: string
+  originalName: string
+  firstAirDate: string
+  posterPath: string
+  backdropPath: string
+  overview: string
+  numberOfSeasons: number
+  numberOfEpisodes: number
+  episodeRuntime: number[]
+  genres: string[]
+  seasons: TMDBSeasonSummary[]
+}
+
+export type TMDBMovieDetails = {
+  id: number
+  title: string
+  originalTitle: string
+  releaseDate: string
+  posterPath: string
+  backdropPath: string
+  overview: string
+  runtime: number
+  genres: string[]
+}
+
+export type TMDBCastMember = {
+  id: number
+  name: string
+  character: string
+  profilePath: string
+  order: number
+}
+
+export type EpisodeReference = {
+  sourceId: string
+  seasonNumber: number
+  episodeNumber: number
+  absoluteNumber: number
 }
 
 export type CalendarFilter = 'all' | 'completed' | 'in_progress'

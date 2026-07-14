@@ -17,6 +17,8 @@
 - 已写入 `docs/plans/2026-07-14-media-details-redesign-implementation.md`，拆分为 11 个 TDD、契约、界面、E2E 和最终审计任务。
 - 第一实施批完成并提交：`1950210` 增加 6 小时 TMDB 实时目录/credits 契约，`89d1c59` 暴露本地可空 `tmdbId`，`9413da1` 扩展受认证 TV/season/credits HTTP 响应。
 - 第一批验证：TMDB 集成包全量通过；media/records/httpapi 三包全量通过；TMDB HTTP 定向测试通过。
+- 第二实施批完成并提交：`589b9ed` 实现只存被标记分集的稀疏身份/进度及累计集数迁移，`141b4d3` 发布 episodeRefs、sourceId、扩展 TMDB/credits 的 OpenAPI 契约。
+- 第二批验证：storage/records/httpapi 全包通过，固定版本 OpenAPI TypeScript 重新生成并通过 `api:check`。
 
 ## 2026-07-13：Task 27 恢复与 v1 MUST 审计
 
