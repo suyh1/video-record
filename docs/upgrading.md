@@ -15,7 +15,7 @@
 2. 确认当前 `/readyz` 为成功状态。
 3. 从设置页创建、下载并校验 `.vrbackup`。
 4. 确认原 `APP_ENCRYPTION_KEY` 在独立密钥库中可恢复。
-5. 记录当前完整 `IMAGE_REPOSITORY`、`IMAGE_TAG` 和镜像 digest。
+5. 记录 Compose 中当前完整的 `image` 值和镜像 digest。
 
 创建用于版本回滚的冷卷快照：
 
@@ -45,14 +45,14 @@ sha256sum video-record-data-pre-upgrade.tgz
 
 ## 使用发布镜像升级
 
-把 `.env` 中 `IMAGE_TAG` 更新为目标完整版本，然后：
+把 Compose 的 `image` 更新为目标完整版本，例如 `owner/video-record:v1.1.0`，然后：
 
 ```bash
 docker compose pull video-record
 docker compose up -d --no-build video-record
 docker compose ps
-curl --fail http://127.0.0.1:${VIDEO_RECORD_PORT:-8080}/healthz
-curl --fail http://127.0.0.1:${VIDEO_RECORD_PORT:-8080}/readyz
+curl --fail http://127.0.0.1:8080/healthz
+curl --fail http://127.0.0.1:8080/readyz
 ```
 
 验证登录、影库、搜索、写入、备份列表和集成状态。检查日志时不要把完整日志上传到公开问题，因为它可能包含作品名、用户名或内部 URL。
@@ -76,7 +76,7 @@ docker compose up -d video-record
 1. 停止服务并保留失败现场日志。
 2. 删除当前数据 volume，重建同名空 volume。
 3. 从升级前冷快照恢复数据 volume。
-4. 把 `IMAGE_TAG` 恢复为上一完整版本。
+4. 把 Compose 的 `image` 恢复为上一完整版本。
 5. 启动旧镜像并验证 `/readyz`、登录和核心记录。
 
 ```bash

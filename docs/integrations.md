@@ -4,13 +4,14 @@
 
 ## TMDB
 
-TMDB 提供电影、剧集、季集和单集搜索与基础元数据。令牌只能通过服务端环境变量 `TMDB_READ_ACCESS_TOKEN` 注入：
+TMDB 提供电影、剧集、季集和单集搜索与基础元数据。令牌只能通过服务端环境变量 `TMDB_READ_ACCESS_TOKEN` 注入。Compose 部署直接修改 `docker-compose.yml`：
 
-```text
-TMDB_READ_ACCESS_TOKEN=<TMDB read access token>
+```yaml
+environment:
+  TMDB_READ_ACCESS_TOKEN: "<TMDB read access token>"
 ```
 
-不要使用 `VITE_` 前缀，不要把令牌写入 Dockerfile、Compose 默认值、源码、测试或文档。修改 `.env` 后重建容器环境：
+不要使用 `VITE_` 前缀，不要把真实令牌写入 Dockerfile、仓库默认值、源码、测试或文档，也不要提交填写令牌后的本机 Compose 修改。保存后重建容器环境：
 
 ```bash
 docker compose up -d --force-recreate video-record

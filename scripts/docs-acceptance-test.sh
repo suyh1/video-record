@@ -67,7 +67,7 @@ done
 
 require_pattern README.md 'docker compose (up|安装|install)' 'a fresh-machine Compose installation'
 require_pattern docs/deployment.md '(openssl rand -base64 32|随机.*32.*byte|32.*byte.*随机)' 'generation of a random 32-byte encryption key'
-require_pattern docs/deployment.md 'VIDEO_RECORD_PORT' 'host port changes'
+require_pattern docs/deployment.md '18080:8080' 'host port changes through the Compose ports entry'
 require_pattern docs/deployment.md '(amd64|x86_64)' 'amd64 deployment support'
 require_pattern docs/deployment.md '(arm64|aarch64)' 'arm64 deployment support'
 require_pattern docs/integrations.md 'TMDB_READ_ACCESS_TOKEN' 'the server-only TMDB token environment variable'
