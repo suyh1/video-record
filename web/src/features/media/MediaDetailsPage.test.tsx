@@ -9,7 +9,7 @@ import { server } from '../../test/server'
 import { MediaDetailsPage } from './MediaDetailsPage'
 
 describe('MediaDetailsPage', () => {
-  it('shows personal record and history before external metadata', async () => {
+  it('shows a live cinematic header, cast, personal record, and folded household tools', async () => {
     sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token')
     let recordVersion = 3
     let tags = ['家庭', '怀旧']
@@ -25,6 +25,7 @@ describe('MediaDetailsPage', () => {
       http.get('*/api/v1/media/media-1', () =>
         HttpResponse.json({
           id: 'media-1',
+          tmdbId: 329865,
           mediaType: 'movie',
           title: '花样年华',
           originalTitle: 'In the Mood for Love',
@@ -34,8 +35,21 @@ describe('MediaDetailsPage', () => {
           externalOverview: '两位邻居在克制与靠近之间建立起一段关系。',
           posterPath: null,
           backdropPath: '',
+          runtimeMinutes: 0,
+          genres: [],
         }),
       ),
+      http.get('*/api/v1/tmdb/movie/329865', () => HttpResponse.json({
+        id: 329865, title: '花样年华', originalTitle: 'In the Mood for Love', releaseDate: '2000-09-29',
+        posterPath: '/mood.jpg', backdropPath: '/mood-backdrop.jpg',
+        overview: '两位邻居在克制与靠近之间建立起一段关系。', runtime: 98, genres: ['剧情', '爱情'],
+      })),
+      http.get('*/api/v1/tmdb/movie/329865/credits', () => HttpResponse.json({
+        cast: [
+          { id: 1, name: '梁朝伟', character: '周慕云', profilePath: '/leung.jpg', order: 0 },
+          { id: 2, name: '张曼玉', character: '苏丽珍', profilePath: '', order: 1 },
+        ],
+      })),
       http.get('*/api/v1/records/media-1', () =>
         HttpResponse.json({
           mediaId: 'media-1', status: 'completed', rating: 9.4, note: '雨夜与走廊。',
@@ -77,24 +91,36 @@ describe('MediaDetailsPage', () => {
       })),
     )
     renderWithQueryClient(
-      <MemoryRouter initialEntries={['/media/media-1']}>
-        <Routes>
-          <Route path="/media/:mediaId" element={<MediaDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
+      <main>
+        <MemoryRouter initialEntries={['/media/media-1']}>
+          <Routes>
+            <Route path="/media/:mediaId" element={<MediaDetailsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </main>,
     )
 
     expect(await screen.findByRole('heading', { name: '花样年华', level: 1 })).toBeVisible()
-    expect(screen.getByLabelText('花样年华 暂无海报')).toBeVisible()
-    expect(screen.getByText('9.4 / 10')).toBeVisible()
+    expect(await screen.findByRole('img', { name: '花样年华 背景' })).toHaveAttribute('src', expect.stringContaining('/w1280/mood-backdrop.jpg'))
+    expect(await screen.findByRole('img', { name: '花样年华 海报' })).toBeVisible()
+    expect(await screen.findByText('98 分钟')).toBeVisible()
+    expect(await screen.findByText('爱情')).toBeVisible()
+    expect(screen.getByRole('region', { name: '主要演员' })).toBeVisible()
+    expect(await screen.findByText('梁朝伟')).toBeVisible()
+    expect(screen.getByText('周慕云')).toBeVisible()
+    expect(screen.getByText('张曼玉')).toBeVisible()
+    expect(screen.getAllByText('9.4 / 10')).toHaveLength(2)
     expect(screen.getByText('雨夜与走廊。')).toBeVisible()
     expect(screen.getByText('2026年7月12日')).toBeVisible()
+    expect(screen.queryByRole('checkbox', { name: '向家庭公开评分' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: '私人标签' })).not.toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(screen.getByText('家庭与整理'))
     expect(await screen.findByRole('checkbox', { name: 'family' })).toBeVisible()
     const householdShared = await screen.findByRole('region', { name: '家庭评价' })
     expect(within(householdShared).getByText('family')).toBeVisible()
     expect(within(householdShared).getByText('8.6 / 10')).toBeVisible()
     expect(within(householdShared).getByText('适合一家人一起看')).toBeVisible()
-    const user = userEvent.setup()
     const tagInput = await screen.findByRole('textbox', { name: '私人标签' })
     expect(tagInput).toHaveValue('家庭, 怀旧')
     await user.clear(tagInput)
@@ -112,9 +138,8 @@ describe('MediaDetailsPage', () => {
     await waitFor(() => expect(deletedEvent).toBe('event-1'))
     expect(await screen.findByText('还没有观看事件')).toBeVisible()
     expect(screen.getByText('0 次记录')).toBeVisible()
-    const personalRecord = screen.getByRole('heading', { name: '个人记录' })
-    const overview = screen.getByRole('heading', { name: '简介' })
-    expect(personalRecord.compareDocumentPosition(overview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('complementary', { name: '个人记录' })).toBeVisible()
+    expect(document.querySelector('main main')).toBeNull()
   })
 
   it('links a custom item to TMDB without replacing its personal record', async () => {
@@ -122,7 +147,7 @@ describe('MediaDetailsPage', () => {
     let linkRequested = false
     server.use(
       http.get('*/api/v1/media/custom-1', () => HttpResponse.json({
-        id: 'custom-1', mediaType: 'movie', title: '我的译名', overview: '我的私人简介',
+        id: 'custom-1', tmdbId: null, mediaType: 'movie', title: '我的译名', overview: '我的私人简介',
         externalTitle: '', externalOverview: '', originalTitle: '', releaseDate: '2016',
         posterPath: '', backdropPath: '', runtimeMinutes: 0, genres: [],
       })),
@@ -151,7 +176,7 @@ describe('MediaDetailsPage', () => {
         expect(request.headers.get('Idempotency-Key')).toBeTruthy()
         linkRequested = true
         return HttpResponse.json({
-          id: 'custom-1', mediaType: 'movie', title: '我的译名', overview: '我的私人简介',
+          id: 'custom-1', tmdbId: 329865, mediaType: 'movie', title: '我的译名', overview: '我的私人简介',
           externalTitle: '降临', externalOverview: '外部简介', originalTitle: 'Arrival', releaseDate: '2016-09-01',
           posterPath: '/arrival.jpg', backdropPath: '', runtimeMinutes: 116, genres: ['科幻'],
         })
@@ -172,6 +197,42 @@ describe('MediaDetailsPage', () => {
     await waitFor(() => expect(linkRequested).toBe(true))
     expect(screen.getByRole('status')).toHaveTextContent('已关联 TMDB，个人记录保持不变')
     expect(screen.getByText('保留这条笔记')).toBeVisible()
+    await user.click(screen.getByText('家庭与整理'))
     expect(screen.getByLabelText('私人标签')).toHaveValue('科幻')
+  })
+
+  it('keeps personal recording usable when live TMDB data is unavailable', async () => {
+    server.use(
+      http.get('*/api/v1/media/media-2', () => HttpResponse.json({
+        id: 'media-2', tmdbId: 329865, mediaType: 'movie', title: '本地片名', overview: '本地兜底简介',
+        externalTitle: '本地片名', externalOverview: '', originalTitle: 'Local title', releaseDate: '2020',
+        posterPath: '', backdropPath: '', runtimeMinutes: 0, genres: [],
+      })),
+      http.get('*/api/v1/tmdb/movie/329865', () => HttpResponse.json({ code: 'tmdb_unavailable' }, { status: 502 })),
+      http.get('*/api/v1/tmdb/movie/329865/credits', () => HttpResponse.json({ code: 'tmdb_unavailable' }, { status: 502 })),
+      http.get('*/api/v1/records/media-2', () => HttpResponse.json({
+        mediaId: 'media-2', status: 'watching', rating: null, note: '本地笔记',
+        watchedAt: null, viewingMethod: null, version: 1,
+      })),
+      http.get('*/api/v1/records/media-2/events', () => HttpResponse.json([])),
+      http.get('*/api/v1/records/media-2/tags', () => HttpResponse.json({ tags: [] })),
+      http.get('*/api/v1/household/records/media-2/sharing', () => HttpResponse.json({
+        mediaId: 'media-2', shareRating: false, shareReview: false, sharedReview: null, version: 1,
+      })),
+      http.get('*/api/v1/household/participants', () => HttpResponse.json([])),
+      http.get('*/api/v1/collections', () => HttpResponse.json([])),
+    )
+    renderWithQueryClient(
+      <MemoryRouter initialEntries={['/media/media-2']}>
+        <Routes><Route path="/media/:mediaId" element={<MediaDetailsPage />} /></Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: '本地片名' })).toBeVisible()
+    expect(screen.getByText('本地兜底简介')).toBeVisible()
+    expect(screen.getByText('本地笔记')).toBeVisible()
+    expect(screen.getByRole('radio', { name: '在看' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('button', { name: '保存记录' })).toBeVisible()
+    expect(await screen.findByText('演员资料暂时不可用')).toBeVisible()
   })
 })

@@ -19,6 +19,15 @@
 - 第一批验证：TMDB 集成包全量通过；media/records/httpapi 三包全量通过；TMDB HTTP 定向测试通过。
 - 第二实施批完成并提交：`589b9ed` 实现只存被标记分集的稀疏身份/进度及累计集数迁移，`141b4d3` 发布 episodeRefs、sourceId、扩展 TMDB/credits 的 OpenAPI 契约。
 - 第二批验证：storage/records/httpapi 全包通过，固定版本 OpenAPI TypeScript 重新生成并通过 `api:check`。
+- 第三实施批完成并提交：`ce540d9` 增加 live TV/season/credits 客户端及纯目录合并，`52d48aa` 将剧集进度改为按需单季加载和稀疏写入。
+- 第三批验证：目录/API 5 项、剧集组件/目录 7 项测试通过，TypeScript 检查通过。
+- 本次会话从详情页 Task 8 的未提交状态恢复；先补齐 1100/900/767px 响应式布局并复验组件与类型，再进入首页下一集的 RED/GREEN 周期。
+- 恢复审计确认：详情页组件层已切到 live hero/cast 与双栏记录布局，但新增样式尚无完整窄屏断点；首页仍只读取本地 progress 的 `nextEpisode`，还未合并 TMDB 实时季目录。
+- 已补齐详情页 1100/900/767px 响应式规则：窄桌面压缩双栏，平板切个人记录优先的单栏，手机去卡片/粘性并使用 112px 海报与 118px 演员列。
+- Task 8 响应式补丁后复验：`MediaDetailsPage.test.tsx` 3/3 通过，`npm --prefix web run typecheck` 退出 0。
+- 提交前地标审计发现 App 壳已有 `<main>`，详情主列不可再使用嵌套 `<main>`；已先加入壳内嵌套回归断言，准备完成 RED/GREEN 修正。
+- 嵌套主地标红灯已确认：定向测试 1/3 失败并准确返回 `.media-details-primary` 内层 `<main>`；最小修正仅将布局容器改为 `<div>`。
+- 嵌套主地标 GREEN：同一定向测试恢复 3/3 通过，详情主列内部的进度与历史 section 语义保持不变。
 
 ## 2026-07-13：Task 27 恢复与 v1 MUST 审计
 
