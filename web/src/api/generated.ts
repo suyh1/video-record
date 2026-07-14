@@ -677,6 +677,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tmdb/connectivity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Test live server-side TMDB connectivity */
+        get: operations["testTMDBConnectivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tmdb/search": {
         parameters: {
             query?: never;
@@ -1253,6 +1270,9 @@ export interface components {
         SharedEventList: components["schemas"]["SharedEvent"][];
         TMDBStatus: {
             configured: boolean;
+        };
+        TMDBConnectivity: {
+            connected: boolean;
         };
         TMDBSearchResult: {
             id: number;
@@ -2686,6 +2706,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TMDBStatus"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    testTMDBConnectivity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description TMDB is reachable with the configured credentials. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TMDBConnectivity"];
                 };
             };
             default: components["responses"]["Problem"];

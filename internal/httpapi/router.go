@@ -184,6 +184,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 				if dependencies.TMDB != nil {
 					tmdbAPI := tmdbHandlers{client: dependencies.TMDB}
 					protected.Get("/tmdb/status", tmdbAPI.status)
+					protected.Get("/tmdb/connectivity", tmdbAPI.connectivity)
 					protected.Get("/tmdb/search", tmdbAPI.search)
 					protected.Get("/tmdb/movie/{id}", tmdbAPI.movie)
 					protected.Get("/tmdb/tv/{id}", tmdbAPI.tv)

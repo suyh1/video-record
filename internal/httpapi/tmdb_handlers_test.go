@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -39,6 +40,65 @@ func TestTMDBStatusNeverReturnsTokenMaterial(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTMDBConnectivityReturnsConnectedWithoutLeakingTokenMaterial(t *testing.T) {
+	const token = "synthetic-connectivity-token"
+	router, cookie := newTMDBTestRouter(t, token, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/configuration", r.URL.Path)
+		require.Equal(t, "Bearer "+token, r.Header.Get("Authorization"))
+		_, _ = w.Write([]byte(`{"images":{"debug_token":"synthetic-connectivity-token"}}`))
+	}))
+
+	response := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/tmdb/connectivity", nil, map[string]string{
+		"Cookie": cookie.String(),
+	})
+
+	require.Equal(t, http.StatusOK, response.Code)
+	require.JSONEq(t, `{"connected":true}`, response.Body.String())
+	require.NotContains(t, response.Body.String(), token)
+}
+
+func TestTMDBConnectivityReturnsActionableProblemCodes(t *testing.T) {
+	for _, test := range []struct {
+		name           string
+		upstreamStatus int
+		expectedStatus int
+		expectedCode   string
+	}{
+		{name: "unauthorized", upstreamStatus: http.StatusUnauthorized, expectedStatus: http.StatusBadGateway, expectedCode: "tmdb_unauthorized"},
+		{name: "forbidden", upstreamStatus: http.StatusForbidden, expectedStatus: http.StatusBadGateway, expectedCode: "tmdb_unauthorized"},
+		{name: "rate limited", upstreamStatus: http.StatusTooManyRequests, expectedStatus: http.StatusServiceUnavailable, expectedCode: "tmdb_rate_limited"},
+		{name: "unavailable", upstreamStatus: http.StatusInternalServerError, expectedStatus: http.StatusBadGateway, expectedCode: "tmdb_unavailable"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			router, cookie := newTMDBTestRouter(t, "synthetic-token", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, "upstream secret response", test.upstreamStatus)
+			}))
+
+			response := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/tmdb/connectivity", nil, map[string]string{
+				"Cookie": cookie.String(),
+			})
+
+			require.Equal(t, test.expectedStatus, response.Code)
+			require.Contains(t, response.Body.String(), `"code":"`+test.expectedCode+`"`)
+			require.NotContains(t, response.Body.String(), "upstream secret response")
+			require.NotContains(t, response.Body.String(), "synthetic-token")
+		})
+	}
+}
+
+func TestTMDBConnectivityReturnsTimeoutProblem(t *testing.T) {
+	router, cookie := newTMDBTestRouterWithTimeout(t, "synthetic-token", 20*time.Millisecond, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+
+	response := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/tmdb/connectivity", nil, map[string]string{
+		"Cookie": cookie.String(),
+	})
+
+	require.Equal(t, http.StatusGatewayTimeout, response.Code)
+	require.Contains(t, response.Body.String(), `"code":"tmdb_timeout"`)
 }
 
 func TestTMDBSearchReturnsCamelCaseMovieAndTVResults(t *testing.T) {
@@ -137,6 +197,10 @@ func TestTMDBDetailsRoutesReturnCamelCaseSnapshots(t *testing.T) {
 }
 
 func newTMDBTestRouter(t *testing.T, token string, upstream http.Handler) (http.Handler, *http.Cookie) {
+	return newTMDBTestRouterWithTimeout(t, token, 0, upstream)
+}
+
+func newTMDBTestRouterWithTimeout(t *testing.T, token string, timeout time.Duration, upstream http.Handler) (http.Handler, *http.Cookie) {
 	t.Helper()
 	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "video-record.db"))
 	require.NoError(t, err)
@@ -151,6 +215,7 @@ func newTMDBTestRouter(t *testing.T, token string, upstream http.Handler) (http.
 		BaseURL: server.URL,
 		Token:   token,
 		Cache:   tmdb.NewCache(db, nil),
+		Timeout: timeout,
 	})
 	router := NewRouter(Dependencies{Storage: db, Auth: authService, TMDB: tmdbClient})
 	cookie, _ := loginForHTTPTest(t, router)

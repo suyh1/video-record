@@ -108,6 +108,14 @@ func (handlers tmdbHandlers) status(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"configured": handlers.client.Configured()})
 }
 
+func (handlers tmdbHandlers) connectivity(w http.ResponseWriter, r *http.Request) {
+	if err := handlers.client.TestConnectivity(r.Context()); err != nil {
+		writeTMDBError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"connected": true})
+}
+
 func (handlers tmdbHandlers) search(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	if query == "" {
@@ -293,6 +301,8 @@ func writeTMDBError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, tmdb.ErrNotConfigured):
 		writeProblem(w, r, http.StatusServiceUnavailable, "Service Unavailable", "tmdb_not_configured")
+	case errors.Is(err, tmdb.ErrUnauthorized):
+		writeProblem(w, r, http.StatusBadGateway, "Bad Gateway", "tmdb_unauthorized")
 	case errors.Is(err, tmdb.ErrRateLimited):
 		if errors.As(err, &clientError) && clientError.RetryAfter > 0 {
 			w.Header().Set("Retry-After", fmt.Sprintf("%.0f", clientError.RetryAfter.Seconds()))

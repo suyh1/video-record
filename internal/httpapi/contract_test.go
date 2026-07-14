@@ -281,6 +281,18 @@ func TestContractProvidesConcreteGeneratedTypesAndRealFileMedia(t *testing.T) {
 	require.Contains(t, export.Responses["200"].Content, "text/csv; charset=utf-8")
 }
 
+func TestContractDocumentsTMDBConnectivity(t *testing.T) {
+	contract := readOpenAPIContract(t)
+	operation := decodeOpenAPIOperation(t, contract, http.MethodGet, "/api/v1/tmdb/connectivity")
+	require.Equal(t, "testTMDBConnectivity", operation.OperationID)
+	require.Equal(t, "#/components/schemas/TMDBConnectivity", operation.Responses["200"].Content["application/json"].Schema.Ref)
+
+	schema, ok := contract.Components.Schemas["TMDBConnectivity"]
+	require.True(t, ok)
+	require.Equal(t, []string{"connected"}, schema.Required)
+	require.Contains(t, schema.Properties, "connected")
+}
+
 func readOpenAPIContract(t *testing.T) openAPIContract {
 	t.Helper()
 	contents, err := os.ReadFile(filepath.Join("..", "..", "api", "openapi.yaml"))

@@ -765,6 +765,17 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TMDBStatus' }
         default: { $ref: '#/components/responses/Problem' }
+  /api/v1/tmdb/connectivity:
+    get:
+      operationId: testTMDBConnectivity
+      summary: Test live server-side TMDB connectivity
+      responses:
+        '200':
+          description: TMDB is reachable with the configured credentials.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TMDBConnectivity' }
+        default: { $ref: '#/components/responses/Problem' }
   /api/v1/tmdb/search:
     get:
       operationId: searchTMDB
@@ -1510,6 +1521,12 @@ components:
       required: [configured]
       properties:
         configured: { type: boolean }
+    TMDBConnectivity:
+      type: object
+      additionalProperties: false
+      required: [connected]
+      properties:
+        connected: { type: boolean }
     TMDBSearchResult:
       type: object
       additionalProperties: false
