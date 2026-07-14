@@ -20,7 +20,7 @@ const (
 	defaultBaseURL   = "https://api.themoviedb.org/3"
 	defaultTimeout   = 8 * time.Second
 	searchCacheTTL   = 6 * time.Hour
-	detailsCacheTTL  = 7 * 24 * time.Hour
+	liveMetadataTTL  = 6 * time.Hour
 	maxResponseBytes = 5 << 20
 )
 
@@ -112,19 +112,19 @@ func (client *Client) Search(ctx context.Context, query, language string) (Searc
 
 func (client *Client) MovieDetails(ctx context.Context, id int, language string) (MovieDetails, error) {
 	var response MovieDetails
-	err := client.get(ctx, fmt.Sprintf("/movie/%d", id), languageQuery(language), detailsCacheTTL, &response)
+	err := client.get(ctx, fmt.Sprintf("/movie/%d", id), languageQuery(language), liveMetadataTTL, &response)
 	return response, err
 }
 
 func (client *Client) TVDetails(ctx context.Context, id int, language string) (TVDetails, error) {
 	var response TVDetails
-	err := client.get(ctx, fmt.Sprintf("/tv/%d", id), languageQuery(language), detailsCacheTTL, &response)
+	err := client.get(ctx, fmt.Sprintf("/tv/%d", id), languageQuery(language), liveMetadataTTL, &response)
 	return response, err
 }
 
 func (client *Client) SeasonDetails(ctx context.Context, tvID, season int, language string) (SeasonDetails, error) {
 	var response SeasonDetails
-	err := client.get(ctx, fmt.Sprintf("/tv/%d/season/%d", tvID, season), languageQuery(language), detailsCacheTTL, &response)
+	err := client.get(ctx, fmt.Sprintf("/tv/%d/season/%d", tvID, season), languageQuery(language), liveMetadataTTL, &response)
 	return response, err
 }
 
@@ -134,7 +134,22 @@ func (client *Client) EpisodeDetails(ctx context.Context, tvID, season, episode 
 		ctx,
 		fmt.Sprintf("/tv/%d/season/%d/episode/%d", tvID, season, episode),
 		languageQuery(language),
-		detailsCacheTTL,
+		liveMetadataTTL,
+		&response,
+	)
+	return response, err
+}
+
+func (client *Client) Credits(ctx context.Context, mediaType string, id int, language string) (Credits, error) {
+	if (mediaType != "movie" && mediaType != "tv") || id < 1 {
+		return Credits{}, &ClientError{Kind: ErrUpstreamUnavailable}
+	}
+	var response Credits
+	err := client.get(
+		ctx,
+		fmt.Sprintf("/%s/%d/credits", mediaType, id),
+		languageQuery(language),
+		liveMetadataTTL,
 		&response,
 	)
 	return response, err

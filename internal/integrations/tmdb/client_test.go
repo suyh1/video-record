@@ -95,15 +95,37 @@ func TestSearchCacheExpiresAfterSixHours(t *testing.T) {
 	require.Equal(t, int32(2), requests.Load())
 }
 
-func TestClientFetchesTVSeasonAndEpisodeDetails(t *testing.T) {
+func TestClientFetchesLiveTVSeasonAndCredits(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "zh-CN", r.URL.Query().Get("language"))
 		switch r.URL.Path {
 		case "/tv/1399":
-			_, _ = w.Write([]byte(`{"id":1399,"name":"权力的游戏","first_air_date":"2011-04-17"}`))
+			_, _ = w.Write([]byte(`{
+				"id":1399,
+				"name":"权力的游戏",
+				"first_air_date":"2011-04-17",
+				"episode_run_time":[57],
+				"seasons":[{"id":3624,"name":"第 1 季","season_number":1,"episode_count":10,"poster_path":"/season.jpg"}]
+			}`))
 		case "/tv/1399/season/1":
-			_, _ = w.Write([]byte(`{"id":3624,"season_number":1,"episodes":[]}`))
+			_, _ = w.Write([]byte(`{
+				"id":3624,
+				"name":"第 1 季",
+				"overview":"维斯特洛的冬天将至。",
+				"poster_path":"/season.jpg",
+				"air_date":"2011-04-17",
+				"season_number":1,
+				"episodes":[{"id":63056,"season_number":1,"episode_number":1,"name":"凛冬将至","still_path":"/winter.jpg"}]
+			}`))
 		case "/tv/1399/season/1/episode/1":
-			_, _ = w.Write([]byte(`{"id":63056,"season_number":1,"episode_number":1,"name":"凛冬将至"}`))
+			_, _ = w.Write([]byte(`{"id":63056,"season_number":1,"episode_number":1,"name":"凛冬将至","still_path":"/winter.jpg"}`))
+		case "/tv/1399/credits":
+			_, _ = w.Write([]byte(`{
+				"cast":[
+					{"id":1,"name":"肖恩·宾","character":"艾德·史塔克","profile_path":"/sean.jpg","order":0},
+					{"id":2,"name":"米歇尔·菲尔利","character":"凯特琳·史塔克","profile_path":"","order":1}
+				]
+			}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -114,15 +136,25 @@ func TestClientFetchesTVSeasonAndEpisodeDetails(t *testing.T) {
 	tv, err := client.TVDetails(context.Background(), 1399, "zh-CN")
 	require.NoError(t, err)
 	require.Equal(t, 1399, tv.ID)
+	require.Equal(t, []int{57}, tv.EpisodeRunTime)
+	require.Len(t, tv.Seasons, 1)
+	require.Equal(t, 10, tv.Seasons[0].EpisodeCount)
 	season, err := client.SeasonDetails(context.Background(), 1399, 1, "zh-CN")
 	require.NoError(t, err)
 	require.Equal(t, 1, season.SeasonNumber)
+	require.Equal(t, "/season.jpg", season.PosterPath)
+	require.Equal(t, "/winter.jpg", season.Episodes[0].StillPath)
 	episode, err := client.EpisodeDetails(context.Background(), 1399, 1, 1, "zh-CN")
 	require.NoError(t, err)
 	require.Equal(t, 1, episode.EpisodeNumber)
+	require.Equal(t, "/winter.jpg", episode.StillPath)
+	credits, err := client.Credits(context.Background(), "tv", 1399, "zh-CN")
+	require.NoError(t, err)
+	require.Len(t, credits.Cast, 2)
+	require.Equal(t, "艾德·史塔克", credits.Cast[0].Character)
 }
 
-func TestDetailsCacheExpiresAfterSevenDays(t *testing.T) {
+func TestLiveDetailsCacheExpiresAfterSixHours(t *testing.T) {
 	clock := &fakeClock{now: time.Date(2026, time.July, 13, 12, 0, 0, 0, time.UTC)}
 	cache := newTestCache(t, clock.Now)
 	var requests atomic.Int32
@@ -140,7 +172,7 @@ func TestDetailsCacheExpiresAfterSevenDays(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int32(1), requests.Load())
 
-	clock.Advance(7*24*time.Hour + time.Millisecond)
+	clock.Advance(6*time.Hour + time.Millisecond)
 	_, err = client.MovieDetails(context.Background(), 329865, "zh-CN")
 	require.NoError(t, err)
 	require.Equal(t, int32(2), requests.Load())
