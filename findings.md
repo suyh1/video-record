@@ -34,6 +34,18 @@
 - OpenAPI 现有 `TMDBTV`、`TMDBSeason`、`TMDBEpisode` 和 `MediaItem` 都可向后兼容扩展；进度请求需新增 `episodeRefs` 与远端总集数，进度项需返回 `sourceId`，再用固定版本 `openapi-typescript@7.13.0` 重生成并运行 `api:check`。
 - 无需新增整季目录迁移；现有 seasons/episodes 非空字段允许为用户标记集创建空展示字段的身份桩。若要保留准确累计集数，需要给身份桩记录由远端目录计算的 `absolute_number`，并让日历优先读取该值。
 - Task 9 可完全复用 `selectDefaultSeason`、`mergeSeason`、`findNextEpisode` 和 `totalEpisodeCount`：首页按条目 `tmdbId` 获取 TV 摘要，只加载当前未完成季，再将单个远端 episode 转成与详情页一致的最小 `episodeRefs` 写入；TMDB 失败时不根据稀疏本地身份误判“全看完”。
+- Task 10 现有 E2E 环境未启动 TMDB 上游，`e2e-environment.mjs` 只过滤颜色变量；搜索测试通过 Playwright 页面路由 mock，旧剧集旅程使用本地完整目录。要验证服务端认证代理、6 小时缓存和稀疏落库，需在 runner 内启动确定性的 loopback TMDB 服务并把 API base URL/测试令牌注入 Go 进程。
+- Go 配置当前只有 TMDB token，没有 base URL 覆盖；`tmdb.ClientOptions` 本身已支持 `BaseURL`，前端 poster/hero 也接受绝对 HTTP 图片路径。最小 E2E 接缝是在 config 增加默认空的 `TMDB_API_BASE_URL` 并传入现有 client，未设置时仍由 client 使用官方固定地址。
+- 首轮手机详情实际图显示 `.personal-record-panel` 虽已去卡片/定位，但全局移动端 `.form-actions` 仍为 sticky，保存按钮浮在状态选项上方并破坏 DOM 阅读顺序；需在个人记录面板内显式恢复 `position: static`，而不是放宽重叠验收。
+- TMDB 故障测试失败后的截图在 `finally` 重置合成上游后触发 React Query 重试，已显示恢复后的 live 数据，不能作为失败状态证据；故障旅程应在重置前只断言本地标题、演员错误和表单保存，不依赖该异步截图。
+- 768px/1440px 浅色实图确认响应式网格正确：平板单栏按“个人记录→剧集进度→历史”排序，桌面为宽主列 + 右侧记录栏，cast/hero 未出现文档级横向溢出。当前无需重构网格，只修控件对比度与手机 sticky 行为。
+- 暗色实图定位到 hero 遮罩的主题反转缺陷：遮罩混入 `var(--ink)`，而暗色主题的 ink 是浅色，导致 backdrop 上覆盖浅灰层、白色标题几乎不可读。遮罩应改为固定深色 OKLCH alpha，不能依赖前景主题变量。
+- `TMDBLinker` 仍只用 `externalTitle` 判断已关联，未使用本轮新增的 `tmdbId`；因此保留自定义标题且已有 TMDB 身份的导入条目会错误显示“关联 TMDB”。组件需以 `tmdbId || externalTitle` 判断，同时 hero 内按钮要显式设置 `color/background`，避免继承环境文字色。
+- 重新录制的 375px 明暗基线确认两项视觉修复生效：hero 在暗色主题仍保持深色遮罩与清晰白字，个人记录保存按钮回到状态/更多选项之后的正常文档流；底部导航未覆盖关键控件。
+- 重新录制的 768px 明暗基线确认平板单栏顺序、四状态控制、演员 fallback、季选择与集列表均无拥挤或溢出，hero 在两种主题中保持一致层级。
+- 强制重录后的 1440px 明暗基线确认桌面双栏充分使用主内容区、右侧个人记录不挤压剧集列表，暗色 hero 层次清晰，已关联条目不再出现重复 TMDB 按钮。六张最终详情基线均已人工检查。
+- 实时 dev URL 的独立 Chromium 测量：桌面详情列为 `712px 400px`、文档溢出 0、hero 位图自然宽 720、cast 4 项且家庭设置默认关闭；375px 文档溢出 0、个人表单 action 为 static、个人记录在主进度之前、移动导航高 65px，控制台/pageerror 均为 0。
+- 当前内置浏览器插件在加载 `browser-client.mjs` 时连续三次因 `process` 属性重定义失败，未能建立 in-app 会话；没有修改插件缓存，改用同一仓库 Chromium 对实时服务完成测量与截图，并保留该工具限制作为残余环境风险。
 
 ## 仓库现状
 

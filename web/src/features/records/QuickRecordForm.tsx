@@ -44,7 +44,7 @@ export function QuickRecordForm({ record, now, participants = [], onSaved, onRew
       setRewatchSaved(false)
       if (variables.action === 'undo') {
         setSavedChange(null)
-        form.reset(formValuesFromRecord(record))
+        form.reset(formValuesFromRecord(saved))
       } else {
         setSavedChange({
           saved,

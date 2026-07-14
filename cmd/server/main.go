@@ -69,9 +69,10 @@ func main() {
 	}
 	authService := auth.NewService(auth.NewRepository(db), auth.ServiceOptions{})
 	tmdbClient := tmdb.NewClient(tmdb.ClientOptions{
-		Token:  cfg.TMDBReadAccessToken,
-		Cache:  tmdb.NewCache(db, nil),
-		Logger: logger,
+		BaseURL: cfg.TMDBAPIBaseURL,
+		Token:   cfg.TMDBReadAccessToken,
+		Cache:   tmdb.NewCache(db, nil),
+		Logger:  logger,
 	})
 	mediaService := media.NewService(media.NewRepository(db))
 	recordService := records.NewService(records.NewRepository(db))

@@ -31,6 +31,8 @@ export default defineConfig({
         APP_ENV: 'development',
         APP_PORT: '18081',
         DATA_DIR: resolve(repositoryRoot, '.tmp/e2e-data'),
+        TMDB_API_BASE_URL: process.env.TMDB_API_BASE_URL ?? '',
+        TMDB_READ_ACCESS_TOKEN: process.env.TMDB_READ_ACCESS_TOKEN ?? '',
       },
       url: 'http://127.0.0.1:18081/readyz',
       reuseExistingServer: false,
@@ -51,9 +53,14 @@ export default defineConfig({
       testMatch: /setup\.spec\.ts/,
     },
     {
-      name: 'chromium',
+      name: 'visual',
       dependencies: ['setup'],
-      testIgnore: /(setup|backup)\.spec\.ts/,
+      testMatch: /visual\.spec\.ts/,
+    },
+    {
+      name: 'chromium',
+      dependencies: ['visual'],
+      testIgnore: /(setup|backup|visual)\.spec\.ts/,
     },
     {
       name: 'recovery',

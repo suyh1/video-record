@@ -20,6 +20,7 @@ type Config struct {
 	DataDir             string
 	CookieSecure        bool
 	EncryptionKey       []byte
+	TMDBAPIBaseURL      string
 	TMDBReadAccessToken string
 }
 
@@ -49,6 +50,7 @@ func Load() (Config, error) {
 		DataDir:             valueOrDefault("DATA_DIR", "/data"),
 		CookieSecure:        cookieSecure,
 		EncryptionKey:       encryptionKey,
+		TMDBAPIBaseURL:      strings.TrimSpace(os.Getenv("TMDB_API_BASE_URL")),
 		TMDBReadAccessToken: strings.TrimSpace(os.Getenv("TMDB_READ_ACCESS_TOKEN")),
 	}, nil
 }

@@ -1,7 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
-import { expect, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 
 export const baseURL = 'http://127.0.0.1:15173'
+export const syntheticTMDBOrigin = process.env.E2E_TMDB_ORIGIN ?? 'http://127.0.0.1:18082'
 export const admin = { username: 'e2e-admin', password: ['Synthetic', 'passphrase', '2026'].join('-') }
 
 export async function login(page: Page) {
@@ -40,10 +41,25 @@ export async function seedLibrary(page: Page, csrfToken: string) {
   expect(report.failures).toEqual([])
 }
 
-export async function mockTMDB(page: Page) {
-  await page.route('**/api/v1/tmdb/search**', async (route) => {
-    await route.fulfill({ json: { results: [] } })
+export async function controlSyntheticTMDB(page: Page, failingIds: number[] = [], resetCounts = false) {
+  const response = await page.request.post(`${syntheticTMDBOrigin}/__control`, {
+    data: { failingIds, resetCounts },
   })
+  expect(response.ok()).toBeTruthy()
+}
+
+export async function syntheticTMDBCounts(page: Page) {
+  const response = await page.request.get(`${syntheticTMDBOrigin}/__counts`)
+  expect(response.ok()).toBeTruthy()
+  return response.json() as Promise<Record<string, number>>
+}
+
+export async function expectImageLoaded(image: Locator) {
+  await expect(image).toBeVisible()
+  await expect.poll(() => image.evaluate((element) => {
+    const target = element as HTMLImageElement
+    return target.complete && target.naturalWidth > 0 && target.naturalHeight > 0
+  })).toBeTruthy()
 }
 
 export async function expectNoHorizontalOverflow(page: Page) {
@@ -67,6 +83,40 @@ export async function expectNoHorizontalOverflow(page: Page) {
     return { clientWidth: documentElement.clientWidth, overflow, offenders }
   })
   expect(result.overflow, JSON.stringify(result, null, 2)).toBeLessThanOrEqual(1)
+}
+
+export async function expectNoFixedElementOverlap(page: Page) {
+  const overlaps = await page.evaluate(() => {
+    const elements = [...document.querySelectorAll<HTMLElement>('body *')]
+      .filter((element) => {
+        const style = getComputedStyle(element)
+        const rect = element.getBoundingClientRect()
+        return (style.position === 'fixed' || style.position === 'sticky') && rect.width > 0 && rect.height > 0
+      })
+    const collisions: string[] = []
+    for (let leftIndex = 0; leftIndex < elements.length; leftIndex += 1) {
+      const left = elements[leftIndex]
+      if (!left) continue
+      for (let rightIndex = leftIndex + 1; rightIndex < elements.length; rightIndex += 1) {
+        const right = elements[rightIndex]
+        if (!right || left.contains(right) || right.contains(left)) continue
+        const leftRect = left.getBoundingClientRect()
+        const rightRect = right.getBoundingClientRect()
+        const width = Math.min(leftRect.right, rightRect.right) - Math.max(leftRect.left, rightRect.left)
+        const height = Math.min(leftRect.bottom, rightRect.bottom) - Math.max(leftRect.top, rightRect.top)
+        if (width > 1 && height > 1) collisions.push(`${selector(left)} <> ${selector(right)}`)
+      }
+    }
+    return collisions
+
+    function selector(element: HTMLElement) {
+      const className = typeof element.className === 'string' && element.className
+        ? `.${element.className.trim().replaceAll(/\s+/g, '.')}`
+        : ''
+      return `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}${className}`
+    }
+  })
+  expect(overlaps, overlaps.join('\n')).toEqual([])
 }
 
 export async function expectNoBlockingA11yViolations(page: Page) {
@@ -93,7 +143,7 @@ const seedDocument = {
         customOverview: '一部用于端到端验证的合成电影。',
         customYear: '2024',
         runtimeMinutes: 112,
-        externalIds: [],
+        externalIds: [{ source: 'tmdb', sourceId: '2002', mediaType: 'movie' }],
         genres: [],
         seasons: [],
       },
@@ -123,23 +173,9 @@ const seedDocument = {
         customTitle: '潮汐档案',
         customOverview: '一部用于分集进度验证的合成剧集。',
         customYear: '2025',
-        externalIds: [],
+        externalIds: [{ source: 'tmdb', sourceId: '1001', mediaType: 'tv' }],
         genres: [],
-        seasons: [
-          {
-            id: 'e2e-season-1',
-            seasonNumber: 1,
-            name: '第 1 季',
-            overview: '',
-            posterPath: '',
-            airDate: '2025-01-01',
-            episodes: [
-              { id: 'e2e-episode-1', episodeNumber: 1, name: '潮起', overview: '', stillPath: '', airDate: '2025-01-01', runtime: 45 },
-              { id: 'e2e-episode-2', episodeNumber: 2, name: '回声', overview: '', stillPath: '', airDate: '2025-01-08', runtime: 47 },
-              { id: 'e2e-episode-3', episodeNumber: 3, name: '归航', overview: '', stillPath: '', airDate: '2025-01-15', runtime: 49 },
-            ],
-          },
-        ],
+        seasons: [],
       },
       state: {
         status: 'watching',

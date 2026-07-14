@@ -1,8 +1,10 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
+import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { RecordState } from '../../api/types'
 import { renderWithQueryClient } from '../../test/render'
 import { server } from '../../test/server'
 import { QuickRecordForm } from './QuickRecordForm'
@@ -78,6 +80,31 @@ describe('QuickRecordForm', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('保存失败')
     expect(screen.getByLabelText('私人笔记')).toHaveValue('看到沙虫出现')
+  })
+
+  it('resets visible fields from the undo response after the parent rerenders', async () => {
+    const wishlistRecord = { ...initialRecord, status: 'wishlist' as const, version: 1 }
+    let attempts = 0
+    server.use(http.put('*/api/v1/records/media-1', () => {
+      attempts += 1
+      return HttpResponse.json(attempts === 1
+        ? { ...wishlistRecord, note: '临时笔记', version: 2 }
+        : { ...wishlistRecord, note: null, version: 3 })
+    }))
+    const user = userEvent.setup()
+
+    function ControlledForm() {
+      const [record, setRecord] = useState<RecordState>(wishlistRecord)
+      return <QuickRecordForm record={record} now={new Date('2026-07-13T09:00:00Z')} onSaved={setRecord} />
+    }
+
+    renderWithQueryClient(<ControlledForm />)
+    await user.click(screen.getByRole('button', { name: '更多记录选项' }))
+    await user.type(screen.getByLabelText('私人笔记'), '临时笔记')
+    await user.click(screen.getByRole('button', { name: '保存记录' }))
+    await user.click(await screen.findByRole('button', { name: '撤销刚才的修改' }))
+
+    await waitFor(() => expect(screen.getByLabelText('私人笔记')).toHaveValue(''))
   })
 
   it('keeps the draft and reapplies it against the latest ETag after a conflict', async () => {

@@ -35,7 +35,7 @@ export function TMDBLinker({ media }: TMDBLinkerProps) {
   })
 
   if (linked) return <p className="tmdb-link-success" role="status">已关联 TMDB，个人记录保持不变</p>
-  if (media.externalTitle) return null
+  if (media.tmdbId || media.externalTitle) return null
 
   return (
     <div className="tmdb-linker">

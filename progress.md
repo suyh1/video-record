@@ -34,6 +34,35 @@
 - Task 9 首次 typecheck 仅报 live/legacy 联合类型未随普通布尔值收窄；根因定位后改为在各来源分支使用其原始 episode 值，不使用强制断言。
 - Task 9 类型修正后复验：`npm --prefix web run typecheck` 退出 0，Home 定向测试保持 3/3 通过。
 - Task 9 提交前门禁：Home + episodeCatalog 6/6 通过，前端 lint 与 `git diff --check` 退出 0；未新增依赖或本地 TMDB 展示数据存储。
+- Task 9 已提交为 `b5d1344`；Task 10 初审确认当前 E2E 仍是旧本地剧集目录 + 页面级 TMDB mock，尚不能覆盖后端 live cache、credits/season 代理和稀疏身份落库。
+- Task 10 配置审计：现有 TMDB client 已支持 BaseURL，但应用 config/main 未暴露；将先以 Go 配置红测增加 `TMDB_API_BASE_URL` 覆盖，默认生产路径保持不变。
+- `TMDB_API_BASE_URL` 配置 RED 已确认：config 定向测试因字段不存在编译失败；最小实现只读取可空覆盖并传给现有 TMDB client。
+- `TMDB_API_BASE_URL` GREEN：config 与 `cmd/server` 定向包均通过；E2E runner 现启动带 credits/两季/图片/请求计数的本地 TMDB，上游种子剧集改为零本地季集目录。
+- Task 10 新 E2E 断言已覆盖 live hero/cast/season、单集稀疏写入、切季整季、缓存、TMDB 故障记录、三视口溢出/固定元素和详情明暗快照；视口测试显式选择季，避免依赖文件执行顺序。
+- Task 10 首轮完整 E2E RED：9/14 通过、4 失败、1 因项目依赖未运行。已通过三视口无溢出/固定重叠、live 单集稀疏写入、6 小时缓存与既有主要旅程；失败为 hero 按钮对比度、折叠整季测试步骤、本地故障简介断言和六张新详情基线。
+- 首轮截图复核发现移动端个人记录保存栏仍继承全局 sticky，浮在状态选项上方；故障截图则因测试清理后自动重试已恢复 live 数据，后续断言将避免依赖清理后的画面。
+- 768px 与 1440px 浅色详情图已人工检查：单栏/双栏断点、演员条、季选择和历史区均正确使用宽度，无需改变既定布局架构。
+- 375px/768px 暗色详情图已检查并定位 hero 遮罩反转：`--ink` 在暗色主题为浅色，造成浅灰遮罩与白字低对比；准备改成主题无关深色遮罩。
+- 1440px 暗色图确认同一遮罩缺陷；源码同时发现 `TMDBLinker` 未识别已有 `tmdbId`，导致保留自定义标题的已关联条目仍显示重复关联按钮。
+- TMDBLinker 与移动 sticky 红灯均已确认；最小实现按 `tmdbId` 隐藏重复入口、用固定深色 alpha 遮罩 hero，并在 375px 个人记录面板内取消 form actions sticky。
+- 修正后 GREEN：TMDBLinker + MediaDetails 组件测试 4/4，通过初始化 + 三视口详情 E2E 2/2；375px form actions 计算样式已为 static。
+- E2E 失败项复验中 axe/live 单集/整季/缓存/TMDB 故障保存 6/6 通过；后续录制测试因前一旅程留下笔记导致表单默认展开，已改为验证保存后通过产品撤销恢复状态。
+- 录制子集复验中后续正常录制已通过；故障旅程仅因误期待撤销后自动收起失败，现改为断言笔记字段清空以验证记录恢复。
+- 撤销字段断言进一步定位真实 UI bug：后端/新页面已恢复空笔记，但当前表单用旧 prop 重置仍显示被撤销文本；将以组件红测要求使用 undo 响应状态重置。
+- QuickRecordForm 受控父层回归测试取得 RED（1/7 失败，笔记仍为“临时笔记”）；最小修正改为用 undo 响应 `saved` 重置表单。
+- QuickRecordForm GREEN：组件 7/7；初始化 + TMDB 故障保存/撤销 + 正常录制 E2E 3/3，故障恢复不再污染后续旅程。
+- 视觉子集 3/3 通过并生成六张详情基线；375px 明暗图已人工复核，暗色遮罩和静态保存栏修正符合预期。
+- 768px 明暗详情基线已人工复核：单栏内容顺序、控制尺寸和文字对比符合预期。
+- 1440px 检查发现浅色基线因 1% 容差保留了已删除的关联按钮；将用 `--update-snapshots=all` 强制重录，不能把容差内旧图当作批准基线。
+- 使用 `--update-snapshots=all` 强制重录后视觉子集 3/3；1440px 浅色旧按钮已消失，六张最终详情明暗基线全部人工复核完成。
+- 全前端首轮门禁：Vitest 25 文件/54 测试、lint、api:check、diff-check 通过；typecheck/build 仅因测试 harness state 推断过窄失败，已显式标注 `RecordState`。
+- 最终全仓 Go race 已退出 0。完整 E2E 首轮 11/14 通过，失败定位为电影 TMDB 缓存预热影响故障夹具，以及视觉测试在进度写入后运行；已分别改为页面 API 固定失败和 setup 后独立 visual project。
+- 完整 E2E 二轮 visual/axe/剧集均通过；两条录制旅程仍假设电影未被家庭旅程标记。已移除完成记录不支持的快速撤销假设，并按字段是否可见决定是否展开。
+- 完整 E2E 最终普通模式 14/14 通过（setup 1、visual 2、chromium 10、recovery 1）；全仓 `go test ./... -race -count=1` 也已退出 0。
+- 浏览器验收端口 `38082/28081/25173` 均空闲；当前未提交文件均属于 Task 10 与跟踪更新，无意外外部改动。
+- 实时浏览器验收已完成：桌面/手机均无横向溢出，desktop 双栏 `712px/400px`，mobile form actions static 且个人记录在进度前，hero 图片非空、季切换与家庭折叠可用、控制台/pageerror 为 0；内置浏览器插件因三次 `process` 重定义错误不可用，使用仓库 Chromium 完成同等检查。
+- 最终需求审计逐项通过：全宽 hero/海报、live cast、6 小时 live 季集、仅标记集稀疏落库、季/单集/范围/整季进度、家庭折叠、桌面双栏/移动单栏、TMDB 故障本地记录均有代码与自动化证据。
+- 最终前端门禁：Vitest 25 文件/54 测试、typecheck、lint、api:check、build、diff-check 全部退出 0；完整 E2E 14/14、Go race 与 vet 退出 0。
 
 ## 2026-07-13：Task 27 恢复与 v1 MUST 审计
 

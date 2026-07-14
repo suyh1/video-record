@@ -17,6 +17,7 @@ func TestLoadDefaults(t *testing.T) {
 	require.Equal(t, 8080, cfg.Port)
 	require.Equal(t, "/data", cfg.DataDir)
 	require.False(t, cfg.CookieSecure)
+	require.Empty(t, cfg.TMDBAPIBaseURL)
 }
 
 func TestLoadEnablesSecureCookiesInProduction(t *testing.T) {
@@ -49,6 +50,7 @@ func TestLoadUsesEnvironmentOverrides(t *testing.T) {
 	t.Setenv("APP_COOKIE_SECURE", "true")
 	t.Setenv("APP_ENCRYPTION_KEY", key)
 	t.Setenv("TMDB_READ_ACCESS_TOKEN", "synthetic-tmdb-token")
+	t.Setenv("TMDB_API_BASE_URL", "http://127.0.0.1:18082/3")
 
 	cfg, err := Load()
 
@@ -59,6 +61,7 @@ func TestLoadUsesEnvironmentOverrides(t *testing.T) {
 	require.True(t, cfg.CookieSecure)
 	require.Len(t, cfg.EncryptionKey, 32)
 	require.Equal(t, "synthetic-tmdb-token", cfg.TMDBReadAccessToken)
+	require.Equal(t, "http://127.0.0.1:18082/3", cfg.TMDBAPIBaseURL)
 }
 
 func clearConfigEnvironment(t *testing.T) {
@@ -70,6 +73,7 @@ func clearConfigEnvironment(t *testing.T) {
 		"APP_COOKIE_SECURE",
 		"APP_ENCRYPTION_KEY",
 		"TMDB_READ_ACCESS_TOKEN",
+		"TMDB_API_BASE_URL",
 	} {
 		t.Setenv(key, "")
 	}

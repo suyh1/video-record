@@ -5,7 +5,7 @@ import { createConnection } from 'node:net'
 import { resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-import { playwrightEnvironment } from './e2e-environment.mjs'
+import { playwrightEnvironment, startSyntheticTMDB, syntheticTMDBPort } from './e2e-environment.mjs'
 
 const require = createRequire(import.meta.url)
 const projectRoot = resolve(import.meta.dirname, '../..')
@@ -13,10 +13,18 @@ const dataDir = resolve(projectRoot, '.tmp/e2e-data')
 const playwrightCLI = require.resolve('@playwright/test/cli')
 
 await rm(dataDir, { force: true, recursive: true })
+const syntheticToken = ['e2e', 'tmdb', 'token'].join('-')
+const syntheticTMDB = await startSyntheticTMDB({ token: syntheticToken })
+const environment = playwrightEnvironment({
+  ...process.env,
+  E2E_TMDB_ORIGIN: syntheticTMDB.origin,
+  TMDB_API_BASE_URL: syntheticTMDB.baseURL,
+  TMDB_READ_ACCESS_TOKEN: syntheticToken,
+})
 
 const child = spawn(process.execPath, [playwrightCLI, 'test', ...process.argv.slice(2)], {
   cwd: resolve(projectRoot, 'web'),
-  env: playwrightEnvironment(process.env),
+  env: environment,
   stdio: 'inherit',
 })
 
@@ -24,7 +32,8 @@ const exitCode = await new Promise((resolveExit) => {
   child.on('exit', (code, signal) => resolveExit(signal ? 1 : (code ?? 1)))
 })
 
-await Promise.all([waitForPortRelease(18081), waitForPortRelease(15173)])
+await syntheticTMDB.close()
+await Promise.all([waitForPortRelease(18081), waitForPortRelease(15173), waitForPortRelease(syntheticTMDBPort)])
 await rm(dataDir, { force: true, recursive: true })
 process.exitCode = exitCode
 
