@@ -25,13 +25,45 @@ require_pattern() {
   fi
 }
 
+reject_literal() {
+  file=$1
+  literal=$2
+  description=$3
+
+  if [ -f "$file" ] && grep -Fiq "$literal" "$file"; then
+    fail "$file must not contain $description"
+  fi
+}
+
 require_file README.md
+require_file docker-compose.yml
 require_file docs/deployment.md
 require_file docs/backup-restore.md
 require_file docs/upgrading.md
 require_file docs/security.md
 require_file docs/integrations.md
 require_file docs/release-checklist.md
+
+if [ -e .env.example ]; then
+  fail '.env.example must not exist; docker-compose.yml is the only Compose configuration source'
+fi
+
+reject_literal docker-compose.yml '${' 'variable interpolation'
+require_pattern docker-compose.yml 'image:[[:space:]]+video-record:local' 'the explicit local image name'
+require_pattern docker-compose.yml '8080:8080' 'the explicit default host port'
+require_pattern docker-compose.yml 'APP_COOKIE_SECURE:[[:space:]]*"false"' 'the explicit local HTTP cookie setting'
+require_pattern docker-compose.yml 'APP_ENCRYPTION_KEY:[[:space:]]*""' 'an explicit optional encryption-key value'
+require_pattern docker-compose.yml 'TMDB_READ_ACCESS_TOKEN:[[:space:]]*""' 'an explicit optional TMDB token value'
+
+for operator_document in \
+  README.md \
+  docs/deployment.md \
+  docs/security.md \
+  docs/integrations.md \
+  docs/upgrading.md \
+  docs/release-checklist.md; do
+  reject_literal "$operator_document" '.env' 'instructions to maintain a separate .env file'
+done
 
 require_pattern README.md 'docker compose (up|安装|install)' 'a fresh-machine Compose installation'
 require_pattern docs/deployment.md '(openssl rand -base64 32|随机.*32.*byte|32.*byte.*随机)' 'generation of a random 32-byte encryption key'
