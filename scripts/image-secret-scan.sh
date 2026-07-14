@@ -34,17 +34,39 @@ const indexPath = path.join(root, 'index.json')
 const legacyManifestPath = path.join(root, 'manifest.json')
 if (fs.existsSync(indexPath)) {
   const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'))
-  for (const descriptor of index.manifests || []) {
-    const manifestDigest = String(descriptor.digest || '').replace(/^sha256:/, '')
-    if (!/^[0-9a-f]{64}$/.test(manifestDigest)) process.exit(1)
-    const manifestPath = path.join(root, 'blobs', 'sha256', manifestDigest)
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
-    for (const layer of manifest.layers || []) {
-      const digest = String(layer.digest || '').replace(/^sha256:/, '')
-      if (!/^[0-9a-f]{64}$/.test(digest)) process.exit(1)
-      process.stdout.write('blobs/sha256/' + digest + '\n')
+  const visitedDescriptors = new Set()
+  const emittedLayers = new Set()
+  const digestValue = (descriptor) => {
+    const digest = String(descriptor?.digest || '').replace(/^sha256:/, '')
+    if (!/^[0-9a-f]{64}$/.test(digest)) process.exit(1)
+    return digest
+  }
+  const isArchiveLayer = (layer) => {
+    const mediaType = String(layer?.mediaType || '')
+    return mediaType === '' ||
+      (mediaType.includes('image.layer') && mediaType.includes('tar')) ||
+      mediaType.includes('rootfs.diff.tar')
+  }
+  const visitDescriptor = (descriptor) => {
+    const digest = digestValue(descriptor)
+    if (visitedDescriptors.has(digest)) return
+    visitedDescriptors.add(digest)
+    const document = JSON.parse(fs.readFileSync(path.join(root, 'blobs', 'sha256', digest), 'utf8'))
+    if (Array.isArray(document.manifests)) {
+      for (const child of document.manifests) visitDescriptor(child)
+      return
+    }
+    if (!Array.isArray(document.layers)) process.exit(1)
+    for (const layer of document.layers) {
+      if (!isArchiveLayer(layer)) continue
+      const layerDigest = digestValue(layer)
+      if (emittedLayers.has(layerDigest)) continue
+      emittedLayers.add(layerDigest)
+      process.stdout.write('blobs/sha256/' + layerDigest + '\n')
     }
   }
+  if (!Array.isArray(index.manifests)) process.exit(1)
+  for (const descriptor of index.manifests) visitDescriptor(descriptor)
 } else if (fs.existsSync(legacyManifestPath)) {
   const manifests = JSON.parse(fs.readFileSync(legacyManifestPath, 'utf8'))
   if (!Array.isArray(manifests)) process.exit(1)

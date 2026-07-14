@@ -27,14 +27,78 @@ type migration struct {
 }
 
 func Migrate(ctx context.Context, db *DB) error {
+	return migrateEmbedded(ctx, db, true)
+}
+
+func migrateEmbedded(ctx context.Context, db *DB, createBackup bool) error {
 	migrations, err := fs.Sub(embeddedMigrations, "migrations")
 	if err != nil {
 		return err
 	}
-	return migrate(ctx, db.Writer(), migrations)
+	ordered, err := loadMigrations(migrations)
+	if err != nil {
+		return err
+	}
+	if createBackup {
+		required, err := preMigrationBackupRequired(ctx, db.Reader(), ordered)
+		if err != nil {
+			return err
+		}
+		if required {
+			if _, err := NewBackupManager(db, BackupOptions{}).Create(ctx); err != nil {
+				return fmt.Errorf("create pre-migration backup: %w", err)
+			}
+		}
+	}
+	return migrateLoaded(ctx, db.Writer(), ordered)
+}
+
+func preMigrationBackupRequired(ctx context.Context, db *sql.DB, ordered []migration) (bool, error) {
+	var exists int
+	if err := db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'
+	`).Scan(&exists); err != nil {
+		return false, err
+	}
+	if exists == 0 {
+		return false, nil
+	}
+	rows, err := db.QueryContext(ctx, "SELECT version FROM schema_migrations")
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = rows.Close() }()
+	applied := make(map[int]struct{})
+	for rows.Next() {
+		var version int
+		if err := rows.Scan(&version); err != nil {
+			return false, err
+		}
+		applied[version] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	if len(applied) == 0 {
+		return false, nil
+	}
+	for _, item := range ordered {
+		if _, exists := applied[item.version]; !exists {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func migrate(ctx context.Context, db *sql.DB, migrations fs.FS) error {
+	ordered, err := loadMigrations(migrations)
+	if err != nil {
+		return err
+	}
+	return migrateLoaded(ctx, db, ordered)
+}
+
+func migrateLoaded(ctx context.Context, db *sql.DB, ordered []migration) error {
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version INTEGER PRIMARY KEY,
@@ -46,10 +110,6 @@ func migrate(ctx context.Context, db *sql.DB, migrations fs.FS) error {
 		return err
 	}
 
-	ordered, err := loadMigrations(migrations)
-	if err != nil {
-		return err
-	}
 	for _, item := range ordered {
 		var name, checksum string
 		err := db.QueryRowContext(ctx,

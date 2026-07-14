@@ -5,6 +5,8 @@ import { createConnection } from 'node:net'
 import { resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
+import { playwrightEnvironment } from './e2e-environment.mjs'
+
 const require = createRequire(import.meta.url)
 const projectRoot = resolve(import.meta.dirname, '../..')
 const dataDir = resolve(projectRoot, '.tmp/e2e-data')
@@ -14,7 +16,7 @@ await rm(dataDir, { force: true, recursive: true })
 
 const child = spawn(process.execPath, [playwrightCLI, 'test', ...process.argv.slice(2)], {
   cwd: resolve(projectRoot, 'web'),
-  env: process.env,
+  env: playwrightEnvironment(process.env),
   stdio: 'inherit',
 })
 

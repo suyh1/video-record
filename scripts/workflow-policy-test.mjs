@@ -21,6 +21,7 @@ requireText(ci, ciPath, [
   './scripts/coverage-gate-test.sh',
   './scripts/image-secret-scan-test.sh',
   './scripts/verify-manifest-test.sh',
+  './scripts/docs-acceptance-test.sh',
   'gofmt -l',
   'go test ./... -race -count=1',
   'go vet ./...',

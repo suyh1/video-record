@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -25,13 +26,40 @@ describe('App', () => {
     server.use(http.get('*/api/v1/auth/me', () => {
       currentUserRequest()
       return HttpResponse.json({ id: 'member-1', username: 'family', role: 'member' })
-    }), http.get('*/api/v1/sync/status', () => HttpResponse.json({ accounts: [], pendingTotal: 0 })))
+    }),
+    http.get('*/api/v1/sync/status', () => HttpResponse.json({ accounts: [], pendingTotal: 0 })),
+    http.get('*/api/v1/integrations/accounts', () => HttpResponse.json([])))
     window.history.pushState({}, '', '/settings')
 
     render(<App />)
 
     expect(await screen.findByText('This product uses the TMDB API but is not endorsed or certified by TMDB.')).toBeVisible()
+    expect(screen.getByText('TMDB 未配置')).toBeVisible()
     await waitFor(() => expect(currentUserRequest).toHaveBeenCalledOnce())
+    window.history.pushState({}, '', '/')
+  })
+
+  it('shows the current account and logs out from settings', async () => {
+    let loggedOut = false
+    server.use(
+      http.get('*/api/v1/auth/me', () => loggedOut
+        ? HttpResponse.json({ code: 'unauthenticated' }, { status: 401 })
+        : HttpResponse.json({ id: 'member-1', username: 'family', role: 'member' })),
+      http.get('*/api/v1/sync/status', () => HttpResponse.json({ accounts: [], pendingTotal: 0 })),
+      http.get('*/api/v1/integrations/accounts', () => HttpResponse.json([])),
+      http.post('*/api/v1/auth/logout', () => {
+        loggedOut = true
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+    window.history.pushState({}, '', '/settings')
+    const user = userEvent.setup()
+
+    render(<App />)
+
+    expect(await screen.findByText('family')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '退出登录' }))
+    expect(await screen.findByRole('heading', { name: '登录 video-record' })).toBeVisible()
     window.history.pushState({}, '', '/')
   })
 

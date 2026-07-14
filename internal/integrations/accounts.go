@@ -82,7 +82,12 @@ func (repository *AccountRepository) Create(ctx context.Context, input CreateAcc
 		CredentialFingerprint: encrypted.Fingerprint,
 		Enabled:               input.Enabled, CreatedAt: now, UpdatedAt: now,
 	}
-	_, err = repository.db.Writer().ExecContext(ctx, `
+	tx, err := repository.db.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return Account{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO external_accounts (
 			id, user_id, provider, name, base_url, credential_ciphertext,
 			credential_nonce, credential_version, credential_fingerprint,
@@ -94,7 +99,52 @@ func (repository *AccountRepository) Create(ctx context.Context, input CreateAcc
 	if err != nil {
 		return Account{}, err
 	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO audit_events (
+			id, actor_user_id, action, target_type, target_id, metadata_json, created_at
+		) VALUES (?, ?, 'integration.connect', 'integration_account', ?, '{}', ?)
+	`, uuid.NewString(), account.UserID, account.ID, now.UnixMilli()); err != nil {
+		return Account{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Account{}, err
+	}
 	return account, nil
+}
+
+func (repository *AccountRepository) Delete(ctx context.Context, userID, accountID string) error {
+	userID = strings.TrimSpace(userID)
+	accountID = strings.TrimSpace(accountID)
+	if userID == "" || accountID == "" {
+		return ErrInvalidAccount
+	}
+	tx, err := repository.db.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx,
+		"DELETE FROM external_accounts WHERE id = ? AND user_id = ?",
+		accountID, userID,
+	)
+	if err != nil {
+		return err
+	}
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if deleted == 0 {
+		return ErrAccountNotFound
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO audit_events (
+			id, actor_user_id, action, target_type, target_id, metadata_json, created_at
+		) VALUES (?, ?, 'integration.disconnect', 'integration_account', ?, '{}', ?)
+	`, uuid.NewString(), userID, accountID, repository.now().UTC().UnixMilli()); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (repository *AccountRepository) List(ctx context.Context, userID string) ([]Account, error) {

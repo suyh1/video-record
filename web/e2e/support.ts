@@ -47,8 +47,26 @@ export async function mockTMDB(page: Page) {
 }
 
 export async function expectNoHorizontalOverflow(page: Page) {
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-  expect(overflow).toBeLessThanOrEqual(1)
+  const result = await page.evaluate(() => {
+    const documentElement = document.documentElement
+    const overflow = documentElement.scrollWidth - documentElement.clientWidth
+    const offenders = [...document.querySelectorAll<HTMLElement>('body *')]
+      .map((element) => {
+        const rect = element.getBoundingClientRect()
+        return {
+          element: element.tagName.toLowerCase(),
+          id: element.id,
+          className: typeof element.className === 'string' ? element.className : '',
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width),
+        }
+      })
+      .filter(({ left, right }) => left < -1 || right > documentElement.clientWidth + 1)
+      .slice(0, 20)
+    return { clientWidth: documentElement.clientWidth, overflow, offenders }
+  })
+  expect(result.overflow, JSON.stringify(result, null, 2)).toBeLessThanOrEqual(1)
 }
 
 export async function expectNoBlockingA11yViolations(page: Page) {

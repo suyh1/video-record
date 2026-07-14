@@ -67,6 +67,20 @@ func TestPolicyHandlersNeverExposePrivateNotesAndRequireExplicitSharing(t *testi
 	require.Contains(t, private.Body.String(), `"privateNote":null`)
 	require.NotContains(t, private.Body.String(), note)
 
+	sharingState := performJSONRequest(router, http.MethodGet,
+		"http://example.test/api/v1/household/records/"+movie.ID+"/sharing",
+		nil, map[string]string{"Cookie": memberCookie.String()},
+	)
+	require.Equal(t, http.StatusOK, sharingState.Code)
+	require.Equal(t, `"1"`, sharingState.Header().Get("ETag"))
+	require.JSONEq(t, `{
+		"mediaId":"`+movie.ID+`",
+		"shareRating":false,
+		"shareReview":false,
+		"sharedReview":null,
+		"version":1
+	}`, sharingState.Body.String())
+
 	shared := performJSONRequest(router, http.MethodPut,
 		"http://example.test/api/v1/household/records/"+movie.ID+"/sharing",
 		map[string]any{"shareRating": true, "shareReview": true, "sharedReview": "值得一起看", "expectedVersion": state.Version},

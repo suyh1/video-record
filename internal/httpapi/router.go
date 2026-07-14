@@ -8,6 +8,7 @@ import (
 
 	"video-record/internal/auth"
 	"video-record/internal/household"
+	"video-record/internal/integrations"
 	"video-record/internal/integrations/tmdb"
 	"video-record/internal/media"
 	"video-record/internal/records"
@@ -17,17 +18,19 @@ import (
 )
 
 type Dependencies struct {
-	Logger       *slog.Logger
-	Storage      *storage.DB
-	Auth         *auth.Service
-	CookieSecure bool
-	TMDB         *tmdb.Client
-	Media        *media.Service
-	Records      *records.Service
-	Stats        *statsdomain.Service
-	Household    *household.Service
-	Backup       *storage.BackupManager
-	Sync         *syncdomain.CandidateService
+	Logger              *slog.Logger
+	Storage             *storage.DB
+	Auth                *auth.Service
+	CookieSecure        bool
+	TMDB                *tmdb.Client
+	Media               *media.Service
+	Records             *records.Service
+	Stats               *statsdomain.Service
+	Household           *household.Service
+	Backup              *storage.BackupManager
+	Sync                *syncdomain.CandidateService
+	IntegrationAccounts *integrations.AccountRepository
+	SyncJobs            *syncdomain.Service
 }
 
 func NewRouter(dependencies Dependencies) http.Handler {
@@ -69,6 +72,19 @@ func NewRouter(dependencies Dependencies) http.Handler {
 				}
 				protected.Get("/auth/me", handlers.me)
 				protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post("/auth/logout", handlers.logout)
+				if dependencies.IntegrationAccounts != nil {
+					integrationAPI := integrationHandlers{
+						accounts: dependencies.IntegrationAccounts,
+						jobs:     dependencies.SyncJobs,
+					}
+					protected.Get("/integrations/accounts", integrationAPI.list)
+					protected.With(protectedWriteMiddleware...).Post(
+						"/integrations/accounts", integrationAPI.create,
+					)
+					protected.With(protectedWriteMiddleware...).Delete(
+						"/integrations/accounts/{accountID}", integrationAPI.disconnect,
+					)
+				}
 				if dependencies.Backup != nil && dependencies.Storage != nil {
 					idempotency := newIdempotencyMiddleware(dependencies.Storage)
 					backupAPI := backupHandlers{manager: dependencies.Backup, idempotency: idempotency}
@@ -88,6 +104,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protected.Get("/records/{mediaID}", recordAPI.getRecord)
 					protected.Get("/records/{mediaID}/events", recordAPI.watchEvents)
 					protected.Get("/records/{mediaID}/progress", recordAPI.episodeProgress)
+					protected.Get("/records/{mediaID}/tags", recordAPI.tags)
 					protected.With(protectedWriteMiddleware...).Put(
 						"/records/{mediaID}", recordAPI.updateState,
 					)
@@ -99,6 +116,9 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					)
 					protected.With(protectedWriteMiddleware...).Post(
 						"/collections/{collectionID}/items", recordAPI.addCollectionItem,
+					)
+					protected.With(protectedWriteMiddleware...).Put(
+						"/collections/{collectionID}/items", recordAPI.replaceCollectionItems,
 					)
 					if dependencies.Storage != nil {
 						idempotency := newIdempotencyMiddleware(dependencies.Storage)
@@ -148,6 +168,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protected.Get("/household/members", householdAPI.members)
 					protected.Get("/household/participants", householdAPI.participants)
 					protected.Get("/household/records/{ownerID}/{mediaID}", householdAPI.visibleRecord)
+					protected.Get("/household/records/{mediaID}/sharing", householdAPI.sharing)
 					if dependencies.Storage != nil {
 						idempotency := newIdempotencyMiddleware(dependencies.Storage)
 						protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth), idempotency.Handle).

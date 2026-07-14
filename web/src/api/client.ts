@@ -2,14 +2,19 @@ import type {
   CalendarFilter,
   CalendarResponse,
   BackupArtifact,
+  Collection,
   CurrentUser,
   HouseholdMember,
   ImportReport,
+  IntegrationAccount,
+  CreateIntegrationAccountPayload,
   LibraryResponse,
   MediaDetails,
   MediaSearchResult,
   MediaType,
   RecordState,
+  RecordTags,
+  RecordSharing,
   RecordStatus,
   SeriesProgress,
   StatsSummary,
@@ -20,6 +25,7 @@ import type {
   SetupStatus,
   TMDBSearchResponse,
   WatchEvent,
+  VisibleHouseholdRecord,
   LoginResponse,
 } from './types'
 
@@ -36,6 +42,12 @@ export class APIError extends Error {
 }
 
 export async function requestJSON<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await request(path, init)
+  if (response.status === 204) return undefined as T
+  return (await response.json()) as T
+}
+
+async function request(path: string, init?: RequestInit) {
   const response = await fetch(new URL(path, window.location.origin), {
     credentials: 'same-origin',
     ...init,
@@ -50,8 +62,7 @@ export async function requestJSON<T>(path: string, init?: RequestInit): Promise<
       response.headers.get('ETag'),
     )
   }
-  if (response.status === 204) return undefined as T
-  return (await response.json()) as T
+  return response
 }
 
 export async function searchLocalMedia(query: string, signal?: AbortSignal): Promise<MediaSearchResult[]> {
@@ -111,12 +122,80 @@ export function getRecord(mediaID: string, signal?: AbortSignal) {
   return requestJSON<RecordState>(`/api/v1/records/${encodeURIComponent(mediaID)}`, signal ? { signal } : undefined)
 }
 
+export function getRecordTags(mediaID: string, signal?: AbortSignal) {
+  return requestJSON<RecordTags>(
+    `/api/v1/records/${encodeURIComponent(mediaID)}/tags`,
+    signal ? { signal } : undefined,
+  )
+}
+
+export async function setRecordTags(mediaID: string, version: number, tags: string[]) {
+  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+  const response = await request(`/api/v1/records/${encodeURIComponent(mediaID)}/tags`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': createIdempotencyKey(),
+      'If-Match': `"${version}"`,
+      'X-CSRF-Token': csrfToken,
+    },
+    body: JSON.stringify({ tags }),
+  })
+  const nextVersion = Number(response.headers.get('ETag')?.replaceAll('"', ''))
+  if (!Number.isInteger(nextVersion) || nextVersion < 0) throw new Error('Invalid record ETag')
+  return nextVersion
+}
+
+export function getRecordSharing(mediaID: string, signal?: AbortSignal) {
+  return requestJSON<RecordSharing>(
+    `/api/v1/household/records/${encodeURIComponent(mediaID)}/sharing`,
+    signal ? { signal } : undefined,
+  )
+}
+
+export function updateRecordSharing(
+  mediaID: string,
+  payload: { shareRating: boolean; shareReview: boolean; sharedReview: string; expectedVersion: number },
+) {
+  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+  return requestJSON<RecordSharing>(`/api/v1/household/records/${encodeURIComponent(mediaID)}/sharing`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': createIdempotencyKey(),
+      'X-CSRF-Token': csrfToken,
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function getVisibleHouseholdRecord(ownerID: string, mediaID: string, signal?: AbortSignal) {
+  return requestJSON<VisibleHouseholdRecord>(
+    `/api/v1/household/records/${encodeURIComponent(ownerID)}/${encodeURIComponent(mediaID)}`,
+    signal ? { signal } : undefined,
+  )
+}
+
 export function getWatchEvents(mediaID: string, signal?: AbortSignal) {
   return requestJSON<WatchEvent[]>(`/api/v1/records/${encodeURIComponent(mediaID)}/events`, signal ? { signal } : undefined)
 }
 
 export function createRewatch(mediaID: string, payload: { watchedAt: string; viewingMethod?: string }) {
   return protectedWrite<WatchEvent>(`/api/v1/records/${encodeURIComponent(mediaID)}/events`, payload)
+}
+
+export function deleteWatchEvent(mediaID: string, eventID: string) {
+  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+  return requestJSON<void>(
+    `/api/v1/records/${encodeURIComponent(mediaID)}/events/${encodeURIComponent(eventID)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        'Idempotency-Key': createIdempotencyKey(),
+        'X-CSRF-Token': csrfToken,
+      },
+    },
+  )
 }
 
 export function getEpisodeProgress(mediaID: string, signal?: AbortSignal) {
@@ -160,6 +239,14 @@ export function loginUser(username: string, password: string) {
   })
 }
 
+export function logoutUser() {
+  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+  return requestJSON<void>('/api/v1/auth/logout', {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': csrfToken },
+  })
+}
+
 export function getHouseholdMembers(signal?: AbortSignal) {
   return requestJSON<HouseholdMember[]>('/api/v1/household/members', signal ? { signal } : undefined)
 }
@@ -200,6 +287,25 @@ export function getBackups(signal?: AbortSignal) {
 
 export function getSyncStatus(signal?: AbortSignal) {
   return requestJSON<SyncStatusResponse>('/api/v1/sync/status', signal ? { signal } : undefined)
+}
+
+export function getIntegrationAccounts(signal?: AbortSignal) {
+  return requestJSON<IntegrationAccount[]>('/api/v1/integrations/accounts', signal ? { signal } : undefined)
+}
+
+export function createIntegrationAccount(payload: CreateIntegrationAccountPayload) {
+  return protectedWrite<IntegrationAccount>('/api/v1/integrations/accounts', payload)
+}
+
+export function disconnectIntegrationAccount(accountID: string) {
+  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+  return requestJSON<void>(`/api/v1/integrations/accounts/${encodeURIComponent(accountID)}`, {
+    method: 'DELETE',
+    headers: {
+      'Idempotency-Key': createIdempotencyKey(),
+      'X-CSRF-Token': csrfToken,
+    },
+  })
 }
 
 export function getSyncCandidates(signal?: AbortSignal) {
@@ -282,6 +388,31 @@ export function getLibrary(status: RecordStatus | 'all', signal?: AbortSignal) {
   return requestJSON<LibraryResponse>(`/api/v1/library${query}`, signal ? { signal } : undefined)
 }
 
+export function getCollections(signal?: AbortSignal) {
+  return requestJSON<Collection[]>('/api/v1/collections', signal ? { signal } : undefined)
+}
+
+export function createCollection(name: string) {
+  return protectedWrite<Collection>('/api/v1/collections', { name })
+}
+
+export function addCollectionItem(collectionID: string, mediaID: string) {
+  return protectedWrite<void>(`/api/v1/collections/${encodeURIComponent(collectionID)}/items`, { mediaId: mediaID })
+}
+
+export function replaceCollectionItems(collectionID: string, mediaIDs: string[]) {
+  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+  return requestJSON<void>(`/api/v1/collections/${encodeURIComponent(collectionID)}/items`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': createIdempotencyKey(),
+      'X-CSRF-Token': csrfToken,
+    },
+    body: JSON.stringify({ mediaIds: mediaIDs }),
+  })
+}
+
 export async function createMediaFromTMDB(item: MediaSearchResult): Promise<MediaDetails> {
   if (item.source !== 'tmdb' || !item.externalId) throw new Error('TMDB identity required')
   const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
@@ -291,6 +422,34 @@ export async function createMediaFromTMDB(item: MediaSearchResult): Promise<Medi
       'Idempotency-Key': createIdempotencyKey(),
       'X-CSRF-Token': csrfToken,
     },
+  })
+}
+
+export async function linkMediaToTMDB(mediaID: string, item: MediaSearchResult): Promise<MediaDetails> {
+  if (item.source !== 'tmdb' || !item.externalId) throw new Error('TMDB identity required')
+  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+  return requestJSON<MediaDetails>(
+    `/api/v1/media/${encodeURIComponent(mediaID)}/tmdb/${item.mediaType}/${item.externalId}`,
+    {
+      method: 'POST',
+      headers: {
+        'Idempotency-Key': createIdempotencyKey(),
+        'X-CSRF-Token': csrfToken,
+      },
+    },
+  )
+}
+
+export function createCustomMedia(payload: { title: string; mediaType: MediaType; year: string; overview: string }) {
+  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+  return requestJSON<MediaDetails>('/api/v1/media/custom', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': createIdempotencyKey(),
+      'X-CSRF-Token': csrfToken,
+    },
+    body: JSON.stringify(payload),
   })
 }
 

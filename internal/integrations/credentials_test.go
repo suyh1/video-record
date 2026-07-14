@@ -164,6 +164,46 @@ func TestAccountRepositoryScopesCredentialsToUser(t *testing.T) {
 	require.ErrorIs(t, err, ErrAccountNotFound)
 }
 
+func TestAccountRepositoryDisconnectsOnlyOwnedAccountAndAuditsWithoutSecrets(t *testing.T) {
+	ctx := context.Background()
+	db := openIntegrationDB(t)
+	insertIntegrationUser(t, db, "user-a", "owner-a")
+	insertIntegrationUser(t, db, "user-b", "owner-b")
+	repository := NewAccountRepository(db, NewCredentialCipher(bytes.Repeat([]byte{0x61}, 32)), AccountRepositoryOptions{})
+	account, err := repository.Create(ctx, CreateAccountInput{
+		UserID: "user-a", Provider: "jellyfin", Name: "Private server",
+		BaseURL: "https://private-media.example.test", Credentials: []byte(`{"token":"synthetic-disconnect-secret"}`), Enabled: true,
+	})
+	require.NoError(t, err)
+
+	require.ErrorIs(t, repository.Delete(ctx, "user-b", account.ID), ErrAccountNotFound)
+	accounts, err := repository.List(ctx, "user-a")
+	require.NoError(t, err)
+	require.Len(t, accounts, 1)
+
+	require.NoError(t, repository.Delete(ctx, "user-a", account.ID))
+	accounts, err = repository.List(ctx, "user-a")
+	require.NoError(t, err)
+	require.Empty(t, accounts)
+	rows, err := db.Reader().QueryContext(ctx, `
+		SELECT action, metadata_json FROM audit_events
+		WHERE target_type = 'integration_account' AND target_id = ?
+		ORDER BY created_at, action
+	`, account.ID)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, rows.Close()) }()
+	var actions []string
+	for rows.Next() {
+		var action, metadata string
+		require.NoError(t, rows.Scan(&action, &metadata))
+		actions = append(actions, action)
+		require.NotContains(t, metadata, "synthetic-disconnect-secret")
+		require.NotContains(t, metadata, "private-media.example.test")
+	}
+	require.NoError(t, rows.Err())
+	require.ElementsMatch(t, []string{"integration.connect", "integration.disconnect"}, actions)
+}
+
 func TestAccountRepositoryRejectsBaseURLsThatCouldPersistPlaintextCredentials(t *testing.T) {
 	ctx := context.Background()
 	db := openIntegrationDB(t)

@@ -372,7 +372,7 @@ func validateReplacement(ctx context.Context, path string, manifestSchema, curre
 	if err := validateMigrationRows(ctx, replacement.Reader(), databaseSchema); err != nil {
 		return err
 	}
-	if err := Migrate(ctx, replacement); err != nil {
+	if err := migrateEmbedded(ctx, replacement, false); err != nil {
 		return ErrIncompatibleBackup
 	}
 	if _, err := replacement.Writer().ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {

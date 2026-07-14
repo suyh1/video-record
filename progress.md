@@ -1,5 +1,18 @@
 # video-record 工作进度
 
+## 2026-07-13：Task 27 恢复与 v1 MUST 审计
+
+- 已重新确认工作分支为 `main`，未创建分支或 worktree；Task 27 工作树改动保留在原位。
+- 已完整重读 `PRODUCT.md`、已确认设计、实施计划及三个跟踪文件，并恢复 Task 27 的未提交上下文。
+- 已按设计 MUST 重新审计用户可达功能，并以 TDD 补齐标签、家庭公开评分/短评、观看事件删除确认和自定义条目关联 TMDB。
+- 已明确最终双架构镜像必须在所有功能改动后重建和独立验证，且不会创建或推送标签、镜像、manifest 或发布产物。
+- 已按 RED/GREEN 补齐私有标签编辑、家庭评分/短评公开与查看、观看事件删除确认、自定义条目创建及关联 TMDB、首页下一集推进与撤销。
+- 已同步 OpenAPI/生成类型；完整前端回归为 23 个测试文件、44 项测试通过，typecheck 与 API 生成一致性检查通过。
+- 已在发布清单加入设计 MUST 分组映射，并在升级文档明确自动迁移前备份失败会阻止迁移开始。
+- 已修复真实 API 空标签 `null`、TMDB 未配置状态对比度、200% 缩放溢出和 E2E 定位器歧义；最终 Playwright 9/9 通过。
+- 已使用 Go 1.26.5、Node 24.13.0 和当前最终代码完成全部质量、安全、性能、恢复、Compose 与 amd64/arm64 容器门禁，并把实际摘要写入发布清单。
+- Task 27 已完成；未创建标签、未 push main/镜像/manifest，也未执行外部发布。
+
 ## 2026-07-13
 
 - 已读取适用的调研与设计工作流。
@@ -39,7 +52,7 @@
 
 ## 当前状态
 
-设计与实施计划均已完成，正在 `main` 按实施计划执行；Task 26 已完成，下一步从 Task 27 继续。
+设计与实施计划的 27 个任务均已在 `main` 完成；本地 `v1.0.0` release candidate 门禁通过，外部标签、push、manifest、SBOM/provenance 与 Docker Hub 发布仍等待明确授权。
 
 ## 实施记录
 
@@ -359,3 +372,20 @@
 - manifest verifier 要求 amd64/arm64 各且仅各一个有效 SHA-256 descriptor 且平台 digest 不同；镜像密钥扫描器同时覆盖 OCI layout 与传统 Docker save archive。
 - 最终 actionlint、workflow policy、release/manifest 脚本测试、shell 语法、覆盖率门禁、`git diff --check` 与工作树/28 个提交历史 gitleaks 均通过；独立复核同时通过 Go race/vet/govulncheck、前端全套验证和两种镜像归档扫描，确认无剩余 Critical/Important。
 - 未创建或推送任何 Git 标签、Docker 镜像或发布产物；外部发布仍需显式授权。
+
+### Task 27：运维文档与 v1 发布门禁
+
+- 已创建 README、部署、集成、备份恢复、升级回滚、安全和发布清单，并用 `docs-acceptance-test.sh` 固定 fresh install、密钥生成、TMDB 归属、端口、备份、双架构和 secret scan 要求。
+- 自动迁移在任何未应用 migration 前创建 Online Backup；备份失败会阻止迁移开始，恢复与升级文档明确保留原 `APP_ENCRYPTION_KEY` 和冷卷回滚流程。
+- 已按设计 MUST 审计并补齐首页下一集/撤销、私有片单与排序、私人标签、家庭共享评分/短评及可见列表、观看事件二次确认删除、TMDB 无结果自定义创建和以后关联。
+- 真实 API 无标签曾返回 `null` 导致详情页白屏；新增 HTTP 红测后在仓储源头返回空数组，最终 episode、household、recording 旅程全部恢复。
+- axe 红灯定位 TMDB 未配置文字对比度 3.39:1；200% 缩放诊断定位媒体服务器表单固定最小列宽。分别修正为正文色+告警图标和可收缩网格后，axe/键盘/缩放/reduced-motion 全部通过。
+- 视觉基线已从当前代码强制重录并人工检查 `375x812`、`768x1024`、`1440x900` 亮暗六张；个人片单区、海报比例、筛选和移动底栏无横向溢出。
+- Go 1.26.5 全仓 race/vet/迁移/govulncheck 通过；精确覆盖率最终为 records 85.0622%、media 86.5546%、stats 85.1485%、household 86.6667%、storage 85.4195%、integrations 88.0000%、sync 85.1093%。
+- 前端干净安装、lint/typecheck、23 文件 44 测试、OpenAPI check、build 和 npm audit 通过；Playwright 9/9、WCAG 阻断违规 0。
+- 性能结果为 calendar p95 51.561292ms、library p95 10.752083ms、初次 10,000 条同步 4.702336959s、增量 46.776583ms；四种中断恢复全部通过。
+- 最终 `rehearsal.vrbackup` 为 15,477 bytes，SHA-256 `f3f29f985385e24364bdf9a2bf2d4da6acbccc9ffe8944b589b0134b5f3d59fb`；归档完整、只含 manifest/数据库，真实恢复精确移除备份后的成员。
+- Compose 使用独立项目/卷、随机 32-byte key 和 `127.0.0.1:18080` 完成 health/ready、前端访问与封闭初始化；临时资源已清理。
+- 最终 amd64 镜像为 `sha256:0602f09c91dd...`、6,197,906 bytes，arm64 为 `sha256:dcdd4e1d49c1...`、5,845,732 bytes；两者分别完成完整 smoke、14 层/964 文件 secret scan 和 Scout `0C/0H/0M/0L`。
+- actionlint、workflow policy、coverage/release/manifest/image 脚本、shell syntax、文档验收、工作树与 29 个提交历史 gitleaks 全部通过。
+- 未使用个人 TMDB token；未创建/推送 Git 标签、main、镜像或 manifest，未生成外部 SBOM/provenance，外部发布仍等待明确授权。

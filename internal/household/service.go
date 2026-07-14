@@ -182,6 +182,17 @@ func (service *Service) UpdateSharing(
 	return newSharing(record), nil
 }
 
+func (service *Service) Sharing(ctx context.Context, actorID, ownerID, mediaID string) (Sharing, error) {
+	if !service.policy.CanMutatePersonalRecord(actorID, ownerID) {
+		return Sharing{}, ErrForbidden
+	}
+	record, err := service.repository.RecordPrivacy(ctx, ownerID, mediaID)
+	if err != nil {
+		return Sharing{}, err
+	}
+	return newSharing(record), nil
+}
+
 func (service *Service) VisibleRecord(ctx context.Context, viewerID, ownerID, mediaID string) (VisibleRecord, error) {
 	if _, err := service.repository.FindMember(ctx, viewerID); err != nil {
 		return VisibleRecord{}, err

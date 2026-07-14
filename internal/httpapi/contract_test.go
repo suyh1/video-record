@@ -15,6 +15,7 @@ import (
 
 	"video-record/internal/auth"
 	"video-record/internal/household"
+	"video-record/internal/integrations"
 	"video-record/internal/integrations/tmdb"
 	"video-record/internal/media"
 	"video-record/internal/records"
@@ -71,6 +72,9 @@ var protectedWriteRoutes = []struct {
 	{http.MethodPut, "/api/v1/records/{mediaID}/tags"},
 	{http.MethodPost, "/api/v1/collections"},
 	{http.MethodPost, "/api/v1/collections/{collectionID}/items"},
+	{http.MethodPut, "/api/v1/collections/{collectionID}/items"},
+	{http.MethodPost, "/api/v1/integrations/accounts"},
+	{http.MethodDelete, "/api/v1/integrations/accounts/{accountID}"},
 	{http.MethodPost, "/api/v1/data/import"},
 	{http.MethodPost, "/api/v1/records/{mediaID}/events"},
 	{http.MethodPost, "/api/v1/records/{mediaID}/progress"},
@@ -162,9 +166,11 @@ func TestContractDefinesCursorETagAndProtectedWriteShapes(t *testing.T) {
 		Status string
 	}{
 		{http.MethodPut, "/api/v1/records/{mediaID}/tags", "204"},
+		{http.MethodGet, "/api/v1/records/{mediaID}/tags", "200"},
 		{http.MethodGet, "/api/v1/records/{mediaID}/progress", "200"},
 		{http.MethodPost, "/api/v1/records/{mediaID}/progress", "200"},
 		{http.MethodPut, "/api/v1/household/records/{mediaID}/sharing", "200"},
+		{http.MethodGet, "/api/v1/household/records/{mediaID}/sharing", "200"},
 	} {
 		operation := decodeOpenAPIOperation(t, contract, response.Method, response.Path)
 		_, documentsETag := operation.Responses[response.Status].Headers["ETag"]
@@ -324,5 +330,9 @@ func newFullContractRouter(t *testing.T) (http.Handler, *storage.DB) {
 		Household: household.NewService(household.NewRepository(db)),
 		Backup:    storage.NewBackupManager(db, storage.BackupOptions{BackupsDir: filepath.Join(t.TempDir(), "backups")}),
 		Sync:      syncdomain.NewCandidateService(db, syncdomain.CandidateServiceOptions{}),
+		IntegrationAccounts: integrations.NewAccountRepository(
+			db, integrations.NewCredentialCipher(make([]byte, 32)), integrations.AccountRepositoryOptions{},
+		),
+		SyncJobs: syncdomain.NewService(db, syncdomain.ServiceOptions{}),
 	}), db
 }

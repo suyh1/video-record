@@ -30,6 +30,7 @@ type Repository interface {
 	Tags(context.Context, string, string) ([]string, error)
 	CreateCollection(context.Context, string, string) (Collection, error)
 	AddCollectionItem(context.Context, string, string, string) error
+	ReplaceCollectionItems(context.Context, string, string, []string) error
 	Collections(context.Context, string) ([]Collection, error)
 	ExportDocument(context.Context, string) (exportDocument, error)
 	ImportDocument(context.Context, string, exportDocument) (ImportReport, error)
@@ -466,7 +467,7 @@ func (repository *SQLiteRepository) Tags(ctx context.Context, userID, mediaID st
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var names []string
+	names := make([]string, 0)
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
@@ -528,6 +529,53 @@ func (repository *SQLiteRepository) AddCollectionItem(ctx context.Context, userI
 		}
 		if exists == 0 {
 			return ErrCollectionNotFound
+		}
+	}
+	return tx.Commit()
+}
+
+func (repository *SQLiteRepository) ReplaceCollectionItems(
+	ctx context.Context,
+	userID, collectionID string,
+	mediaIDs []string,
+) error {
+	tx, err := repository.db.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var owned int
+	if err := tx.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM collections WHERE id = ? AND user_id = ?
+	`, collectionID, userID).Scan(&owned); err != nil {
+		return err
+	}
+	if owned == 0 {
+		return ErrCollectionNotFound
+	}
+	for _, mediaID := range mediaIDs {
+		var exists int
+		if err := tx.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM media_items WHERE id = ?",
+			mediaID,
+		).Scan(&exists); err != nil {
+			return err
+		}
+		if exists == 0 {
+			return ErrInvalidRecord
+		}
+	}
+	if _, err := tx.ExecContext(ctx,
+		"DELETE FROM collection_items WHERE collection_id = ?",
+		collectionID,
+	); err != nil {
+		return err
+	}
+	for position, mediaID := range mediaIDs {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO collection_items (collection_id, media_id, position) VALUES (?, ?, ?)
+		`, collectionID, mediaID, position); err != nil {
+			return err
 		}
 	}
 	return tx.Commit()

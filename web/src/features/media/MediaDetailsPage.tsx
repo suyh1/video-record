@@ -1,12 +1,18 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, Star } from 'lucide-react'
+import { Star } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 
 import { getHouseholdParticipants, getMedia, getRecord, getWatchEvents } from '../../api/client'
 import type { MediaSearchResult, RecordState } from '../../api/types'
 import { EpisodeProgress } from '../episodes/EpisodeProgress'
+import { CollectionPicker } from '../collections/CollectionPicker'
 import { QuickRecordForm } from '../records/QuickRecordForm'
+import { RecordTagsEditor } from '../records/RecordTagsEditor'
+import { RecordSharingEditor } from '../records/RecordSharingEditor'
+import { WatchHistory } from '../records/WatchHistory'
+import { HouseholdSharedRecords } from '../records/HouseholdSharedRecords'
 import { MediaPoster } from './MediaPoster'
+import { TMDBLinker } from './TMDBLinker'
 
 export function MediaDetailsPage() {
   const { mediaId = '' } = useParams()
@@ -66,6 +72,7 @@ export function MediaDetailsPage() {
           <h1>{media.data.title}</h1>
           <p className="media-original-title">{media.data.originalTitle}</p>
           <p className="media-release-year">{media.data.releaseDate.slice(0, 4)}</p>
+          <TMDBLinker media={media.data} />
         </div>
       </header>
 
@@ -87,7 +94,26 @@ export function MediaDetailsPage() {
           onSaved={savedRecord}
           onRewatched={() => void queryClient.invalidateQueries({ queryKey: ['watch-events', mediaId] })}
         />
+        <RecordTagsEditor
+          mediaID={mediaId}
+          version={record.data.version}
+          onVersionChange={(version) => queryClient.setQueryData<RecordState>(
+            ['record', mediaId],
+            (current) => current ? { ...current, version } : current,
+          )}
+        />
+        <RecordSharingEditor
+          mediaID={mediaId}
+          version={record.data.version}
+          onVersionChange={(version) => queryClient.setQueryData<RecordState>(
+            ['record', mediaId],
+            (current) => current ? { ...current, version } : current,
+          )}
+        />
+        <CollectionPicker mediaID={mediaId} />
       </section>
+
+      <HouseholdSharedRecords mediaID={mediaId} members={participants.data ?? []} />
 
       <section className="details-section" aria-labelledby="history-heading">
         <div className="details-section-heading">
@@ -96,21 +122,7 @@ export function MediaDetailsPage() {
             <p>{events.data.length} 次记录</p>
           </div>
         </div>
-        {events.data.length ? (
-          <ol className="watch-history">
-            {events.data.map((event) => (
-              <li key={event.id}>
-                <span className="history-icon"><CalendarDays aria-hidden="true" size={16} /></span>
-                <div>
-                  <strong>{formatDate(event.watchedAt)}</strong>
-                  {event.viewingMethod ? <span>{event.viewingMethod}</span> : null}
-                </div>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="quiet-empty">还没有观看事件</p>
-        )}
+        <WatchHistory mediaID={mediaId} events={events.data} />
       </section>
 
       {media.data.mediaType === 'tv' ? <EpisodeProgress mediaId={mediaId} /> : null}
@@ -130,10 +142,4 @@ function DetailsSkeleton() {
       <div className="skeleton copy-skeleton" />
     </div>
   )
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC',
-  }).format(new Date(value))
 }

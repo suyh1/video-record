@@ -27,6 +27,8 @@ import (
 type syncRuntime struct {
 	candidates *syncdomain.CandidateService
 	scheduler  *syncdomain.Scheduler
+	accounts   *integrations.AccountRepository
+	jobs       *syncdomain.Service
 }
 
 func main() {
@@ -95,17 +97,19 @@ func main() {
 	}()
 
 	apiHandler := httpapi.NewRouter(httpapi.Dependencies{
-		Logger:       logger,
-		Storage:      db,
-		Auth:         authService,
-		CookieSecure: cfg.CookieSecure,
-		TMDB:         tmdbClient,
-		Media:        mediaService,
-		Records:      recordService,
-		Stats:        statsService,
-		Household:    householdService,
-		Backup:       backupManager,
-		Sync:         syncRuntime.candidates,
+		Logger:              logger,
+		Storage:             db,
+		Auth:                authService,
+		CookieSecure:        cfg.CookieSecure,
+		TMDB:                tmdbClient,
+		Media:               mediaService,
+		Records:             recordService,
+		Stats:               statsService,
+		Household:           householdService,
+		Backup:              backupManager,
+		Sync:                syncRuntime.candidates,
+		IntegrationAccounts: syncRuntime.accounts,
+		SyncJobs:            syncRuntime.jobs,
 	})
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
@@ -159,5 +163,7 @@ func newSyncRuntime(ctx context.Context, db *storage.DB, encryptionKey []byte) (
 	return syncRuntime{
 		candidates: candidates,
 		scheduler:  syncdomain.NewScheduler(service, runner, syncdomain.SchedulerOptions{}),
+		accounts:   accounts,
+		jobs:       service,
 	}, nil
 }

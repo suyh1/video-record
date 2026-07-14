@@ -52,6 +52,10 @@ type collectionItemRequest struct {
 	MediaID string `json:"mediaId"`
 }
 
+type collectionItemsRequest struct {
+	MediaIDs []string `json:"mediaIds"`
+}
+
 type collectionResponse struct {
 	ID    string   `json:"id"`
 	Name  string   `json:"name"`
@@ -282,6 +286,27 @@ func (handlers recordHandlers) setTags(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (handlers recordHandlers) tags(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	mediaID := chi.URLParam(r, "mediaID")
+	state, _, err := handlers.service.State(r.Context(), identity.User.ID, mediaID)
+	if err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	tags, err := handlers.service.Tags(r.Context(), identity.User.ID, mediaID)
+	if err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	w.Header().Set("ETag", quotedVersion(state.Version))
+	writeJSON(w, http.StatusOK, tagsRequest{Tags: tags})
+}
+
 func (handlers recordHandlers) createCollection(w http.ResponseWriter, r *http.Request) {
 	identity, ok := IdentityFromContext(r.Context())
 	if !ok {
@@ -316,6 +341,26 @@ func (handlers recordHandlers) addCollectionItem(w http.ResponseWriter, r *http.
 		r.Context(), identity.User.ID, chi.URLParam(r, "collectionID"), request.MediaID,
 	)
 	if err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (handlers recordHandlers) replaceCollectionItems(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	var request collectionItemsRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_request")
+		return
+	}
+	if err := handlers.service.ReplaceCollectionItems(
+		r.Context(), identity.User.ID, chi.URLParam(r, "collectionID"), request.MediaIDs,
+	); err != nil {
 		writeRecordError(w, r, err, 0)
 		return
 	}

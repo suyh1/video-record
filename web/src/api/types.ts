@@ -27,15 +27,39 @@ export type RecordState = {
   version: number
 }
 
+export type RecordTags = {
+  tags: string[]
+}
+
+export type RecordSharing = {
+  mediaId: string
+  shareRating: boolean
+  shareReview: boolean
+  sharedReview: string | null
+  version: number
+}
+
+export type VisibleHouseholdRecord = {
+  ownerId: string
+  mediaId: string
+  rating: number | null
+  privateNote: string | null
+  sharedReview: string | null
+}
+
 export type MediaDetails = {
   id: string
   mediaType: MediaType
   title: string
+  externalTitle: string
+  externalOverview: string
   originalTitle: string
   releaseDate: string
   overview: string
   posterPath: string | null
   backdropPath: string | null
+  runtimeMinutes: number
+  genres: string[]
 }
 
 export type WatchEvent = {
@@ -171,6 +195,12 @@ export type LibraryResponse = {
   nextCursor: string | null
 }
 
+export type Collection = {
+  id: string
+  name: string
+  items: string[]
+}
+
 export type SyncCandidateStatus = 'exact' | 'possible' | 'unmatched' | 'conflict' | 'confirmed' | 'ignored'
 
 export type SyncAccountStatus = {
@@ -186,6 +216,29 @@ export type SyncAccountStatus = {
 export type SyncStatusResponse = {
   accounts: SyncAccountStatus[]
   pendingTotal: number
+}
+
+export type IntegrationProvider = 'jellyfin' | 'emby' | 'plex'
+
+export type IntegrationAccount = {
+  id: string
+  provider: IntegrationProvider
+  name: string
+  credentialFingerprint: string
+  enabled: boolean
+  locked: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export type CreateIntegrationAccountPayload = {
+  provider: IntegrationProvider
+  name: string
+  baseUrl: string
+  token: string
+  userId?: string
+  accountId?: number
+  timezone?: string
 }
 
 export type SyncMatchEvidence = {

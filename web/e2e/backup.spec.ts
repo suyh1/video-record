@@ -16,7 +16,7 @@ test('exports data and rehearses a real backup restore', async ({ page }, testIn
   await expect((await exportDownload).suggestedFilename()).toBe('video-record-export.json')
 
   await page.getByRole('button', { name: '创建系统备份' }).click()
-  await expect(page.getByRole('status')).toContainText('备份已创建')
+  await expect(page.getByRole('region', { name: '备份与恢复' }).getByRole('status')).toContainText('备份已创建')
   const downloadLink = page.getByRole('link', { name: /^下载 / }).first()
   const backupDownload = page.waitForEvent('download')
   await downloadLink.click()

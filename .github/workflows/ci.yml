@@ -43,6 +43,8 @@ jobs:
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.9
       - name: Enforce workflow policy
         run: node scripts/workflow-policy-test.mjs
+      - name: Validate operator documentation
+        run: ./scripts/docs-acceptance-test.sh
       - name: Test release scripts
         run: |
           ./scripts/coverage-gate-test.sh

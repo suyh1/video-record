@@ -14,7 +14,7 @@
 - [x] 阶段 6：分章节确认产品、交互、视觉、技术与发布设计（六章全部确认）
 - [x] 阶段 7：写入 `docs/plans/2026-07-13-video-record-design.md` 并提交（提交 `d0ee509`）
 - [x] 阶段 8：在设计获批后编写实施计划
-- [ ] 阶段 9：按实施计划完成 27 个任务并逐任务验证、记录和提交
+- [x] 阶段 9：按实施计划完成 27 个任务并逐任务验证、记录和提交
 
 ## 实施进度
 
@@ -44,7 +44,7 @@
 - [x] Task 24：性能与故障恢复基线
 - [x] Task 25：生产 Docker 镜像与 Compose
 - [x] Task 26：CI、双架构发布与供应链元数据
-- [ ] Task 27：运维文档与 v1 发布门禁
+- [x] Task 27：运维文档与 v1 发布门禁
 
 ## 已确认约束
 
@@ -133,3 +133,11 @@
 | Task 25 初始镜像的 Go 1.26.0 标准库存在 12 个 High CVE | 1 | Scout 显示修复上限为 1.26.4；仅升级 Docker 编译器补丁版本并重建复扫，保持 Go 1.26 语言/模块契约 |
 | Task 25 独立审查发现固定用户与 image history 检查可假通过 | 1 | 先新增失败策略测试，再严格要求 `65532:65532` 并覆盖通用 token/secret/password/credential/key、Bearer、JWT 与运行时密钥形态 |
 | Task 25 Docker Scout 默认镜像解析无输出挂起 | 2 | 默认插件继承 `credsStore: desktop`；改为直接调用 Scout 插件、使用空 `DOCKER_CONFIG` 与 `local://`，本地镜像扫描在约 2 秒内完成 |
+| Task 27 恢复记录补丁使用了错误的 `progress.md` 标题锚点 | 1 | `apply_patch` 整体拒绝且未产生部分修改；读取真实文件头后改用精确标题重试 |
+| Task 27 全仓 race 暴露标签 GET 未文档化/返回 ETag | 1 | 保留契约门禁；读取当前用户记录版本，在标签 GET 响应与 OpenAPI 中返回 ETag 后重跑全仓 race |
+| Task 27 E2E 详情页因无标签返回 `null` 白屏 | 1 | 先加 HTTP 红测要求 `tags: []`，再在仓储源头初始化空切片；相关旅程恢复 |
+| Task 27 axe 与 200% 缩放暴露 TMDB 状态对比度和集成表单溢出 | 1 | 保留 axe/overflow 红灯；正文改用 ink、图标保留 warning，表单轨道允许收缩后复验 |
+| Task 27 新功能使 records/household 精确覆盖率低于 85% | 1 | 补真实 SQLite 片单失败原子性与家庭共享权限测试，最终分别为 85.0622%/86.6667% |
+| Task 27 本机默认 Go 1.26.0 触发已修复标准库漏洞 | 1 | 使用项目与 CI 固定的 Go 1.26.5 工具链重跑 govulncheck，结果 0 个可达漏洞 |
+| Task 27 工作树 gitleaks 命中合成凭据指纹 | 1 | 不加 allowlist；将长十六进制测试字面量改为短片段运行时拼接，工作树与历史均零匹配 |
+| Task 27 Docker Desktop 全接口静态端口转发未到达新容器 | 3 | 不重启正在承载用户服务的 Desktop；改用 Compose loopback `127.0.0.1:18080` 完成同一非默认端口新装验收 |

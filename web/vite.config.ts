@@ -10,6 +10,16 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: env.VITE_EMBED_OUT_DIR || 'dist',
       emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+            'query-vendor': ['@tanstack/react-query'],
+            'dialog-vendor': ['@radix-ui/react-dialog'],
+            'icon-vendor': ['lucide-react'],
+          },
+        },
+      },
     },
     server: {
       proxy: {

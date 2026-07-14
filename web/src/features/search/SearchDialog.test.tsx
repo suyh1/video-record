@@ -67,4 +67,38 @@ describe('SearchDialog', () => {
     await waitFor(() => expect(localCalls).toBe(1))
     expect(remoteCalls).toBe(1)
   })
+
+  it('offers a custom item only after local and TMDB searches return no results', async () => {
+    sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token')
+    let createBody: unknown
+    server.use(
+      http.get('*/api/v1/media/search', () => HttpResponse.json({ items: [] })),
+      http.get('*/api/v1/tmdb/search', () => HttpResponse.json({ results: [] })),
+      http.post('*/api/v1/media/custom', async ({ request }) => {
+        expect(request.headers.get('X-CSRF-Token')).toBe('csrf-test-token')
+        expect(request.headers.get('Idempotency-Key')).toBeTruthy()
+        createBody = await request.json()
+        return HttpResponse.json({
+          id: 'custom-1', mediaType: 'tv', title: '私藏短剧', overview: '',
+          externalTitle: '', externalOverview: '', originalTitle: '', releaseDate: '2025',
+          posterPath: '', backdropPath: '', runtimeMinutes: 0, genres: [],
+        }, { status: 201 })
+      }),
+    )
+    const onSelect = vi.fn()
+    const user = userEvent.setup()
+    renderWithQueryClient(<SearchDialog open onClose={() => undefined} onSelect={onSelect} />)
+
+    await user.type(screen.getByRole('searchbox', { name: '搜索影视' }), '私藏短剧')
+    await screen.findByText('没有找到匹配的电影或剧集')
+    await user.click(screen.getByRole('button', { name: '创建自定义条目' }))
+    await user.click(screen.getByRole('radio', { name: '剧集' }))
+    await user.type(screen.getByRole('textbox', { name: '年份（可选）' }), '2025')
+    await user.click(screen.getByRole('button', { name: '保存自定义条目' }))
+
+    await waitFor(() => expect(createBody).toEqual({ title: '私藏短剧', mediaType: 'tv', year: '2025', overview: '' }))
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'custom-1', source: 'local', mediaType: 'tv', title: '私藏短剧', year: '2025',
+    }))
+  })
 })

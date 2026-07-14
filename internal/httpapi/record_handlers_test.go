@@ -52,6 +52,13 @@ func TestRecordHandlersEnforceVersionAndCurrentUserOwnership(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, tags.Code)
 	require.Equal(t, `"2"`, tags.Header().Get("ETag"))
 
+	readTags := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/records/"+mediaID+"/tags", nil, map[string]string{
+		"Cookie": cookie.String(),
+	})
+	require.Equal(t, http.StatusOK, readTags.Code)
+	require.Equal(t, `"2"`, readTags.Header().Get("ETag"))
+	require.JSONEq(t, `{"tags":["家庭","科幻"]}`, readTags.Body.String())
+
 	staleTagsHeaders := cloneHeaders(tagsHeaders)
 	staleTagsHeaders["Idempotency-Key"] = "stale-record-tags"
 	staleTags := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID+"/tags", map[string]any{
@@ -86,12 +93,38 @@ func TestRecordHandlersEnforceVersionAndCurrentUserOwnership(t *testing.T) {
 		"mediaId": mediaID,
 	}, itemHeaders)
 	require.Equal(t, http.StatusNoContent, added.Code)
+	reorderHeaders := cloneHeaders(tagsHeaders)
+	reorderHeaders["Idempotency-Key"] = "reorder-collection-items"
+	reordered := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/collections/"+collectionBody.ID+"/items", map[string]any{
+		"mediaIds": []string{},
+	}, reorderHeaders)
+	require.Equal(t, http.StatusNoContent, reordered.Code)
 
 	listed := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/collections", nil, map[string]string{
 		"Cookie": cookie.String(),
 	})
 	require.Equal(t, http.StatusOK, listed.Code)
-	require.Contains(t, listed.Body.String(), mediaID)
+	require.NotContains(t, listed.Body.String(), mediaID)
+}
+
+func TestRecordTagsReturnsEmptyArrayWhenNoTagsExist(t *testing.T) {
+	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
+	created := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID, map[string]any{
+		"status": "wishlist",
+	}, map[string]string{
+		"Cookie":          cookie.String(),
+		"Origin":          "http://example.test",
+		"X-CSRF-Token":    csrfToken,
+		"Idempotency-Key": "create-record-without-tags",
+		"If-Match":        `"0"`,
+	})
+	require.Equal(t, http.StatusOK, created.Code)
+
+	response := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/records/"+mediaID+"/tags", nil, map[string]string{
+		"Cookie": cookie.String(),
+	})
+	require.Equal(t, http.StatusOK, response.Code)
+	require.JSONEq(t, `{"tags":[]}`, response.Body.String())
 }
 
 func TestRecordHandlerClearsExplicitNullRatingAndNote(t *testing.T) {

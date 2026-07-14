@@ -179,6 +179,26 @@ func (handlers householdHandlers) updateSharing(w http.ResponseWriter, r *http.R
 	})
 }
 
+func (handlers householdHandlers) sharing(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	sharing, err := handlers.service.Sharing(
+		r.Context(), identity.User.ID, identity.User.ID, chi.URLParam(r, "mediaID"),
+	)
+	if err != nil {
+		writeHouseholdError(w, r, err)
+		return
+	}
+	w.Header().Set("ETag", quotedVersion(sharing.Version))
+	writeJSON(w, http.StatusOK, sharingResponse{
+		MediaID: sharing.MediaID, ShareRating: sharing.ShareRating,
+		ShareReview: sharing.ShareReview, SharedReview: sharing.SharedReview, Version: sharing.Version,
+	})
+}
+
 func (handlers householdHandlers) visibleRecord(w http.ResponseWriter, r *http.Request) {
 	identity, ok := IdentityFromContext(r.Context())
 	if !ok {

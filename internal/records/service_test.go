@@ -152,6 +152,49 @@ func TestTagsAndCollectionsArePrivateToTheirOwner(t *testing.T) {
 	)
 }
 
+func TestCollectionItemsCanBeReorderedAndRemovedOnlyByTheirOwner(t *testing.T) {
+	ctx := context.Background()
+	service, db, ownerID, firstMediaID := newTestRecordsService(t)
+	mediaService := media.NewService(media.NewRepository(db))
+	secondMedia, err := mediaService.CreateCustom(ctx, media.CreateCustomInput{
+		MediaType: media.MediaTypeMovie, Title: "第二部测试电影",
+	})
+	require.NoError(t, err)
+	thirdMedia, err := mediaService.CreateCustom(ctx, media.CreateCustomInput{
+		MediaType: media.MediaTypeMovie, Title: "第三部测试电影",
+	})
+	require.NoError(t, err)
+	collection, err := service.CreateCollection(ctx, ownerID, "排序片单")
+	require.NoError(t, err)
+	for _, mediaID := range []string{firstMediaID, secondMedia.ID, thirdMedia.ID} {
+		require.NoError(t, service.AddCollectionItem(ctx, ownerID, collection.ID, mediaID))
+	}
+
+	require.NoError(t, service.ReplaceCollectionItems(
+		ctx, ownerID, collection.ID, []string{thirdMedia.ID, firstMediaID},
+	))
+	collections, err := service.Collections(ctx, ownerID)
+	require.NoError(t, err)
+	require.Equal(t, []string{thirdMedia.ID, firstMediaID}, collections[0].Items)
+
+	otherUserID := insertTestUser(t, db, "collection-reorder-other")
+	require.ErrorIs(t,
+		service.ReplaceCollectionItems(ctx, otherUserID, collection.ID, []string{firstMediaID}),
+		ErrCollectionNotFound,
+	)
+	require.ErrorIs(t,
+		service.ReplaceCollectionItems(ctx, ownerID, collection.ID, []string{firstMediaID, firstMediaID}),
+		ErrInvalidRecord,
+	)
+	require.ErrorIs(t,
+		service.ReplaceCollectionItems(ctx, ownerID, collection.ID, []string{"missing-media"}),
+		ErrInvalidRecord,
+	)
+	collections, err = service.Collections(ctx, ownerID)
+	require.NoError(t, err)
+	require.Equal(t, []string{thirdMedia.ID, firstMediaID}, collections[0].Items)
+}
+
 func TestVersionedTagsAdvanceStateAndRejectStaleWriters(t *testing.T) {
 	service, db, userID, mediaID := newTestRecordsService(t)
 	state, err := service.UpdateState(context.Background(), UpdateStateInput{
@@ -204,6 +247,33 @@ func TestTagsAndCollectionsValidateRequiredFields(t *testing.T) {
 	collection, err := service.CreateCollection(context.Background(), userID, "  周末电影  ")
 	require.NoError(t, err)
 	require.Equal(t, "周末电影", collection.Name)
+
+	for _, input := range []struct {
+		userID       string
+		collectionID string
+		mediaID      string
+	}{
+		{"", collection.ID, mediaID},
+		{userID, "", mediaID},
+		{userID, collection.ID, ""},
+	} {
+		require.ErrorIs(t,
+			service.AddCollectionItem(context.Background(), input.userID, input.collectionID, input.mediaID),
+			ErrInvalidRecord,
+		)
+	}
+	require.ErrorIs(t,
+		service.ReplaceCollectionItems(context.Background(), "", collection.ID, nil),
+		ErrInvalidRecord,
+	)
+	require.ErrorIs(t,
+		service.ReplaceCollectionItems(context.Background(), userID, "", nil),
+		ErrInvalidRecord,
+	)
+	require.ErrorIs(t,
+		service.ReplaceCollectionItems(context.Background(), userID, collection.ID, []string{" "}),
+		ErrInvalidRecord,
+	)
 }
 
 func newTestRecordsService(t *testing.T) (*Service, *storage.DB, string, string) {

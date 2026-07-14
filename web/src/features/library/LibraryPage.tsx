@@ -3,9 +3,10 @@ import { Search } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { getLibrary } from '../../api/client'
+import { getCollections, getLibrary } from '../../api/client'
 import type { RecordStatus } from '../../api/types'
 import { MediaPoster } from '../media/MediaPoster'
+import { CollectionManager } from '../collections/CollectionManager'
 
 type LibraryFilter = RecordStatus | 'all'
 
@@ -19,10 +20,16 @@ const filters: Array<{ value: LibraryFilter; label: string }> = [
 
 export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
   const [filter, setFilter] = useState<LibraryFilter>('all')
+  const [selectedCollectionID, setSelectedCollectionID] = useState('')
   const library = useQuery({
     queryKey: ['library', filter],
     queryFn: ({ signal }) => getLibrary(filter, signal),
   })
+  const collections = useQuery({ queryKey: ['collections'], queryFn: ({ signal }) => getCollections(signal) })
+  const selectedCollection = collections.data?.find((collection) => collection.id === selectedCollectionID)
+  const displayedItems = selectedCollection
+    ? selectedCollection.items.flatMap((mediaID) => library.data?.items.find((item) => item.id === mediaID) ?? [])
+    : library.data?.items ?? []
 
   return (
     <div className="page library-page">
@@ -31,8 +38,16 @@ export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
           <p className="page-kicker">私人记录</p>
           <h1>影库</h1>
         </div>
-        <p>{library.data?.items.length ?? 0} 部影视</p>
+        <p>{displayedItems.length} 部影视</p>
       </header>
+      <CollectionManager
+        mediaItems={library.data?.items ?? []}
+        selectedCollectionID={selectedCollectionID}
+        onSelect={(collectionID) => {
+          setSelectedCollectionID(collectionID)
+          if (collectionID) setFilter('all')
+        }}
+      />
       <div className="library-toolbar" aria-label="影库筛选">
         {filters.map((item) => (
           <button
@@ -53,16 +68,16 @@ export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
           <button type="button" onClick={() => void library.refetch()}>重新加载</button>
         </div>
       ) : null}
-      {library.data && library.data.items.length > 0 ? (
+      {library.data && displayedItems.length > 0 ? (
         <div className="poster-grid">
-          {library.data.items.map((item) => (
+          {displayedItems.map((item) => (
             <Link key={item.id} className="poster-link" to={`/media/${item.id}`}>
               <MediaPoster item={item} />
             </Link>
           ))}
         </div>
       ) : null}
-      {library.data?.items.length === 0 ? (
+      {library.data && displayedItems.length === 0 ? (
         <div className="library-message empty-state">
           <Search aria-hidden="true" size={22} />
           <p>这个分类还没有记录</p>

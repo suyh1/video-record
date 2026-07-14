@@ -188,7 +188,8 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
+        /** Replace and order items in a private collection */
+        put: operations["replaceCollectionItems"];
         /** Add media to a private collection */
         post: operations["addCollectionItem"];
         delete?: never;
@@ -226,6 +227,43 @@ export interface paths {
         /** Import validated current-user viewing data */
         post: operations["importData"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List current-user media server account metadata */
+        get: operations["listIntegrationAccounts"];
+        put?: never;
+        /** Encrypt and create a current-user media server account */
+        post: operations["createIntegrationAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/accounts/{accountID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Disconnect an owned media server account */
+        delete: operations["disconnectIntegrationAccount"];
         options?: never;
         head?: never;
         patch?: never;
@@ -294,7 +332,8 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /** Read the current user's private tags for a media record */
+        get: operations["getRecordTags"];
         /** Replace private tags for a media record */
         put: operations["setRecordTags"];
         post?: never;
@@ -610,7 +649,8 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /** Read the current user's household sharing settings */
+        get: operations["getHouseholdSharing"];
         /** Update explicit household sharing flags */
         put: operations["updateHouseholdSharing"];
         post?: never;
@@ -903,6 +943,35 @@ export interface components {
         AddCollectionItemRequest: {
             /** Format: uuid */
             mediaId: string;
+        };
+        ReplaceCollectionItemsRequest: {
+            mediaIds: string[];
+        };
+        IntegrationAccount: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            provider: "jellyfin" | "emby" | "plex";
+            name: string;
+            credentialFingerprint: string;
+            enabled: boolean;
+            locked: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        IntegrationAccountList: components["schemas"]["IntegrationAccount"][];
+        CreateIntegrationAccountRequest: {
+            /** @enum {string} */
+            provider: "jellyfin" | "emby" | "plex";
+            name: string;
+            /** Format: uri */
+            baseUrl: string;
+            token: string;
+            userId?: string;
+            accountId?: number;
+            timezone?: string;
         };
         CatalogItem: {
             /** Format: uuid */
@@ -1660,6 +1729,34 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    replaceCollectionItems: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
+            path: {
+                collectionID: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceCollectionItemsRequest"];
+            };
+        };
+        responses: {
+            /** @description Collection items replaced in the supplied order. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     addCollectionItem: {
         parameters: {
             query?: never;
@@ -1736,6 +1833,79 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ImportReport"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listIntegrationAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Encrypted integration account metadata without credentials or base URLs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationAccountList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createIntegrationAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateIntegrationAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Integration account created and sync jobs provisioned. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationAccount"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    disconnectIntegrationAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
+            path: {
+                accountID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Integration account disconnected. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };
@@ -1837,6 +2007,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecordState"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getRecordTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current private tags. */
+            200: {
+                headers: {
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagsRequest"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -2358,6 +2552,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VisibleRecord"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getHouseholdSharing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current sharing settings. */
+            200: {
+                headers: {
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharingResponse"];
                 };
             };
             default: components["responses"]["Problem"];

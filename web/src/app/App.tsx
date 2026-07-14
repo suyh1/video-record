@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import {
   BarChart3,
   CalendarDays,
@@ -13,17 +13,20 @@ import {
 import { type FormEvent, useRef, useState } from 'react'
 import { BrowserRouter, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
 
-import { createMediaFromTMDB } from '../api/client'
+import { createMediaFromTMDB, getSetupStatus } from '../api/client'
 import type { MediaSearchResult } from '../api/types'
 import { CalendarPage } from '../features/calendar/CalendarPage'
 import { AuthGate } from '../features/auth/AuthGate'
+import { HomePage } from '../features/home/HomePage'
 import { MemberSettings } from '../features/household/MemberSettings'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { MediaDetailsPage } from '../features/media/MediaDetailsPage'
 import { SearchDialog } from '../features/search/SearchDialog'
-import { TmdbAttribution } from '../features/settings/TmdbStatus'
+import { TmdbStatus } from '../features/settings/TmdbStatus'
+import { AccountSettings } from '../features/settings/AccountSettings'
 import { DataTransfer } from '../features/settings/DataTransfer'
 import { BackupRestore } from '../features/settings/BackupRestore'
+import { IntegrationAccounts } from '../features/settings/IntegrationAccounts'
 import { StatsPage } from '../features/stats/StatsPage'
 import { CandidateReviewPage } from '../features/sync/CandidateReviewPage'
 import { SyncStatus } from '../features/sync/SyncStatus'
@@ -123,7 +126,7 @@ function ApplicationShell() {
 
         <main id="main-content" className="main-content" tabIndex={-1}>
           <Routes>
-            <Route path="/" element={<HomePage />} />
+            <Route path="/" element={<HomePage onSearch={() => setSearchOpen(true)} />} />
             <Route path="/library" element={<LibraryPage onSearch={() => setSearchOpen(true)} />} />
             <Route path="/media/:mediaId" element={<MediaDetailsPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
@@ -194,57 +197,17 @@ function MobileNavigationLink({ item }: { item: NavigationItem }) {
   )
 }
 
-function HomePage() {
-  return (
-    <div className="page home-page">
-      <header className="page-heading">
-        <p className="page-kicker">私人影库</p>
-        <h1>首页</h1>
-      </header>
-
-      <section className="content-section" aria-labelledby="continue-heading">
-        <div className="section-heading">
-          <div>
-            <h2 id="continue-heading">继续观看</h2>
-            <p>0 部剧集</p>
-          </div>
-        </div>
-        <div className="empty-state">
-          <Clapperboard aria-hidden="true" size={24} strokeWidth={1.6} />
-          <p>还没有正在观看的剧集</p>
-          <NavLink className="text-link" to="/library">
-            前往影库
-          </NavLink>
-        </div>
-      </section>
-
-      <section className="content-section" aria-labelledby="recent-heading">
-        <div className="section-heading">
-          <div>
-            <h2 id="recent-heading">最近记录</h2>
-            <p>按观看时间排列</p>
-          </div>
-        </div>
-        <div className="timeline-empty">
-          <span aria-hidden="true" />
-          <p>第一条观影记录会显示在这里</p>
-        </div>
-      </section>
-    </div>
-  )
-}
-
 function SettingsPage() {
+  const setup = useQuery({ queryKey: ['setup-status'], queryFn: ({ signal }) => getSetupStatus(signal) })
   return (
     <div className="page">
       <header className="page-heading">
         <p className="page-kicker">video-record</p>
         <h1>设置</h1>
       </header>
-      <section className="integration-status" aria-labelledby="metadata-heading">
-        <h2 id="metadata-heading">元数据</h2>
-        <TmdbAttribution />
-      </section>
+      <AccountSettings />
+      <TmdbStatus configured={setup.data?.tmdbConfigured ?? false} />
+      <IntegrationAccounts />
       <SyncStatus />
       <MemberSettings />
       <DataTransfer />

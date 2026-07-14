@@ -13,7 +13,7 @@ test('searches, records, and preserves a repeat viewing', async ({ page }) => {
 
   await page.getByRole('radio', { name: '看过' }).click()
   await page.getByRole('button', { name: '更多记录选项' }).click()
-  await page.getByLabel('评分').fill('8.6')
+  await page.getByRole('spinbutton', { name: '评分' }).fill('8.6')
   await page.getByLabel('私人笔记').fill('合成记录，不包含真实用户数据。')
   await page.getByRole('button', { name: '保存记录' }).click()
   await expect(page.getByRole('status')).toContainText('记录已保存')

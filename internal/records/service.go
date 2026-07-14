@@ -176,7 +176,34 @@ func (service *Service) CreateCollection(ctx context.Context, userID, name strin
 }
 
 func (service *Service) AddCollectionItem(ctx context.Context, userID, collectionID, mediaID string) error {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(collectionID) == "" || strings.TrimSpace(mediaID) == "" {
+		return ErrInvalidRecord
+	}
 	return service.repository.AddCollectionItem(ctx, userID, collectionID, mediaID)
+}
+
+func (service *Service) ReplaceCollectionItems(
+	ctx context.Context,
+	userID, collectionID string,
+	mediaIDs []string,
+) error {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(collectionID) == "" {
+		return ErrInvalidRecord
+	}
+	seen := make(map[string]struct{}, len(mediaIDs))
+	normalized := make([]string, 0, len(mediaIDs))
+	for _, mediaID := range mediaIDs {
+		mediaID = strings.TrimSpace(mediaID)
+		if mediaID == "" {
+			return ErrInvalidRecord
+		}
+		if _, exists := seen[mediaID]; exists {
+			return ErrInvalidRecord
+		}
+		seen[mediaID] = struct{}{}
+		normalized = append(normalized, mediaID)
+	}
+	return service.repository.ReplaceCollectionItems(ctx, userID, collectionID, normalized)
 }
 
 func (service *Service) Collections(ctx context.Context, userID string) ([]Collection, error) {
