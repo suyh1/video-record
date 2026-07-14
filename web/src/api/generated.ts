@@ -773,6 +773,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tmdb/{mediaType}/{id}/credits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mediaType: components["parameters"]["MediaType"];
+                id: components["parameters"]["TMDBID"];
+            };
+            cookie?: never;
+        };
+        /** Read normalized ordered TMDB cast */
+        get: operations["getTMDBCredits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/media/{id}": {
         parameters: {
             query?: never;
@@ -976,6 +996,7 @@ export interface components {
         CatalogItem: {
             /** Format: uuid */
             id: string;
+            tmdbId: number | null;
             /** @enum {string} */
             source: "local";
             mediaType: components["schemas"]["MediaType"];
@@ -1040,6 +1061,7 @@ export interface components {
         EpisodeProgressItem: {
             /** Format: uuid */
             id: string;
+            sourceId: string;
             /** Format: uuid */
             seasonId: string;
             seasonNumber: number;
@@ -1061,6 +1083,12 @@ export interface components {
             nextEpisode: components["schemas"]["EpisodeProgressItem"] | null;
             episodes: components["schemas"]["EpisodeProgressItem"][];
         };
+        EpisodeReference: {
+            sourceId: string;
+            seasonNumber: number;
+            episodeNumber: number;
+            absoluteNumber: number;
+        };
         UpdateEpisodeProgressRequest: {
             /** @enum {string} */
             action: "single" | "range" | "season" | "next" | "undo";
@@ -1070,6 +1098,8 @@ export interface components {
             throughEpisodeId?: string;
             /** Format: uuid */
             seasonId?: string;
+            episodeRefs?: components["schemas"]["EpisodeReference"][];
+            totalEpisodes?: number;
             /** Format: date-time */
             watchedAt?: string;
             expectedVersion: number;
@@ -1248,6 +1278,16 @@ export interface components {
             backdropPath: string;
             overview: string;
             runtime: number;
+            genres: string[];
+        };
+        TMDBSeasonSummary: {
+            id: number;
+            name: string;
+            overview: string;
+            posterPath: string;
+            airDate: string;
+            seasonNumber: number;
+            episodeCount: number;
         };
         TMDBTV: {
             id: number;
@@ -1259,6 +1299,9 @@ export interface components {
             overview: string;
             numberOfSeasons: number;
             numberOfEpisodes: number;
+            episodeRuntime: number[];
+            genres: string[];
+            seasons: components["schemas"]["TMDBSeasonSummary"][];
         };
         TMDBEpisode: {
             id: number;
@@ -1268,16 +1311,31 @@ export interface components {
             seasonNumber: number;
             episodeNumber: number;
             runtime: number;
+            stillPath: string;
         };
         TMDBSeason: {
             id: number;
             name: string;
+            overview: string;
+            posterPath: string;
+            airDate: string;
             seasonNumber: number;
             episodes: components["schemas"]["TMDBEpisode"][];
+        };
+        TMDBCastMember: {
+            id: number;
+            name: string;
+            character: string;
+            profilePath: string;
+            order: number;
+        };
+        TMDBCredits: {
+            cast: components["schemas"]["TMDBCastMember"][];
         };
         MediaItem: {
             /** Format: uuid */
             id: string;
+            tmdbId: number | null;
             mediaType: components["schemas"]["MediaType"];
             title: string;
             overview: string;
@@ -2746,6 +2804,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TMDBEpisode"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getTMDBCredits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mediaType: components["parameters"]["MediaType"];
+                id: components["parameters"]["TMDBID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ordered TMDB cast. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TMDBCredits"];
                 };
             };
             default: components["responses"]["Problem"];

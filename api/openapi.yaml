@@ -845,6 +845,20 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TMDBEpisode' }
         default: { $ref: '#/components/responses/Problem' }
+  /api/v1/tmdb/{mediaType}/{id}/credits:
+    parameters:
+      - $ref: '#/components/parameters/MediaType'
+      - $ref: '#/components/parameters/TMDBID'
+    get:
+      operationId: getTMDBCredits
+      summary: Read normalized ordered TMDB cast
+      responses:
+        '200':
+          description: Ordered TMDB cast.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TMDBCredits' }
+        default: { $ref: '#/components/responses/Problem' }
   /api/v1/media/{id}:
     parameters:
       - name: id
@@ -1154,9 +1168,10 @@ components:
     CatalogItem:
       type: object
       additionalProperties: false
-      required: [id, source, mediaType, title, originalTitle, year, posterPath, status]
+      required: [id, tmdbId, source, mediaType, title, originalTitle, year, posterPath, status]
       properties:
         id: { type: string, format: uuid }
+        tmdbId: { type: [integer, 'null'], minimum: 1 }
         source: { type: string, enum: [local] }
         mediaType: { $ref: '#/components/schemas/MediaType' }
         title: { type: string }
@@ -1243,9 +1258,10 @@ components:
     EpisodeProgressItem:
       type: object
       additionalProperties: false
-      required: [id, seasonId, seasonNumber, episodeNumber, absoluteNumber, name, watched, watchedAt]
+      required: [id, sourceId, seasonId, seasonNumber, episodeNumber, absoluteNumber, name, watched, watchedAt]
       properties:
         id: { type: string, format: uuid }
+        sourceId: { type: string }
         seasonId: { type: string, format: uuid }
         seasonNumber: { type: integer }
         episodeNumber: { type: integer }
@@ -1274,6 +1290,15 @@ components:
         episodes:
           type: array
           items: { $ref: '#/components/schemas/EpisodeProgressItem' }
+    EpisodeReference:
+      type: object
+      additionalProperties: false
+      required: [sourceId, seasonNumber, episodeNumber, absoluteNumber]
+      properties:
+        sourceId: { type: string, minLength: 1 }
+        seasonNumber: { type: integer, minimum: 1 }
+        episodeNumber: { type: integer, minimum: 1 }
+        absoluteNumber: { type: integer, minimum: 1 }
     UpdateEpisodeProgressRequest:
       type: object
       additionalProperties: false
@@ -1283,6 +1308,12 @@ components:
         episodeId: { type: string, format: uuid }
         throughEpisodeId: { type: string, format: uuid }
         seasonId: { type: string, format: uuid }
+        episodeRefs:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/EpisodeReference' }
+        totalEpisodes: { type: integer, minimum: 0 }
         watchedAt: { type: string, format: date-time }
         expectedVersion: { type: integer, minimum: 0 }
     StatsPoint:
@@ -1505,7 +1536,7 @@ components:
     TMDBMovie:
       type: object
       additionalProperties: false
-      required: [id, title, originalTitle, releaseDate, posterPath, backdropPath, overview, runtime]
+      required: [id, title, originalTitle, releaseDate, posterPath, backdropPath, overview, runtime, genres]
       properties:
         id: { type: integer, minimum: 1 }
         title: { type: string }
@@ -1515,10 +1546,25 @@ components:
         backdropPath: { type: string }
         overview: { type: string }
         runtime: { type: integer, minimum: 0 }
+        genres:
+          type: array
+          items: { type: string }
+    TMDBSeasonSummary:
+      type: object
+      additionalProperties: false
+      required: [id, name, overview, posterPath, airDate, seasonNumber, episodeCount]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string }
+        overview: { type: string }
+        posterPath: { type: string }
+        airDate: { type: string }
+        seasonNumber: { type: integer, minimum: 0 }
+        episodeCount: { type: integer, minimum: 0 }
     TMDBTV:
       type: object
       additionalProperties: false
-      required: [id, name, originalName, firstAirDate, posterPath, backdropPath, overview, numberOfSeasons, numberOfEpisodes]
+      required: [id, name, originalName, firstAirDate, posterPath, backdropPath, overview, numberOfSeasons, numberOfEpisodes, episodeRuntime, genres, seasons]
       properties:
         id: { type: integer, minimum: 1 }
         name: { type: string }
@@ -1529,10 +1575,19 @@ components:
         overview: { type: string }
         numberOfSeasons: { type: integer, minimum: 0 }
         numberOfEpisodes: { type: integer, minimum: 0 }
+        episodeRuntime:
+          type: array
+          items: { type: integer, minimum: 0 }
+        genres:
+          type: array
+          items: { type: string }
+        seasons:
+          type: array
+          items: { $ref: '#/components/schemas/TMDBSeasonSummary' }
     TMDBEpisode:
       type: object
       additionalProperties: false
-      required: [id, name, overview, airDate, seasonNumber, episodeNumber, runtime]
+      required: [id, name, overview, airDate, seasonNumber, episodeNumber, runtime, stillPath]
       properties:
         id: { type: integer, minimum: 1 }
         name: { type: string }
@@ -1541,23 +1596,46 @@ components:
         seasonNumber: { type: integer, minimum: 0 }
         episodeNumber: { type: integer, minimum: 1 }
         runtime: { type: integer, minimum: 0 }
+        stillPath: { type: string }
     TMDBSeason:
       type: object
       additionalProperties: false
-      required: [id, name, seasonNumber, episodes]
+      required: [id, name, overview, posterPath, airDate, seasonNumber, episodes]
       properties:
         id: { type: integer, minimum: 1 }
         name: { type: string }
+        overview: { type: string }
+        posterPath: { type: string }
+        airDate: { type: string }
         seasonNumber: { type: integer, minimum: 0 }
         episodes:
           type: array
           items: { $ref: '#/components/schemas/TMDBEpisode' }
+    TMDBCastMember:
+      type: object
+      additionalProperties: false
+      required: [id, name, character, profilePath, order]
+      properties:
+        id: { type: integer, minimum: 1 }
+        name: { type: string }
+        character: { type: string }
+        profilePath: { type: string }
+        order: { type: integer, minimum: 0 }
+    TMDBCredits:
+      type: object
+      additionalProperties: false
+      required: [cast]
+      properties:
+        cast:
+          type: array
+          items: { $ref: '#/components/schemas/TMDBCastMember' }
     MediaItem:
       type: object
       additionalProperties: false
-      required: [id, mediaType, title, overview, externalTitle, externalOverview, originalTitle, releaseDate, posterPath, backdropPath, runtimeMinutes, genres]
+      required: [id, tmdbId, mediaType, title, overview, externalTitle, externalOverview, originalTitle, releaseDate, posterPath, backdropPath, runtimeMinutes, genres]
       properties:
         id: { type: string, format: uuid }
+        tmdbId: { type: [integer, 'null'], minimum: 1 }
         mediaType: { $ref: '#/components/schemas/MediaType' }
         title: { type: string }
         overview: { type: string }

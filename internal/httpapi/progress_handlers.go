@@ -17,6 +17,15 @@ type episodeProgressRequest struct {
 	SeasonID         string                        `json:"seasonId"`
 	WatchedAt        time.Time                     `json:"watchedAt"`
 	ExpectedVersion  int                           `json:"expectedVersion"`
+	EpisodeRefs      []episodeReferenceRequest     `json:"episodeRefs"`
+	TotalEpisodes    int                           `json:"totalEpisodes"`
+}
+
+type episodeReferenceRequest struct {
+	SourceID       string `json:"sourceId"`
+	SeasonNumber   int    `json:"seasonNumber"`
+	EpisodeNumber  int    `json:"episodeNumber"`
+	AbsoluteNumber int    `json:"absoluteNumber"`
 }
 
 type episodeProgressResponse struct {
@@ -32,6 +41,7 @@ type episodeProgressResponse struct {
 
 type episodeProgressItem struct {
 	ID             string     `json:"id"`
+	SourceID       string     `json:"sourceId"`
 	SeasonID       string     `json:"seasonId"`
 	SeasonNumber   int        `json:"seasonNumber"`
 	EpisodeNumber  int        `json:"episodeNumber"`
@@ -67,12 +77,20 @@ func (handlers recordHandlers) updateEpisodeProgress(w http.ResponseWriter, r *h
 		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_request")
 		return
 	}
+	references := make([]records.EpisodeReference, 0, len(request.EpisodeRefs))
+	for _, episode := range request.EpisodeRefs {
+		references = append(references, records.EpisodeReference{
+			SourceID: episode.SourceID, SeasonNumber: episode.SeasonNumber,
+			EpisodeNumber: episode.EpisodeNumber, AbsoluteNumber: episode.AbsoluteNumber,
+		})
+	}
 	progress, err := handlers.service.UpdateEpisodeProgress(r.Context(), records.EpisodeProgressInput{
 		UserID: identity.User.ID, MediaID: chi.URLParam(r, "mediaID"),
 		Action: request.Action, EpisodeID: request.EpisodeID,
 		ThroughEpisodeID: request.ThroughEpisodeID, SeasonID: request.SeasonID,
 		WatchedAt: request.WatchedAt, Source: records.SourceManual,
-		ExpectedVersion: request.ExpectedVersion,
+		ExpectedVersion: request.ExpectedVersion, EpisodeRefs: references,
+		TotalEpisodes: request.TotalEpisodes,
 	})
 	if err != nil {
 		writeRecordError(w, r, err, progress.Version)
@@ -104,7 +122,7 @@ func newEpisodeProgressResponse(progress records.SeriesProgress) episodeProgress
 
 func newEpisodeProgressItem(episode records.Episode) episodeProgressItem {
 	return episodeProgressItem{
-		ID: episode.ID, SeasonID: episode.SeasonID,
+		ID: episode.ID, SourceID: episode.SourceID, SeasonID: episode.SeasonID,
 		SeasonNumber: episode.SeasonNumber, EpisodeNumber: episode.EpisodeNumber,
 		AbsoluteNumber: episode.AbsoluteNumber, Name: episode.Name,
 		Watched: episode.Watched, WatchedAt: episode.WatchedAt,
