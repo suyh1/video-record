@@ -17,6 +17,7 @@ type Repository interface {
 	ValidateRoundScope(context.Context, RoundScope) error
 	FindCurrentRound(context.Context, RoundScope) (WatchRound, bool, error)
 	FindLatestRound(context.Context, RoundScope) (WatchRound, bool, error)
+	FindProfile(context.Context, string, string) (MediaProfile, bool, error)
 	InsertRound(context.Context, WatchRound) error
 	UpdateRound(context.Context, WatchRound, int) (bool, error)
 	FindState(context.Context, string, string) (State, bool, error)
@@ -330,17 +331,17 @@ func (repository *SQLiteRepository) Library(ctx context.Context, userID string, 
 		SELECT media.id, media.media_type,
 		       COALESCE(media.custom_title, media.external_title), media.original_title,
 		       SUBSTR(COALESCE(NULLIF(media.release_date, ''), media.custom_year, ''), 1, 4),
-		       media.poster_path, state.status, tmdb.source_id
-		FROM user_media_states state
-		JOIN media_items media ON media.id = state.media_id
+		       media.poster_path, profile.status, tmdb.source_id
+		FROM user_media_profiles profile
+		JOIN media_items media ON media.id = profile.media_id
 		LEFT JOIN media_external_ids tmdb ON tmdb.media_id = media.id AND tmdb.source = 'tmdb'
-		WHERE state.user_id = ?`
+		WHERE profile.user_id = ?`
 	arguments := []any{userID}
 	if status != "" && status != StatusNone {
-		query += " AND state.status = ?"
+		query += " AND profile.status = ?"
 		arguments = append(arguments, status)
 	}
-	query += " ORDER BY state.updated_at DESC, media.id LIMIT 100"
+	query += " ORDER BY profile.updated_at DESC, media.id LIMIT 100"
 	return repository.catalogItems(ctx, query, arguments...)
 }
 
@@ -350,9 +351,9 @@ func (repository *SQLiteRepository) SearchMedia(ctx context.Context, userID, que
 		SELECT media.id, media.media_type,
 		       COALESCE(media.custom_title, media.external_title), media.original_title,
 		       SUBSTR(COALESCE(NULLIF(media.release_date, ''), media.custom_year, ''), 1, 4),
-		       media.poster_path, COALESCE(state.status, 'none'), tmdb.source_id
+		       media.poster_path, COALESCE(profile.status, 'none'), tmdb.source_id
 		FROM media_items media
-		LEFT JOIN user_media_states state ON state.media_id = media.id AND state.user_id = ?
+		LEFT JOIN user_media_profiles profile ON profile.media_id = media.id AND profile.user_id = ?
 		LEFT JOIN media_external_ids tmdb ON tmdb.media_id = media.id AND tmdb.source = 'tmdb'
 		WHERE COALESCE(media.custom_title, media.external_title) LIKE ? ESCAPE '\'
 		   OR media.original_title LIKE ? ESCAPE '\'
@@ -402,6 +403,9 @@ func (repository *SQLiteRepository) SetTags(ctx context.Context, userID, mediaID
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := ensureMediaProfile(ctx, tx, userID, mediaID); err != nil {
+		return err
+	}
 	if err := setTags(ctx, tx, userID, mediaID, names); err != nil {
 		return err
 	}
@@ -419,17 +423,34 @@ func (repository *SQLiteRepository) SetTagsVersioned(
 		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	result, err := tx.ExecContext(ctx, `
-		UPDATE user_media_states
-		SET version = version + 1, updated_at = strftime('%s', 'now') * 1000
-		WHERE user_id = ? AND media_id = ? AND version = ?
-	`, userID, mediaID, expectedVersion)
-	if err != nil {
+	var currentVersion int
+	err = tx.QueryRowContext(ctx, `
+		SELECT version FROM user_media_profiles WHERE user_id = ? AND media_id = ?
+	`, userID, mediaID).Scan(&currentVersion)
+	switch {
+	case errors.Is(err, sql.ErrNoRows) && expectedVersion == 0:
+		if err := ensureMediaProfile(ctx, tx, userID, mediaID); err != nil {
+			return false, err
+		}
+	case errors.Is(err, sql.ErrNoRows):
+		return false, nil
+	case err != nil:
 		return false, err
-	}
-	updated, err := result.RowsAffected()
-	if err != nil || updated != 1 {
-		return false, err
+	case currentVersion != expectedVersion:
+		return false, nil
+	default:
+		result, err := tx.ExecContext(ctx, `
+			UPDATE user_media_profiles
+			SET version = version + 1, updated_at = strftime('%s', 'now') * 1000
+			WHERE user_id = ? AND media_id = ? AND version = ?
+		`, userID, mediaID, expectedVersion)
+		if err != nil {
+			return false, err
+		}
+		updated, err := result.RowsAffected()
+		if err != nil || updated != 1 {
+			return false, err
+		}
 	}
 	if err := setTags(ctx, tx, userID, mediaID, names); err != nil {
 		return false, err

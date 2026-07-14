@@ -3,6 +3,7 @@ package records
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -27,18 +28,20 @@ func TestCatalogLibrarySearchAndUserIsolation(t *testing.T) {
 	require.NoError(t, err)
 	secondUserID := insertTestUser(t, db, "catalog-second")
 
-	_, err = service.UpdateState(ctx, UpdateStateInput{
-		UserID: firstUserID, MediaID: firstMediaID, Status: StatusCompleted,
+	_, err = service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: firstUserID, MediaID: firstMediaID}, Status: StatusCompleted,
 		Source: SourceManual, ExpectedVersion: 0,
+		CompletedAt: timePointer(time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)),
 	})
 	require.NoError(t, err)
-	_, err = service.UpdateState(ctx, UpdateStateInput{
-		UserID: firstUserID, MediaID: secondItem.ID, Status: StatusWishlist,
-		Source: SourceManual, ExpectedVersion: 0,
+	seasonOne := 1
+	_, err = service.UpdateRound(ctx, UpdateRoundInput{
+		Scope:  RoundScope{UserID: firstUserID, MediaID: secondItem.ID, SeasonNumber: &seasonOne},
+		Status: StatusWishlist, Source: SourceManual, ExpectedVersion: 0,
 	})
 	require.NoError(t, err)
-	_, err = service.UpdateState(ctx, UpdateStateInput{
-		UserID: secondUserID, MediaID: firstMediaID, Status: StatusDropped,
+	_, err = service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: secondUserID, MediaID: firstMediaID}, Status: StatusDropped,
 		Source: SourceManual, ExpectedVersion: 0,
 	})
 	require.NoError(t, err)
@@ -68,6 +71,54 @@ func TestCatalogLibrarySearchAndUserIsolation(t *testing.T) {
 	require.Equal(t, symbolItem.ID, symbolSearch[0].ID)
 	require.Equal(t, StatusNone, symbolSearch[0].Status)
 	require.Nil(t, symbolSearch[0].TMDBID)
+}
+
+func TestMediaProfileProjectsWatchingThenLatestSeasonStatus(t *testing.T) {
+	service, db, userID, _ := newTestRecordsService(t)
+	mediaService := media.NewService(media.NewRepository(db))
+	series, err := mediaService.CreateCustom(context.Background(), media.CreateCustomInput{
+		MediaType: media.MediaTypeTV, Title: "季级投影",
+	})
+	require.NoError(t, err)
+	seasonOne, seasonTwo := 1, 2
+	completedAt := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+
+	_, err = service.UpdateRound(context.Background(), UpdateRoundInput{
+		Scope:  RoundScope{UserID: userID, MediaID: series.ID, SeasonNumber: &seasonOne},
+		Status: StatusCompleted, CompletedAt: &completedAt, Source: SourceManual,
+	})
+	require.NoError(t, err)
+	second, err := service.UpdateRound(context.Background(), UpdateRoundInput{
+		Scope:  RoundScope{UserID: userID, MediaID: series.ID, SeasonNumber: &seasonTwo},
+		Status: StatusWatching, Source: SourceManual,
+	})
+	require.NoError(t, err)
+
+	watching, err := service.Library(context.Background(), userID, StatusWatching)
+	require.NoError(t, err)
+	require.Equal(t, []string{series.ID}, catalogIDs(watching))
+
+	_, err = service.UpdateRound(context.Background(), UpdateRoundInput{
+		Scope:  RoundScope{UserID: userID, MediaID: series.ID, SeasonNumber: &seasonTwo},
+		Status: StatusDropped, Source: SourceManual, ExpectedVersion: second.Version,
+	})
+	require.NoError(t, err)
+	dropped, err := service.Library(context.Background(), userID, StatusDropped)
+	require.NoError(t, err)
+	require.Equal(t, []string{series.ID}, catalogIDs(dropped))
+
+	search, err := service.SearchMedia(context.Background(), userID, "季级投影")
+	require.NoError(t, err)
+	require.Len(t, search, 1)
+	require.Equal(t, StatusDropped, search[0].Status)
+}
+
+func catalogIDs(items []CatalogItem) []string {
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	return ids
 }
 
 func TestCatalogValidatesCurrentUserStatusAndQuery(t *testing.T) {

@@ -55,7 +55,22 @@ func (repository *SQLiteRepository) findRound(
 }
 
 func (repository *SQLiteRepository) InsertRound(ctx context.Context, round WatchRound) error {
-	_, err := repository.db.Writer().ExecContext(ctx, `
+	tx, err := repository.db.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := insertRound(ctx, tx, round); err != nil {
+		return err
+	}
+	if err := projectMediaProfile(ctx, tx, round.UserID, round.MediaID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func insertRound(ctx context.Context, executor sqlExecutor, round WatchRound) error {
+	_, err := executor.ExecContext(ctx, `
 		INSERT INTO watch_rounds (
 			id, user_id, media_id, season_number, round_number, status,
 			rating, note, viewing_method, started_at, completed_at, archived_at,
@@ -70,7 +85,12 @@ func (repository *SQLiteRepository) InsertRound(ctx context.Context, round Watch
 }
 
 func (repository *SQLiteRepository) UpdateRound(ctx context.Context, round WatchRound, expectedVersion int) (bool, error) {
-	result, err := repository.db.Writer().ExecContext(ctx, `
+	tx, err := repository.db.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, `
 		UPDATE watch_rounds SET
 			status = ?, rating = ?, note = ?, viewing_method = ?,
 			started_at = ?, completed_at = ?, version = ?,
@@ -85,7 +105,16 @@ func (repository *SQLiteRepository) UpdateRound(ctx context.Context, round Watch
 		return false, err
 	}
 	rows, err := result.RowsAffected()
-	return rows == 1, err
+	if err != nil || rows != 1 {
+		return false, err
+	}
+	if err := projectMediaProfile(ctx, tx, round.UserID, round.MediaID); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 type roundScanner interface {

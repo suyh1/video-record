@@ -197,23 +197,18 @@ func TestCollectionItemsCanBeReorderedAndRemovedOnlyByTheirOwner(t *testing.T) {
 
 func TestVersionedTagsAdvanceStateAndRejectStaleWriters(t *testing.T) {
 	service, db, userID, mediaID := newTestRecordsService(t)
-	state, err := service.UpdateState(context.Background(), UpdateStateInput{
-		UserID: userID, MediaID: mediaID, Status: StatusWishlist,
-		Source: SourceManual, ExpectedVersion: 0,
-	})
-	require.NoError(t, err)
 
 	updated, err := service.SetTagsVersioned(
-		context.Background(), userID, mediaID, []string{" 科幻 ", "家庭", "科幻"}, state.Version,
+		context.Background(), userID, mediaID, []string{" 科幻 ", "家庭", "科幻"}, 0,
 	)
 	require.NoError(t, err)
-	require.Equal(t, state.Version+1, updated.Version)
+	require.Equal(t, 1, updated.Version)
 	tags, err := service.Tags(context.Background(), userID, mediaID)
 	require.NoError(t, err)
 	require.Equal(t, []string{"家庭", "科幻"}, tags)
 
 	stale, err := service.SetTagsVersioned(
-		context.Background(), userID, mediaID, []string{"覆盖失败"}, state.Version,
+		context.Background(), userID, mediaID, []string{"覆盖失败"}, 0,
 	)
 	require.ErrorIs(t, err, ErrVersionConflict)
 	require.Equal(t, updated.Version, stale.Version)
@@ -223,15 +218,15 @@ func TestVersionedTagsAdvanceStateAndRejectStaleWriters(t *testing.T) {
 
 	secondUserID := insertTestUser(t, db, "versioned-tags-second")
 	missing, err := service.SetTagsVersioned(context.Background(), secondUserID, mediaID, nil, 0)
-	require.ErrorIs(t, err, ErrVersionConflict)
-	require.Equal(t, 0, missing.Version)
+	require.NoError(t, err)
+	require.Equal(t, 1, missing.Version)
 	_, err = service.SetTagsVersioned(context.Background(), "", mediaID, nil, 0)
 	require.ErrorIs(t, err, ErrInvalidRecord)
 	_, err = service.SetTagsVersioned(context.Background(), userID, mediaID, nil, -1)
 	require.ErrorIs(t, err, ErrInvalidRecord)
 
 	repositoryUpdated, err := service.repository.SetTagsVersioned(
-		context.Background(), userID, mediaID, []string{"覆盖失败"}, state.Version,
+		context.Background(), userID, mediaID, []string{"覆盖失败"}, 0,
 	)
 	require.NoError(t, err)
 	require.False(t, repositoryUpdated)

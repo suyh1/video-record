@@ -63,9 +63,9 @@ func (service *Service) CurrentRound(ctx context.Context, scope RoundScope) (Wat
 		return WatchRound{}, err
 	}
 	if exists {
-		return current, nil
+		return service.attachProfileVersion(ctx, current)
 	}
-	return emptyRound(scope), nil
+	return service.attachProfileVersion(ctx, emptyRound(scope))
 }
 
 func (service *Service) UpdateRound(ctx context.Context, input UpdateRoundInput) (WatchRound, error) {
@@ -153,7 +153,7 @@ func (service *Service) UpdateRound(ctx context.Context, input UpdateRoundInput)
 		if err := service.repository.InsertRound(ctx, next); err != nil {
 			return WatchRound{}, err
 		}
-		return next, nil
+		return service.attachProfileVersion(ctx, next)
 	}
 	updated, err := service.repository.UpdateRound(ctx, next, current.Version)
 	if err != nil {
@@ -162,7 +162,18 @@ func (service *Service) UpdateRound(ctx context.Context, input UpdateRoundInput)
 	if !updated {
 		return current, ErrVersionConflict
 	}
-	return next, nil
+	return service.attachProfileVersion(ctx, next)
+}
+
+func (service *Service) attachProfileVersion(ctx context.Context, round WatchRound) (WatchRound, error) {
+	profile, exists, err := service.repository.FindProfile(ctx, round.UserID, round.MediaID)
+	if err != nil {
+		return WatchRound{}, err
+	}
+	if exists {
+		round.ProfileVersion = profile.Version
+	}
+	return round, nil
 }
 
 func emptyRound(scope RoundScope) WatchRound {

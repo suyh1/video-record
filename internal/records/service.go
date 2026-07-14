@@ -154,22 +154,29 @@ func (service *Service) SetTagsVersioned(
 	if userID == "" || mediaID == "" || expectedVersion < 0 {
 		return State{}, ErrInvalidRecord
 	}
-	state, exists, err := service.repository.FindState(ctx, userID, mediaID)
+	profile, exists, err := service.repository.FindProfile(ctx, userID, mediaID)
 	if err != nil {
 		return State{}, err
 	}
-	if !exists || state.Version != expectedVersion {
-		return state, ErrVersionConflict
+	if exists && profile.Version != expectedVersion || !exists && expectedVersion != 0 {
+		return State{UserID: userID, MediaID: mediaID, Status: profile.Status, Version: profile.Version}, ErrVersionConflict
 	}
 	updated, err := service.repository.SetTagsVersioned(ctx, userID, mediaID, names, expectedVersion)
 	if err != nil {
 		return State{}, err
 	}
 	if !updated {
-		return state, ErrVersionConflict
+		latest, _, findErr := service.repository.FindProfile(ctx, userID, mediaID)
+		if findErr != nil {
+			return State{}, findErr
+		}
+		return State{UserID: userID, MediaID: mediaID, Status: latest.Status, Version: latest.Version}, ErrVersionConflict
 	}
-	state.Version++
-	return state, nil
+	latest, _, err := service.repository.FindProfile(ctx, userID, mediaID)
+	if err != nil {
+		return State{}, err
+	}
+	return State{UserID: userID, MediaID: mediaID, Status: latest.Status, Version: latest.Version}, nil
 }
 
 func (service *Service) Tags(ctx context.Context, userID, mediaID string) ([]string, error) {
