@@ -127,7 +127,7 @@ export async function expectNoBlockingA11yViolations(page: Page) {
 }
 
 const seedDocument = {
-  version: 1,
+  version: 2,
   records: [
     {
       media: {
@@ -147,18 +147,24 @@ const seedDocument = {
         genres: [],
         seasons: [],
       },
-      state: {
+      profile: {
+        version: 1,
+        shareRating: false,
+        shareReview: false,
+      },
+      tags: [],
+      rounds: [{
+        id: 'e2e-movie-round-1',
+        seasonNumber: null,
+        roundNumber: 1,
         status: 'wishlist',
         version: 1,
         statusSource: 'confirmed_import',
         ratingSource: 'confirmed_import',
         noteSource: 'confirmed_import',
-        shareRating: false,
-        shareReview: false,
-      },
-      tags: [],
-      events: [],
-      progress: [],
+        events: [],
+        episodes: [],
+      }],
     },
     {
       media: {
@@ -177,18 +183,24 @@ const seedDocument = {
         genres: [],
         seasons: [],
       },
-      state: {
+      profile: {
+        version: 1,
+        shareRating: false,
+        shareReview: false,
+      },
+      tags: [],
+      rounds: [{
+        id: 'e2e-series-season-1-round-1',
+        seasonNumber: 1,
+        roundNumber: 1,
         status: 'watching',
         version: 1,
         statusSource: 'confirmed_import',
         ratingSource: 'confirmed_import',
         noteSource: 'confirmed_import',
-        shareRating: false,
-        shareReview: false,
-      },
-      tags: [],
-      events: [],
-      progress: [],
+        events: [],
+        episodes: [],
+      }],
     },
   ],
   collections: [],

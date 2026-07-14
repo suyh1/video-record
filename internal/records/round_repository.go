@@ -53,7 +53,37 @@ func (repository *SQLiteRepository) findRound(
 	if errors.Is(err, sql.ErrNoRows) {
 		return WatchRound{}, false, nil
 	}
+	if err != nil {
+		return WatchRound{}, false, err
+	}
+	round.ParticipantIDs, err = repository.roundParticipantIDs(ctx, round.ID, round.UserID)
 	return round, err == nil, err
+}
+
+func (repository *SQLiteRepository) roundParticipantIDs(
+	ctx context.Context,
+	roundID, ownerID string,
+) ([]string, error) {
+	rows, err := repository.db.Reader().QueryContext(ctx, `
+		SELECT DISTINCT participant.user_id
+		FROM watch_events event
+		JOIN watch_event_participants participant ON participant.event_id = event.id
+		WHERE event.round_id = ? AND event.episode_id IS NULL AND participant.user_id <> ?
+		ORDER BY participant.user_id
+	`, roundID, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	participantIDs := make([]string, 0)
+	for rows.Next() {
+		var participantID string
+		if err := rows.Scan(&participantID); err != nil {
+			return nil, err
+		}
+		participantIDs = append(participantIDs, participantID)
+	}
+	return participantIDs, rows.Err()
 }
 
 func (repository *SQLiteRepository) InsertRound(ctx context.Context, round WatchRound, participantIDs []string) error {

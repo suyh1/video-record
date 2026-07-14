@@ -314,8 +314,7 @@ export interface paths {
         };
         /** Read the current user's media record */
         get: operations["getRecord"];
-        /** Update a versioned current-user media record */
-        put: operations["updateRecord"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1089,15 +1088,6 @@ export interface components {
             viewingMethod: string | null;
             version: number;
         };
-        UpdateRecordRequest: {
-            status: components["schemas"]["RecordStatus"];
-            rating?: number | null;
-            note?: string | null;
-            /** Format: date-time */
-            watchedAt?: string;
-            viewingMethod?: string | null;
-            participantIds?: string[];
-        };
         CurrentRound: {
             roundId: string;
             /** Format: uuid */
@@ -1112,6 +1102,7 @@ export interface components {
             watchedAt: string | null;
             version: number;
             profileVersion: number;
+            participantIds: string[];
         };
         UpdateCurrentRoundRequest: {
             status: components["schemas"]["RecordStatus"];
@@ -2148,38 +2139,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Current media record. */
-            200: {
-                headers: {
-                    ETag: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RecordState"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    updateRecord: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
-                "X-CSRF-Token": components["parameters"]["CSRFToken"];
-                "If-Match": components["parameters"]["IfMatch"];
-            };
-            path: {
-                mediaID: components["parameters"]["MediaID"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateRecordRequest"];
-            };
-        };
-        responses: {
-            /** @description Updated media record. */
             200: {
                 headers: {
                     ETag: string;

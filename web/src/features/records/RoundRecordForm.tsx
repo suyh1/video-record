@@ -78,7 +78,10 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
     }
     setMessage(null)
     setSaved(false)
-    mutation.mutate({ payload: toPayload(parsed.data, expanded, round.seasonNumber === null), version })
+    mutation.mutate({
+      payload: toPayload(parsed.data, expanded, round.seasonNumber === null, round.status),
+      version,
+    })
   }
 
   function selectStatus(nextStatus: RecordStatus) {
@@ -291,12 +294,17 @@ function formSchema(movie: boolean, now: Date) {
     })
 }
 
-function toPayload(values: FormValues, expanded: boolean, movie: boolean): UpdateCurrentRoundPayload {
-  const payload: UpdateCurrentRoundPayload = { status: values.status }
+function toPayload(
+  values: FormValues,
+  expanded: boolean,
+  movie: boolean,
+  projectedStatus: RecordStatus,
+): UpdateCurrentRoundPayload {
+  const payload: UpdateCurrentRoundPayload = { status: movie ? values.status : projectedStatus }
   if (movie && values.status === 'completed') {
     const watchedAt = fromDateTimeLocalValue(values.watchedAt)
     if (watchedAt) payload.watchedAt = watchedAt.toISOString()
-    if (values.participantIds.length > 0) payload.participantIds = values.participantIds
+    payload.participantIds = values.participantIds
   }
   if (expanded) {
     payload.rating = values.rating === '' ? null : Number(values.rating)
@@ -313,7 +321,7 @@ function formValuesFromRound(round: CurrentRound): FormValues {
     rating: round.rating === null ? '' : String(round.rating),
     note: round.note ?? '',
     viewingMethod: round.viewingMethod ?? '',
-    participantIds: [],
+    participantIds: [...round.participantIds],
   }
 }
 

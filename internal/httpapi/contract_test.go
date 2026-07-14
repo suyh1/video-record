@@ -68,7 +68,6 @@ var protectedWriteRoutes = []struct {
 	Method string
 	Path   string
 }{
-	{http.MethodPut, "/api/v1/records/{mediaID}"},
 	{http.MethodPut, "/api/v1/records/{mediaID}/rounds/current"},
 	{http.MethodPost, "/api/v1/records/{mediaID}/rounds/current/rewatch"},
 	{http.MethodPut, "/api/v1/records/{mediaID}/tags"},
@@ -155,11 +154,9 @@ func TestContractDefinesCursorETagAndProtectedWriteShapes(t *testing.T) {
 		"#/components/schemas/CursorPage",
 		library.Responses["200"].Content["application/json"].Schema.Ref,
 	)
-	for _, method := range []string{http.MethodGet, http.MethodPut} {
-		record := decodeOpenAPIOperation(t, contract, method, "/api/v1/records/{mediaID}")
-		_, documentsETag := record.Responses["200"].Headers["ETag"]
-		require.True(t, documentsETag, "%s record response must document ETag", method)
-	}
+	record := decodeOpenAPIOperation(t, contract, http.MethodGet, "/api/v1/records/{mediaID}")
+	_, documentsETag := record.Responses["200"].Headers["ETag"]
+	require.True(t, documentsETag, "GET record response must document ETag")
 	for _, method := range []string{http.MethodGet, http.MethodPut} {
 		round := decodeOpenAPIOperation(t, contract, method, "/api/v1/records/{mediaID}/rounds/current")
 		_, documentsETag := round.Responses["200"].Headers["ETag"]
@@ -218,7 +215,6 @@ func TestContractProvidesConcreteGeneratedTypesAndRealFileMedia(t *testing.T) {
 		http.MethodPost + " /api/v1/collections":                                 {},
 		http.MethodPost + " /api/v1/collections/{collectionID}/items":            {},
 		http.MethodPost + " /api/v1/data/import":                                 {},
-		http.MethodPut + " /api/v1/records/{mediaID}":                            {},
 		http.MethodPut + " /api/v1/records/{mediaID}/rounds/current":             {},
 		http.MethodPost + " /api/v1/records/{mediaID}/rounds/current/rewatch":    {},
 		http.MethodPut + " /api/v1/records/{mediaID}/tags":                       {},

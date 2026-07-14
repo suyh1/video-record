@@ -14,58 +14,47 @@ import (
 	"video-record/internal/auth"
 )
 
-func TestIdempotencyReplaysOriginalEventResponse(t *testing.T) {
+func TestIdempotencyReplaysOriginalRewatchResponse(t *testing.T) {
 	router, cookie, csrfToken, mediaID, recordService, _ := newRecordsTestRouter(t)
-	baseHeaders := map[string]string{
+	completeRecordForIdempotencyTest(t, router, cookie, csrfToken, mediaID)
+	headers := map[string]string{
 		"Cookie":          cookie.String(),
 		"Origin":          "http://example.test",
 		"X-CSRF-Token":    csrfToken,
-		"Idempotency-Key": "complete-record",
-		"If-Match":        `"0"`,
+		"Idempotency-Key": "rewatch-2026-07-13",
+		"If-Match":        `"1"`,
 	}
-	completed := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID, map[string]any{
-		"status": "completed",
-	}, baseHeaders)
-	require.Equal(t, http.StatusOK, completed.Code)
-
-	eventHeaders := cloneHeaders(baseHeaders)
-	delete(eventHeaders, "If-Match")
-	eventHeaders["Idempotency-Key"] = "rewatch-2026-07-13"
-	body := map[string]any{
-		"watchedAt":     "2026-07-13T20:30:00Z",
-		"viewingMethod": "家庭影院",
-	}
-	first := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/records/"+mediaID+"/events", body, eventHeaders)
-	require.Equal(t, http.StatusCreated, first.Code)
+	target := "http://example.test/api/v1/records/" + mediaID + "/rounds/current/rewatch"
+	first := performJSONRequest(router, http.MethodPost, target, map[string]any{}, headers)
+	require.Equal(t, http.StatusOK, first.Code)
 	require.Empty(t, first.Header().Get("Idempotency-Replayed"))
 
-	second := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/records/"+mediaID+"/events", body, eventHeaders)
+	second := performJSONRequest(router, http.MethodPost, target, map[string]any{}, headers)
 	require.Equal(t, first.Code, second.Code)
 	require.Equal(t, first.Body.String(), second.Body.String())
 	require.Equal(t, "true", second.Header().Get("Idempotency-Replayed"))
 
 	events, err := recordService.WatchEvents(context.Background(), currentUserID(t, router, cookie), mediaID)
 	require.NoError(t, err)
-	require.Len(t, events, 2)
+	require.Len(t, events, 1)
 }
 
 func TestIdempotencyRejectsMissingOrConflictingKeys(t *testing.T) {
 	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
-	completeRecordForIdempotencyTest(t, router, cookie, csrfToken, mediaID)
 	headers := map[string]string{
 		"Cookie": cookie.String(), "Origin": "http://example.test", "X-CSRF-Token": csrfToken,
+		"If-Match": `"0"`,
 	}
-	body := map[string]any{"watchedAt": "2026-07-13T20:30:00Z"}
-	missing := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/records/"+mediaID+"/events", body, headers)
+	target := "http://example.test/api/v1/records/" + mediaID + "/rounds/current"
+	body := map[string]any{"status": "wishlist"}
+	missing := performJSONRequest(router, http.MethodPut, target, body, headers)
 	require.Equal(t, http.StatusBadRequest, missing.Code)
 	require.Contains(t, missing.Body.String(), `"code":"invalid_idempotency_key"`)
 
 	headers["Idempotency-Key"] = "one-logical-request"
-	first := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/records/"+mediaID+"/events", body, headers)
-	require.Equal(t, http.StatusCreated, first.Code)
-	conflict := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/records/"+mediaID+"/events", map[string]any{
-		"watchedAt": "2026-07-14T20:30:00Z",
-	}, headers)
+	first := performJSONRequest(router, http.MethodPut, target, body, headers)
+	require.Equal(t, http.StatusOK, first.Code)
+	conflict := performJSONRequest(router, http.MethodPut, target, map[string]any{"status": "watching"}, headers)
 	require.Equal(t, http.StatusConflict, conflict.Code)
 	require.Contains(t, conflict.Body.String(), `"code":"idempotency_key_conflict"`)
 }
@@ -93,9 +82,8 @@ func TestIdempotencyIncludesQueryScope(t *testing.T) {
 }
 
 func TestIdempotencyExpiresStoredResponses(t *testing.T) {
-	router, cookie, csrfToken, mediaID, recordService, db := newRecordsTestRouter(t)
+	router, cookie, csrfToken, mediaID, _, db := newRecordsTestRouter(t)
 	userID := currentUserID(t, router, cookie)
-	completeRecordForIdempotencyTest(t, router, cookie, csrfToken, mediaID)
 	_, err := db.Writer().ExecContext(context.Background(), `
 		INSERT INTO idempotency_keys (
 			user_id, key, method, path, request_hash, status_code,
@@ -106,15 +94,15 @@ func TestIdempotencyExpiresStoredResponses(t *testing.T) {
 
 	headers := map[string]string{
 		"Cookie": cookie.String(), "Origin": "http://example.test", "X-CSRF-Token": csrfToken,
-		"Idempotency-Key": "expired-key",
+		"Idempotency-Key": "expired-key", "If-Match": `"0"`,
 	}
-	response := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/records/"+mediaID+"/events", map[string]any{
-		"watchedAt": "2026-07-15T20:30:00Z",
-	}, headers)
-	require.Equal(t, http.StatusCreated, response.Code)
-	events, err := recordService.WatchEvents(context.Background(), userID, mediaID)
-	require.NoError(t, err)
-	require.Len(t, events, 2)
+	response := performJSONRequest(
+		router, http.MethodPut,
+		"http://example.test/api/v1/records/"+mediaID+"/rounds/current",
+		map[string]any{"status": "wishlist"}, headers,
+	)
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Contains(t, response.Body.String(), `"status":"wishlist"`)
 }
 
 func TestIdempotencyReplaysNoContentResponse(t *testing.T) {
@@ -158,7 +146,7 @@ func TestIdempotencyReservesKeyBeforeSideEffects(t *testing.T) {
 		"Idempotency-Key": "completion-failure",
 		"If-Match":        `"0"`,
 	}
-	target := "http://example.test/api/v1/records/" + mediaID
+	target := "http://example.test/api/v1/records/" + mediaID + "/rounds/current"
 	body := map[string]any{"status": "wishlist"}
 
 	first := performJSONRequest(router, http.MethodPut, target, body, headers)
@@ -230,7 +218,7 @@ func TestIdempotencyReplayKeepsProblemRequestIDConsistent(t *testing.T) {
 		"Idempotency-Key": "cached-version-conflict",
 		"If-Match":        `"0"`,
 	}
-	target := "http://example.test/api/v1/records/" + mediaID
+	target := "http://example.test/api/v1/records/" + mediaID + "/rounds/current"
 	body := map[string]any{"status": "wishlist"}
 
 	first := performJSONRequest(router, http.MethodPut, target, body, headers)
@@ -249,8 +237,8 @@ func completeRecordForIdempotencyTest(
 	csrfToken, mediaID string,
 ) {
 	t.Helper()
-	completed := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID, map[string]any{
-		"status": "completed",
+	completed := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID+"/rounds/current", map[string]any{
+		"status": "completed", "watchedAt": "2026-07-13T20:30:00Z",
 	}, map[string]string{
 		"Cookie": cookie.String(), "Origin": "http://example.test", "X-CSRF-Token": csrfToken,
 		"Idempotency-Key": "complete-record",

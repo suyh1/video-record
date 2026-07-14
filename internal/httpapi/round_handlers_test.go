@@ -23,7 +23,8 @@ func TestCurrentRoundHandlersReadAndWriteMovie(t *testing.T) {
 	require.JSONEq(t, `{
 		"roundId":"", "mediaId":"`+mediaID+`", "seasonNumber":null,
 		"roundNumber":1, "status":"none", "rating":null, "note":null,
-		"viewingMethod":null, "watchedAt":null, "version":0, "profileVersion":0
+		"viewingMethod":null, "watchedAt":null, "version":0, "profileVersion":0,
+		"participantIds":[]
 	}`, read.Body.String())
 
 	updated := performJSONRequest(router, http.MethodPut, url, map[string]any{
@@ -41,6 +42,7 @@ func TestCurrentRoundHandlersReadAndWriteMovie(t *testing.T) {
 	require.Contains(t, updated.Body.String(), `"viewingMethod":"家庭投影"`)
 	require.Contains(t, updated.Body.String(), `"watchedAt":"2026-07-13T20:30:45Z"`)
 	require.Contains(t, updated.Body.String(), `"profileVersion":1`)
+	require.Contains(t, updated.Body.String(), `"participantIds":[]`)
 
 	replayed := performJSONRequest(router, http.MethodPut, url, map[string]any{
 		"status": "completed", "rating": 8.7, "note": "第一轮",
@@ -100,6 +102,37 @@ func TestCurrentRoundHandlersRequireCorrectSeasonScopeAndSecurity(t *testing.T) 
 	})
 	require.Equal(t, http.StatusOK, created.Code)
 	require.Contains(t, created.Body.String(), `"status":"watching"`)
+}
+
+func TestCurrentRoundHandlersPreserveExistingCompletionTimeWhenUpdatingPrivateFields(t *testing.T) {
+	router, cookie, csrfToken, _, _, db := newRecordsTestRouter(t)
+	mediaService := media.NewService(media.NewRepository(db))
+	series, err := mediaService.CreateCustom(context.Background(), media.CreateCustomInput{
+		MediaType: media.MediaTypeTV, Title: "测试剧集",
+	})
+	require.NoError(t, err)
+	url := "http://example.test/api/v1/records/" + series.ID + "/rounds/current?seasonNumber=2"
+
+	completed := performJSONRequest(router, http.MethodPut, url, map[string]any{
+		"status": "completed", "watchedAt": "2026-07-13T20:30:45Z",
+	}, map[string]string{
+		"Cookie": cookie.String(), "Origin": "http://example.test",
+		"X-CSRF-Token": csrfToken, "Idempotency-Key": "complete-season-round",
+		"If-Match": `"0"`,
+	})
+	require.Equal(t, http.StatusOK, completed.Code, completed.Body.String())
+
+	updated := performJSONRequest(router, http.MethodPut, url, map[string]any{
+		"status": "completed", "rating": 9.1, "note": "只更新私人记录",
+	}, map[string]string{
+		"Cookie": cookie.String(), "Origin": "http://example.test",
+		"X-CSRF-Token": csrfToken, "Idempotency-Key": "update-completed-season-record",
+		"If-Match": `"1"`,
+	})
+	require.Equal(t, http.StatusOK, updated.Code, updated.Body.String())
+	require.Contains(t, updated.Body.String(), `"rating":9.1`)
+	require.Contains(t, updated.Body.String(), `"note":"只更新私人记录"`)
+	require.Contains(t, updated.Body.String(), `"watchedAt":"2026-07-13T20:30:45Z"`)
 }
 
 func TestCurrentRoundHandlersRejectFutureTimeAndStaleVersion(t *testing.T) {

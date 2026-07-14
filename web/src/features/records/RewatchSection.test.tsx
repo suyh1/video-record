@@ -13,7 +13,7 @@ import { RewatchSection } from './RewatchSection'
 const completedMovie: CurrentRound = {
   roundId: 'movie-round-1', mediaId: 'movie-1', seasonNumber: null, roundNumber: 1,
   status: 'completed', rating: 9.2, note: '第一刷笔记', viewingMethod: '影院',
-  watchedAt: '2026-07-13T12:30:45Z', version: 4, profileVersion: 8,
+  watchedAt: '2026-07-13T12:30:45Z', participantIds: [], version: 4, profileVersion: 8,
 }
 
 beforeEach(() => sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token'))

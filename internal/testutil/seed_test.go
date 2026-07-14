@@ -33,7 +33,8 @@ func TestSeedCreatesExactSyntheticDataset(t *testing.T) {
 
 	for table, expected := range map[string]int{
 		"users": 3, "media_items": 20, "media_external_ids": 20,
-		"user_media_states": 20, "watch_events": 80, "watch_event_participants": 80,
+		"user_media_profiles": 20, "watch_rounds": 20,
+		"watch_events": 80, "watch_event_participants": 80,
 	} {
 		var count int
 		require.NoError(t, db.Reader().QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&count))
@@ -92,7 +93,8 @@ func TestSeedRollsBackEveryTableWhenAnInsertFails(t *testing.T) {
 	require.Error(t, err)
 
 	for table, expected := range map[string]int{
-		"users": 0, "media_items": 1, "media_external_ids": 0, "user_media_states": 0,
+		"users": 0, "media_items": 1, "media_external_ids": 0,
+		"user_media_profiles": 0, "watch_rounds": 0,
 	} {
 		var count int
 		require.NoError(t, db.Reader().QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&count))

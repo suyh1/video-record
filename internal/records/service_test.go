@@ -13,114 +13,6 @@ import (
 	"video-record/internal/storage"
 )
 
-func TestStateUpdateUsesOptimisticVersionAndManualPriority(t *testing.T) {
-	service, _, userID, mediaID := newTestRecordsService(t)
-	rating := 91
-	note := "手工笔记"
-
-	manual, err := service.UpdateState(context.Background(), UpdateStateInput{
-		UserID: userID, MediaID: mediaID, Status: StatusCompleted,
-		Rating: &rating, Note: &note, Source: SourceManual, ExpectedVersion: 0,
-	})
-	require.NoError(t, err)
-	require.Equal(t, 1, manual.Version)
-	require.Equal(t, StatusCompleted, manual.Status)
-	require.Equal(t, 91, *manual.Rating)
-	require.Equal(t, note, *manual.Note)
-
-	_, err = service.UpdateState(context.Background(), UpdateStateInput{
-		UserID: userID, MediaID: mediaID, Status: StatusWishlist,
-		Source: SourceManual, ExpectedVersion: 0,
-	})
-	require.ErrorIs(t, err, ErrVersionConflict)
-
-	syncRating := 40
-	syncNote := "同步值"
-	afterSync, err := service.UpdateState(context.Background(), UpdateStateInput{
-		UserID: userID, MediaID: mediaID, Status: StatusWatching,
-		Rating: &syncRating, Note: &syncNote, Source: SourceConfirmedSync, ExpectedVersion: 1,
-	})
-	require.NoError(t, err)
-	require.Equal(t, 1, afterSync.Version)
-	require.Equal(t, StatusCompleted, afterSync.Status)
-	require.Equal(t, 91, *afterSync.Rating)
-	require.Equal(t, note, *afterSync.Note)
-}
-
-func TestStateUpdateClearsExplicitNullableFields(t *testing.T) {
-	service, _, userID, mediaID := newTestRecordsService(t)
-	rating := 91
-	note := "手工笔记"
-	created, err := service.UpdateState(context.Background(), UpdateStateInput{
-		UserID: userID, MediaID: mediaID, Status: StatusCompleted,
-		Rating: &rating, Note: &note, Source: SourceManual, ExpectedVersion: 0,
-	})
-	require.NoError(t, err)
-
-	cleared, err := service.UpdateState(context.Background(), UpdateStateInput{
-		UserID: userID, MediaID: mediaID, Status: StatusCompleted,
-		RatingSet: true, NoteSet: true, Source: SourceManual, ExpectedVersion: created.Version,
-	})
-	require.NoError(t, err)
-	require.Equal(t, 2, cleared.Version)
-	require.Nil(t, cleared.Rating)
-	require.Nil(t, cleared.Note)
-
-	persisted, exists, err := service.repository.FindState(context.Background(), userID, mediaID)
-	require.NoError(t, err)
-	require.True(t, exists)
-	require.Equal(t, cleared.Version, persisted.Version)
-	require.Nil(t, persisted.Rating)
-	require.Nil(t, persisted.Note)
-}
-
-func TestStateUpdatePreservesOmittedFieldsAndSkipsNoopVersion(t *testing.T) {
-	service, _, userID, mediaID := newTestRecordsService(t)
-	rating := 84
-	note := "保留内容"
-	created, err := service.UpdateState(context.Background(), UpdateStateInput{
-		UserID: userID, MediaID: mediaID, Status: StatusWishlist,
-		Rating: &rating, Note: &note, Source: SourceManual, ExpectedVersion: 0,
-	})
-	require.NoError(t, err)
-
-	updated, err := service.UpdateState(context.Background(), UpdateStateInput{
-		UserID: userID, MediaID: mediaID, Status: StatusWatching,
-		Source: SourceManual, ExpectedVersion: created.Version,
-	})
-	require.NoError(t, err)
-	require.Equal(t, 2, updated.Version)
-	require.Equal(t, rating, *updated.Rating)
-	require.Equal(t, note, *updated.Note)
-
-	unchanged, err := service.UpdateState(context.Background(), UpdateStateInput{
-		UserID: userID, MediaID: mediaID, Status: StatusWatching,
-		Rating: &rating, Note: &note, Source: SourceManual, ExpectedVersion: updated.Version,
-	})
-	require.NoError(t, err)
-	require.Equal(t, updated.Version, unchanged.Version)
-}
-
-func TestStateUpdateRejectsInvalidInput(t *testing.T) {
-	service, _, userID, mediaID := newTestRecordsService(t)
-	invalidRating := 101
-	tests := []UpdateStateInput{
-		{MediaID: mediaID, Status: StatusWishlist, Source: SourceManual},
-		{UserID: userID, Status: StatusWishlist, Source: SourceManual},
-		{UserID: userID, MediaID: mediaID, Status: "paused", Source: SourceManual},
-		{UserID: userID, MediaID: mediaID, Status: StatusWishlist, Source: "unknown"},
-	}
-	for _, input := range tests {
-		_, err := service.UpdateState(context.Background(), input)
-		require.ErrorIs(t, err, ErrInvalidRecord)
-	}
-	_, err := service.UpdateState(context.Background(), UpdateStateInput{
-		UserID: userID, MediaID: mediaID, Status: StatusWishlist,
-		Rating: &invalidRating, Source: SourceManual,
-	})
-	require.ErrorIs(t, err, ErrInvalidRating)
-}
-
 func TestTagsAndCollectionsArePrivateToTheirOwner(t *testing.T) {
 	service, db, firstUserID, mediaID := newTestRecordsService(t)
 	secondUserID := insertTestUser(t, db, "second")
@@ -215,6 +107,14 @@ func TestVersionedTagsAdvanceStateAndRejectStaleWriters(t *testing.T) {
 	tags, err = service.Tags(context.Background(), userID, mediaID)
 	require.NoError(t, err)
 	require.Equal(t, []string{"家庭", "科幻"}, tags)
+	advanced, err := service.SetTagsVersioned(
+		context.Background(), userID, mediaID, []string{"重看"}, updated.Version,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 2, advanced.Version)
+	tags, err = service.Tags(context.Background(), userID, mediaID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"重看"}, tags)
 
 	secondUserID := insertTestUser(t, db, "versioned-tags-second")
 	missing, err := service.SetTagsVersioned(context.Background(), secondUserID, mediaID, nil, 0)
@@ -230,6 +130,50 @@ func TestVersionedTagsAdvanceStateAndRejectStaleWriters(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.False(t, repositoryUpdated)
+}
+
+func TestRecordPointerHelpersCompareAndCloneNullableValues(t *testing.T) {
+	first, same, other := 1, 1, 2
+	require.True(t, equalIntPointers(nil, nil))
+	require.True(t, equalIntPointers(&first, &same))
+	require.False(t, equalIntPointers(&first, nil))
+	require.False(t, equalIntPointers(&first, &other))
+	require.True(t, equalStringPointers(nil, nil))
+	require.Nil(t, cloneIntPointer(nil))
+	require.Nil(t, cloneStringPointer(nil))
+}
+
+func TestRecordsServicesReturnStorageErrorsAfterDatabaseCloses(t *testing.T) {
+	service, db, userID, mediaID := newTestRecordsService(t)
+	ctx := context.Background()
+	require.NoError(t, db.Close())
+
+	_, err := service.CurrentRound(ctx, RoundScope{UserID: userID, MediaID: mediaID})
+	require.Error(t, err)
+	_, err = service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: userID, MediaID: mediaID}, Status: StatusWatching,
+		Source: SourceManual,
+	})
+	require.Error(t, err)
+	_, err = service.RoundHistory(ctx, RoundScope{UserID: userID, MediaID: mediaID})
+	require.Error(t, err)
+	_, err = service.RoundDetail(ctx, RoundScope{UserID: userID, MediaID: mediaID}, "round-id")
+	require.Error(t, err)
+	_, err = service.WatchEvents(ctx, userID, mediaID)
+	require.Error(t, err)
+	_, err = service.ExportData(ctx, userID, ExportFormatJSON)
+	require.Error(t, err)
+	require.Error(t, service.SetTags(ctx, userID, mediaID, []string{"离线"}))
+	_, err = service.SetTagsVersioned(ctx, userID, mediaID, []string{"离线"}, 0)
+	require.Error(t, err)
+	_, err = service.Tags(ctx, userID, mediaID)
+	require.Error(t, err)
+	_, err = service.CreateCollection(ctx, userID, "离线片单")
+	require.Error(t, err)
+	require.Error(t, service.AddCollectionItem(ctx, userID, "collection-id", mediaID))
+	require.Error(t, service.ReplaceCollectionItems(ctx, userID, "collection-id", []string{mediaID}))
+	_, err = service.Collections(ctx, userID)
+	require.Error(t, err)
 }
 
 func TestTagsAndCollectionsValidateRequiredFields(t *testing.T) {

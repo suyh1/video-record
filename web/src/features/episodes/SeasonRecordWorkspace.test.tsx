@@ -21,7 +21,8 @@ const tvDetails = {
 function round(seasonNumber: number, status: CurrentRound['status'], note: string): CurrentRound {
   return {
     roundId: `round-${seasonNumber}`, mediaId: 'series-1', seasonNumber, roundNumber: 1,
-    status, rating: null, note, viewingMethod: null, watchedAt: null, version: 2, profileVersion: 9,
+    status, rating: null, note, viewingMethod: null, watchedAt: null, participantIds: [],
+    version: 2, profileVersion: 9,
   }
 }
 

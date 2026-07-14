@@ -237,12 +237,12 @@ func requireCollectionCount(t *testing.T, body []byte, collection string, expect
 func assertPerformanceSyncState(t *testing.T, db *storage.DB, candidates, watchEvents int) {
 	t.Helper()
 	expected := map[string]int{
-		"SELECT COUNT(*) FROM sync_candidates":                                          candidates,
-		"SELECT COUNT(*) FROM sync_candidates WHERE status = 'confirmed'":               candidates,
-		"SELECT COUNT(*) FROM watch_events":                                             watchEvents,
-		"SELECT COUNT(*) FROM watch_event_participants":                                 watchEvents,
-		"SELECT COUNT(*) FROM external_media_mappings":                                  performanceMediaItems,
-		"SELECT COUNT(*) FROM user_media_states WHERE status_source = 'confirmed_sync'": performanceMediaItems,
+		"SELECT COUNT(*) FROM sync_candidates":                                     candidates,
+		"SELECT COUNT(*) FROM sync_candidates WHERE status = 'confirmed'":          candidates,
+		"SELECT COUNT(*) FROM watch_events":                                        watchEvents,
+		"SELECT COUNT(*) FROM watch_event_participants":                            watchEvents,
+		"SELECT COUNT(*) FROM external_media_mappings":                             performanceMediaItems,
+		"SELECT COUNT(*) FROM watch_rounds WHERE status_source = 'confirmed_sync'": performanceMediaItems,
 	}
 	for query, count := range expected {
 		var actual int

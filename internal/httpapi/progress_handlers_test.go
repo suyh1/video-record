@@ -125,6 +125,34 @@ func TestEpisodeProgressHandlersAcceptSparseExternalReferences(t *testing.T) {
 	require.Contains(t, invalid.Body.String(), `"code":"invalid_episode_progress"`)
 }
 
+func TestEpisodeProgressHandlersAcceptSeasonTotalWithSeriesAbsoluteNumbers(t *testing.T) {
+	router, cookie, csrfToken, _, service, db := newRecordsTestRouter(t)
+	mediaService := media.NewService(media.NewRepository(db))
+	series, err := mediaService.UpsertExternal(context.Background(), media.ExternalSnapshot{
+		Source: "tmdb", SourceID: "1399", MediaType: media.MediaTypeTV, Title: "测试剧集",
+	})
+	require.NoError(t, err)
+
+	progressURL := "http://example.test/api/v1/records/" + series.ID + "/progress?seasonNumber=2"
+	updated := performJSONRequest(router, http.MethodPost, progressURL, map[string]any{
+		"action": "season", "expectedVersion": 0, "totalEpisodes": 2,
+		"watchedAt": "2026-07-14T12:00:00Z",
+		"episodeRefs": []map[string]any{
+			{"sourceId": "1201", "seasonNumber": 2, "episodeNumber": 1, "absoluteNumber": 4},
+			{"sourceId": "1202", "seasonNumber": 2, "episodeNumber": 2, "absoluteNumber": 5},
+		},
+	}, map[string]string{
+		"Cookie": cookie.String(), "Origin": "http://example.test",
+		"X-CSRF-Token": csrfToken, "Idempotency-Key": "season-two-progress-1",
+	})
+
+	require.Equal(t, http.StatusOK, updated.Code, updated.Body.String())
+	require.Contains(t, updated.Body.String(), `"seasonNumber":2`)
+	require.Contains(t, updated.Body.String(), `"watchedEpisodes":2`)
+	require.Contains(t, updated.Body.String(), `"totalEpisodes":2`)
+	require.Len(t, mustHTTPWatchEvents(t, service, currentUserID(t, router, cookie), series.ID), 2)
+}
+
 func mustHTTPWatchEvents(t *testing.T, service interface {
 	WatchEvents(context.Context, string, string) ([]records.WatchEvent, error)
 }, userID, mediaID string) []records.WatchEvent {

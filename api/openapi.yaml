@@ -354,27 +354,6 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/RecordState' }
         default: { $ref: '#/components/responses/Problem' }
-    put:
-      operationId: updateRecord
-      summary: Update a versioned current-user media record
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/CSRFToken'
-        - $ref: '#/components/parameters/IfMatch'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/UpdateRecordRequest' }
-      responses:
-        '200':
-          description: Updated media record.
-          headers:
-            ETag: { required: true, schema: { type: string } }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/RecordState' }
-        default: { $ref: '#/components/responses/Problem' }
   /api/v1/records/{mediaID}/rounds/current:
     parameters:
       - $ref: '#/components/parameters/MediaID'
@@ -1282,24 +1261,10 @@ components:
         watchedAt: { type: [string, 'null'], format: date-time }
         viewingMethod: { type: [string, 'null'] }
         version: { type: integer, minimum: 0 }
-    UpdateRecordRequest:
-      type: object
-      additionalProperties: false
-      required: [status]
-      properties:
-        status: { $ref: '#/components/schemas/RecordStatus' }
-        rating: { type: [number, 'null'], minimum: 0, maximum: 10 }
-        note: { type: [string, 'null'] }
-        watchedAt: { type: string, format: date-time }
-        viewingMethod: { type: [string, 'null'] }
-        participantIds:
-          type: array
-          uniqueItems: true
-          items: { type: string, format: uuid }
     CurrentRound:
       type: object
       additionalProperties: false
-      required: [roundId, mediaId, seasonNumber, roundNumber, status, rating, note, viewingMethod, watchedAt, version, profileVersion]
+      required: [roundId, mediaId, seasonNumber, roundNumber, status, rating, note, viewingMethod, watchedAt, version, profileVersion, participantIds]
       properties:
         roundId: { type: string }
         mediaId: { type: string, format: uuid }
@@ -1312,6 +1277,10 @@ components:
         watchedAt: { type: [string, 'null'], format: date-time }
         version: { type: integer, minimum: 0 }
         profileVersion: { type: integer, minimum: 0 }
+        participantIds:
+          type: array
+          uniqueItems: true
+          items: { type: string, format: uuid }
     UpdateCurrentRoundRequest:
       type: object
       additionalProperties: false

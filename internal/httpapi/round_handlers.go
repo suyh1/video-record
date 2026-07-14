@@ -24,6 +24,7 @@ type currentRoundResponse struct {
 	WatchedAt      *time.Time     `json:"watchedAt"`
 	Version        int            `json:"version"`
 	ProfileVersion int            `json:"profileVersion"`
+	ParticipantIDs []string       `json:"participantIds"`
 }
 
 type updateCurrentRoundRequest struct {
@@ -299,6 +300,7 @@ func newCurrentRoundResponse(round records.WatchRound) currentRoundResponse {
 		RoundNumber: round.RoundNumber, Status: round.Status, Note: round.Note,
 		ViewingMethod: round.ViewingMethod, WatchedAt: round.CompletedAt,
 		Version: round.Version, ProfileVersion: round.ProfileVersion,
+		ParticipantIDs: append([]string{}, round.ParticipantIDs...),
 	}
 	if round.Rating != nil {
 		rating := records.RatingToTen(*round.Rating)

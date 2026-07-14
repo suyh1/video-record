@@ -34,7 +34,7 @@ func TestSecurityProblemDetailsETagIdempotencyCSRFAndSessionRevocation(t *testin
 		"Idempotency-Key": "security-record-update",
 	}
 	first := performJSONRequest(router, http.MethodPut,
-		"http://example.test/api/v1/records/security-media", map[string]any{"status": "wishlist"}, baseHeaders)
+		"http://example.test/api/v1/records/security-media/rounds/current", map[string]any{"status": "wishlist"}, baseHeaders)
 	require.Equal(t, http.StatusOK, first.Code, first.Body.String())
 	require.Equal(t, `"1"`, first.Header().Get("ETag"))
 	library := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/library", nil, map[string]string{
@@ -46,7 +46,7 @@ func TestSecurityProblemDetailsETagIdempotencyCSRFAndSessionRevocation(t *testin
 	require.Contains(t, libraryPage, "items")
 	require.Contains(t, libraryPage, "nextCursor")
 	replayed := performJSONRequest(router, http.MethodPut,
-		"http://example.test/api/v1/records/security-media", map[string]any{"status": "wishlist"}, baseHeaders)
+		"http://example.test/api/v1/records/security-media/rounds/current", map[string]any{"status": "wishlist"}, baseHeaders)
 	require.Equal(t, http.StatusOK, replayed.Code)
 	require.Equal(t, "true", replayed.Header().Get("Idempotency-Replayed"))
 	require.Equal(t, first.Body.String(), replayed.Body.String())
@@ -152,7 +152,7 @@ func TestSecurityReturnsProblemDetailsForAPIRoutingErrors(t *testing.T) {
 	}
 }
 
-func TestSecurityIsolatesRecordsCollectionsAndEventsAcrossUsers(t *testing.T) {
+func TestSecurityIsolatesRecordsCollectionsAndRoundsAcrossUsers(t *testing.T) {
 	router, ownerCookie, ownerCSRF, mediaID, _, db := newRecordsTestRouter(t)
 	ownerID := currentUserID(t, router, ownerCookie)
 	householdService := household.NewService(household.NewRepository(db))
@@ -167,25 +167,18 @@ func TestSecurityIsolatesRecordsCollectionsAndEventsAcrossUsers(t *testing.T) {
 			"X-CSRF-Token": ownerCSRF, "Idempotency-Key": "owner-private-collection",
 		})
 	require.Equal(t, http.StatusCreated, collection.Code)
-	ownerEvents := performJSONRequest(router, http.MethodGet,
-		"http://example.test/api/v1/records/"+mediaID+"/events", nil,
+	ownerRound := performJSONRequest(router, http.MethodGet,
+		"http://example.test/api/v1/records/"+mediaID+"/rounds/current", nil,
 		map[string]string{"Cookie": ownerCookie.String()})
-	require.Equal(t, http.StatusOK, ownerEvents.Code)
-	var events []struct {
-		ID string `json:"id"`
-	}
-	require.NoError(t, json.Unmarshal(ownerEvents.Body.Bytes(), &events))
-	require.Len(t, events, 1)
+	require.Equal(t, http.StatusOK, ownerRound.Code)
+	require.Contains(t, ownerRound.Body.String(), `"status":"completed"`)
+	require.NotContains(t, ownerRound.Body.String(), `"roundId":""`)
 
 	memberLogin := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/auth/login",
 		map[string]string{"username": "isolated-member", "password": "correct horse battery staple"},
 		map[string]string{"Origin": "http://example.test"})
 	require.Equal(t, http.StatusOK, memberLogin.Code)
 	memberCookie := memberLogin.Result().Cookies()[0]
-	var loginBody struct {
-		CSRFToken string `json:"csrfToken"`
-	}
-	require.NoError(t, json.Unmarshal(memberLogin.Body.Bytes(), &loginBody))
 
 	memberRecord := performJSONRequest(router, http.MethodGet,
 		"http://example.test/api/v1/records/"+mediaID, nil,
@@ -199,25 +192,23 @@ func TestSecurityIsolatesRecordsCollectionsAndEventsAcrossUsers(t *testing.T) {
 		map[string]string{"Cookie": memberCookie.String()})
 	require.Equal(t, http.StatusOK, memberCollections.Code)
 	require.JSONEq(t, `[]`, memberCollections.Body.String())
-	memberEvents := performJSONRequest(router, http.MethodGet,
-		"http://example.test/api/v1/records/"+mediaID+"/events", nil,
+	memberRound := performJSONRequest(router, http.MethodGet,
+		"http://example.test/api/v1/records/"+mediaID+"/rounds/current", nil,
 		map[string]string{"Cookie": memberCookie.String()})
-	require.Equal(t, http.StatusOK, memberEvents.Code)
-	require.JSONEq(t, `[]`, memberEvents.Body.String())
-	deleteOwnerEvent := performJSONRequest(router, http.MethodDelete,
-		"http://example.test/api/v1/records/"+mediaID+"/events/"+events[0].ID, nil,
-		map[string]string{
-			"Cookie": memberCookie.String(), "Origin": "http://example.test",
-			"X-CSRF-Token": loginBody.CSRFToken, "Idempotency-Key": "cross-user-event-delete",
-		})
-	require.Equal(t, http.StatusNotFound, deleteOwnerEvent.Code)
+	require.Equal(t, http.StatusOK, memberRound.Code)
+	require.Contains(t, memberRound.Body.String(), `"status":"none"`)
+	require.Contains(t, memberRound.Body.String(), `"roundId":""`)
+	memberHistory := performJSONRequest(router, http.MethodGet,
+		"http://example.test/api/v1/records/"+mediaID+"/rounds", nil,
+		map[string]string{"Cookie": memberCookie.String()})
+	require.Equal(t, http.StatusOK, memberHistory.Code)
+	require.JSONEq(t, `{"rounds":[]}`, memberHistory.Body.String())
 }
 
 func concreteSecurityPath(path string) string {
 	replacer := strings.NewReplacer(
 		"{mediaID}", "media-id",
 		"{collectionID}", "collection-id",
-		"{eventID}", "event-id",
 		"{candidateID}", "candidate-id",
 		"{memberID}", "member-id",
 		"{mediaType}", "movie",

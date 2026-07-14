@@ -36,7 +36,7 @@ describe('HomePage', () => {
         return HttpResponse.json({
           roundId: `round-${seasonNumber}`, mediaId: 'series-1', seasonNumber, roundNumber: 1,
           status: seasonNumber === 2 ? 'watching' : 'completed', rating: null, note: null,
-          viewingMethod: null, watchedAt: null, version: 1, profileVersion: 1,
+          viewingMethod: null, watchedAt: null, participantIds: [], version: 1, profileVersion: 1,
         })
       }),
       http.get('*/api/v1/records/series-1/progress', ({ request }) => {
@@ -124,7 +124,7 @@ describe('HomePage', () => {
         return HttpResponse.json({
           roundId: `round-${seasonNumber}`, mediaId: 'series-1', seasonNumber, roundNumber: 1,
           status: seasonNumber === 1 ? 'watching' : 'none', rating: null, note: null,
-          viewingMethod: null, watchedAt: null, version: 1, profileVersion: 1,
+          viewingMethod: null, watchedAt: null, participantIds: [], version: 1, profileVersion: 1,
         })
       }),
       http.post('*/api/v1/records/series-1/progress', async ({ request }) => {

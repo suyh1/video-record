@@ -33,7 +33,7 @@ it('uses movie rounds, profile versions, and no flat watch-event history', async
     http.get('*/api/v1/records/movie-1/rounds/current', () => HttpResponse.json({
       roundId: 'movie-round-1', mediaId: 'movie-1', seasonNumber: null, roundNumber: 1,
       status: 'completed', rating: 9.4, note: '雨夜与走廊。', viewingMethod: '影院',
-      watchedAt: '2026-07-12T20:30:45Z', version: 4, profileVersion: 12,
+      watchedAt: '2026-07-12T20:30:45Z', participantIds: [], version: 4, profileVersion: 12,
     })),
     http.get('*/api/v1/records/movie-1/rounds', () => HttpResponse.json({ rounds: [] })),
     http.get('*/api/v1/records/movie-1/events', () => {
@@ -97,7 +97,7 @@ it('orders a TV season workspace as selector, episodes, private record, and rewa
         roundId: `season-round-${seasonNumber}`, mediaId: 'series-1', seasonNumber, roundNumber: 1,
         status: seasonNumber === 1 ? 'watching' : 'none', rating: null,
         note: seasonNumber === 1 ? '第一季私人笔记' : null, viewingMethod: null,
-        watchedAt: null, version: 2, profileVersion: 7,
+        watchedAt: null, participantIds: [], version: 2, profileVersion: 7,
       })
     }),
     http.get('*/api/v1/records/series-1/progress', ({ request }) => {

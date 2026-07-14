@@ -2,7 +2,6 @@ package sync
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -147,8 +146,6 @@ func TestCandidateValidationAndProjectionHelpers(t *testing.T) {
 	require.Equal(t, "媒体服务器", providerDisplayName("unknown"))
 	require.Nil(t, nullableCandidateInt(0))
 	require.Equal(t, 12, nullableCandidateInt(12))
-	require.Nil(t, nullStringValue(sql.NullString{}))
-	require.Equal(t, "2026-07-13", nullStringValue(sql.NullString{String: "2026-07-13", Valid: true}))
 	require.NotNil(t, NewCandidateService(nil, CandidateServiceOptions{}).now)
 	require.Equal(t, "sync provider run failed", (&runDueError{
 		providerErrors: []error{errors.New("synthetic provider failure")},

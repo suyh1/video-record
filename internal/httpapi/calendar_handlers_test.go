@@ -14,12 +14,10 @@ import (
 func TestCalendarHandlerReturnsLocalDatesAndStableValidationErrors(t *testing.T) {
 	router, cookie, _, mediaID, service, _ := newRecordsTestRouter(t)
 	userID := currentUserID(t, router, cookie)
-	_, _, err := service.RecordStatus(context.Background(), records.RecordStatusInput{
-		UpdateStateInput: records.UpdateStateInput{
-			UserID: userID, MediaID: mediaID, Status: records.StatusCompleted,
-			Source: records.SourceManual, ExpectedVersion: 0,
-		},
-		WatchedAt: time.Date(2026, 6, 30, 16, 0, 0, 0, time.UTC),
+	completedAt := time.Date(2026, 6, 30, 16, 0, 0, 0, time.UTC)
+	_, err := service.UpdateRound(context.Background(), records.UpdateRoundInput{
+		Scope:  records.RoundScope{UserID: userID, MediaID: mediaID},
+		Status: records.StatusCompleted, CompletedAt: &completedAt, Source: records.SourceManual,
 	})
 	require.NoError(t, err)
 

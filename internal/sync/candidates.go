@@ -478,89 +478,6 @@ func (service *CandidateService) applyCandidate(
 	return upsertExternalMapping(ctx, tx, candidate, mediaID, episodeID, now)
 }
 
-func ensureSyncedState(
-	ctx context.Context,
-	tx *sql.Tx,
-	userID, mediaID string,
-	episode bool,
-	completion int,
-	now time.Time,
-) error {
-	desired := records.StatusWatching
-	if completion >= 90 {
-		desired = records.StatusCompleted
-	}
-	if episode && completion >= 90 {
-		var watched, total int
-		if err := tx.QueryRowContext(ctx, `
-			SELECT COUNT(progress.episode_id), COUNT(episode.id)
-			FROM episodes episode
-			JOIN seasons season ON season.id = episode.season_id
-			LEFT JOIN episode_progress progress
-			  ON progress.episode_id = episode.id AND progress.user_id = ?
-			WHERE season.media_id = ?
-		`, userID, mediaID).Scan(&watched, &total); err != nil {
-			return err
-		}
-		if total == 0 || watched < total {
-			desired = records.StatusWatching
-		}
-	}
-	var current records.Status
-	var source records.Source
-	var version int
-	err := tx.QueryRowContext(ctx, `
-		SELECT status, status_source, version FROM user_media_states
-		WHERE user_id = ? AND media_id = ?
-	`, userID, mediaID).Scan(&current, &source, &version)
-	if errors.Is(err, sql.ErrNoRows) {
-		_, err = tx.ExecContext(ctx, `
-			INSERT INTO user_media_states (
-				user_id, media_id, status, version,
-				status_source, rating_source, note_source, updated_at
-			) VALUES (?, ?, ?, 1, 'confirmed_sync', 'confirmed_sync', 'confirmed_sync', ?)
-		`, userID, mediaID, desired, now.UnixMilli())
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	if current == records.StatusDropped || !records.CanOverwrite(records.SourceConfirmedSync, source) {
-		return nil
-	}
-	if current == desired && source == records.SourceConfirmedSync {
-		return nil
-	}
-	_, err = tx.ExecContext(ctx, `
-		UPDATE user_media_states SET status = ?, status_source = 'confirmed_sync',
-		       version = ?, updated_at = ?
-		WHERE user_id = ? AND media_id = ? AND version = ?
-	`, desired, version+1, now.UnixMilli(), userID, mediaID, version)
-	return err
-}
-
-func recomputeSyncedDates(
-	ctx context.Context,
-	tx *sql.Tx,
-	userID, mediaID string,
-	now time.Time,
-) error {
-	var startedAt, completedAt sql.NullString
-	if err := tx.QueryRowContext(ctx, `
-		SELECT MIN(event.watched_at), MAX(event.watched_at)
-		FROM watch_events event
-		JOIN watch_event_participants participant ON participant.event_id = event.id
-		WHERE participant.user_id = ? AND event.media_id = ?
-	`, userID, mediaID).Scan(&startedAt, &completedAt); err != nil {
-		return err
-	}
-	_, err := tx.ExecContext(ctx, `
-		UPDATE user_media_states SET started_at = ?, completed_at = ?, updated_at = ?
-		WHERE user_id = ? AND media_id = ?
-	`, nullStringValue(startedAt), nullStringValue(completedAt), now.UnixMilli(), userID, mediaID)
-	return err
-}
-
 func upsertExternalMapping(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -750,11 +667,4 @@ func nullableCandidateInt(value int) any {
 		return nil
 	}
 	return value
-}
-
-func nullStringValue(value sql.NullString) any {
-	if !value.Valid {
-		return nil
-	}
-	return value.String
 }

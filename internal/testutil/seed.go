@@ -91,11 +91,17 @@ func Seed(ctx context.Context, db *storage.DB, options SeedOptions) (SeedResult,
 		if _, err := statements.externalID.ExecContext(ctx, id, index+1); err != nil {
 			return SeedResult{}, fmt.Errorf("seed media identity %d: %w", index, err)
 		}
-		if _, err := statements.state.ExecContext(
-			ctx, result.UserIDs[0], id, firstWatch.Format(seedEventTimeLayout),
-			now.Format(seedEventTimeLayout), now.UnixMilli(),
+		if _, err := statements.profile.ExecContext(
+			ctx, result.UserIDs[0], id, now.UnixMilli(),
 		); err != nil {
-			return SeedResult{}, fmt.Errorf("seed media state %d: %w", index, err)
+			return SeedResult{}, fmt.Errorf("seed media profile %d: %w", index, err)
+		}
+		if _, err := statements.round.ExecContext(
+			ctx, fmt.Sprintf("perf-round-%05d", index), result.UserIDs[0], id,
+			firstWatch.Format(seedEventTimeLayout), now.Format(seedEventTimeLayout),
+			now.UnixMilli(), now.UnixMilli(),
+		); err != nil {
+			return SeedResult{}, fmt.Errorf("seed media round %d: %w", index, err)
 		}
 		result.MediaIDs = append(result.MediaIDs, id)
 	}
@@ -104,7 +110,8 @@ func Seed(ctx context.Context, db *storage.DB, options SeedOptions) (SeedResult,
 		eventID := fmt.Sprintf("perf-event-%05d", index)
 		watchedAt := firstWatch.Add(time.Duration(index) * time.Hour)
 		if _, err := statements.event.ExecContext(
-			ctx, eventID, result.UserIDs[0], result.MediaIDs[index%len(result.MediaIDs)],
+			ctx, eventID, fmt.Sprintf("perf-round-%05d", index%len(result.MediaIDs)),
+			result.UserIDs[0], result.MediaIDs[index%len(result.MediaIDs)],
 			watchedAt.Format(seedEventTimeLayout), now.UnixMilli(),
 		); err != nil {
 			return SeedResult{}, fmt.Errorf("seed watch event %d: %w", index, err)
@@ -124,7 +131,8 @@ type seedStatements struct {
 	user        *sql.Stmt
 	media       *sql.Stmt
 	externalID  *sql.Stmt
-	state       *sql.Stmt
+	profile     *sql.Stmt
+	round       *sql.Stmt
 	event       *sql.Stmt
 	participant *sql.Stmt
 }
@@ -139,15 +147,17 @@ func prepareSeedStatements(ctx context.Context, tx *sql.Tx) (seedStatements, err
 		 ) VALUES (?, 'movie', ?, ?, ?, '', '', '', ?, ?)`,
 		`INSERT INTO media_external_ids (media_id, source, source_id, media_type)
 		 VALUES (?, 'tmdb', CAST(? AS TEXT), 'movie')`,
-		`INSERT INTO user_media_states (
-			user_id, media_id, status, started_at, completed_at, version,
-			status_source, rating_source, note_source, updated_at
-		 ) VALUES (?, ?, 'completed', ?, ?, 1,
-			'external_default', 'external_default', 'external_default', ?)`,
+		`INSERT INTO user_media_profiles (user_id, media_id, status, version, updated_at)
+		 VALUES (?, ?, 'completed', 1, ?)`,
+		`INSERT INTO watch_rounds (
+			id, user_id, media_id, round_number, status, started_at, completed_at,
+			version, status_source, rating_source, note_source, created_at, updated_at
+		 ) VALUES (?, ?, ?, 1, 'completed', ?, ?, 1,
+			'external_default', 'external_default', 'external_default', ?, ?)`,
 		`INSERT INTO watch_events (
-			id, created_by_user_id, media_id, watched_at, viewing_method,
+			id, round_id, created_by_user_id, media_id, watched_at, viewing_method,
 			source, completion, created_at
-		 ) VALUES (?, ?, ?, ?, 'Synthetic', 'external_default', 100, ?)`,
+		 ) VALUES (?, ?, ?, ?, ?, 'Synthetic', 'external_default', 100, ?)`,
 		`INSERT INTO watch_event_participants (event_id, user_id) VALUES (?, ?)`,
 	}
 	prepared := make([]*sql.Stmt, 0, len(queries))
@@ -163,14 +173,14 @@ func prepareSeedStatements(ctx context.Context, tx *sql.Tx) (seedStatements, err
 	}
 	return seedStatements{
 		user: prepared[0], media: prepared[1], externalID: prepared[2],
-		state: prepared[3], event: prepared[4], participant: prepared[5],
+		profile: prepared[3], round: prepared[4], event: prepared[5], participant: prepared[6],
 	}, nil
 }
 
 func (statements seedStatements) close() {
 	for _, statement := range []*sql.Stmt{
 		statements.user, statements.media, statements.externalID,
-		statements.state, statements.event, statements.participant,
+		statements.profile, statements.round, statements.event, statements.participant,
 	} {
 		_ = statement.Close()
 	}

@@ -201,7 +201,7 @@ func verifyRecoveredDatabase(t *testing.T, databasePath, mode string) {
 		}
 		var source string
 		require.NoError(t, db.Reader().QueryRowContext(ctx,
-			"SELECT status_source FROM user_media_states WHERE media_id = 'perf-media-00000'",
+			"SELECT status_source FROM watch_rounds WHERE media_id = 'perf-media-00000' AND archived_at IS NULL",
 		).Scan(&source))
 		require.Equal(t, "external_default", source)
 	case "backup":

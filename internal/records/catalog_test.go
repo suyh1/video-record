@@ -113,6 +113,33 @@ func TestMediaProfileProjectsWatchingThenLatestSeasonStatus(t *testing.T) {
 	require.Equal(t, StatusDropped, search[0].Status)
 }
 
+func TestStateReadsProjectedProfileAndCurrentRoundAfterViewingMigration(t *testing.T) {
+	service, _, userID, movieID := newTestRecordsService(t)
+	rating := 87
+	note := "归档前的私人笔记"
+	completedAt := time.Date(2026, 7, 13, 12, 30, 45, 0, time.UTC)
+	round, err := service.UpdateRound(context.Background(), UpdateRoundInput{
+		Scope:       RoundScope{UserID: userID, MediaID: movieID},
+		Status:      StatusCompleted,
+		Rating:      &rating,
+		RatingSet:   true,
+		Note:        &note,
+		NoteSet:     true,
+		CompletedAt: &completedAt,
+		Source:      SourceManual,
+	})
+	require.NoError(t, err)
+
+	state, exists, err := service.State(context.Background(), userID, movieID)
+	require.NoError(t, err)
+	require.True(t, exists)
+	require.Equal(t, StatusCompleted, state.Status)
+	require.Equal(t, round.ProfileVersion, state.Version)
+	require.Equal(t, rating, *state.Rating)
+	require.Equal(t, note, *state.Note)
+	require.Equal(t, completedAt, *state.CompletedAt)
+}
+
 func catalogIDs(items []CatalogItem) []string {
 	ids := make([]string, 0, len(items))
 	for _, item := range items {

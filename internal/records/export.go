@@ -38,10 +38,6 @@ type exportRecord struct {
 	Profile *exportProfile `json:"profile,omitempty"`
 	Tags    []string       `json:"tags"`
 	Rounds  []exportRound  `json:"rounds"`
-
-	State    *exportState     `json:"-"`
-	Events   []exportEvent    `json:"-"`
-	Progress []exportProgress `json:"-"`
 }
 
 type exportProfile struct {
@@ -129,21 +125,6 @@ type exportEpisode struct {
 	Runtime       *int    `json:"runtime,omitempty"`
 }
 
-type exportState struct {
-	Status       Status  `json:"status"`
-	Rating       *int    `json:"rating,omitempty"`
-	Note         *string `json:"note,omitempty"`
-	Version      int     `json:"version"`
-	StatusSource Source  `json:"statusSource"`
-	RatingSource Source  `json:"ratingSource"`
-	NoteSource   Source  `json:"noteSource"`
-	StartedAt    *string `json:"startedAt,omitempty"`
-	CompletedAt  *string `json:"completedAt,omitempty"`
-	ShareRating  bool    `json:"shareRating"`
-	ShareReview  bool    `json:"shareReview"`
-	SharedReview *string `json:"sharedReview,omitempty"`
-}
-
 type exportEvent struct {
 	ID              string  `json:"id"`
 	EpisodeID       *string `json:"episodeId,omitempty"`
@@ -153,13 +134,6 @@ type exportEvent struct {
 	ExternalEventID *string `json:"externalEventId,omitempty"`
 	Completion      int     `json:"completion"`
 	Note            *string `json:"note,omitempty"`
-}
-
-type exportProgress struct {
-	EpisodeID    string `json:"episodeId"`
-	WatchedAt    string `json:"watchedAt"`
-	Source       Source `json:"source"`
-	WatchEventID string `json:"watchEventId"`
 }
 
 type exportCollection struct {
@@ -590,91 +564,6 @@ func (repository *SQLiteRepository) exportEpisodes(ctx context.Context, seasonID
 		episodes = append(episodes, episode)
 	}
 	return episodes, rows.Err()
-}
-
-func (repository *SQLiteRepository) exportState(ctx context.Context, userID, mediaID string) (*exportState, error) {
-	var state exportState
-	var rating sql.NullInt64
-	var note, startedAt, completedAt, sharedReview sql.NullString
-	var shareRating, shareReview int
-	err := repository.db.Reader().QueryRowContext(ctx, `
-		SELECT status, rating, note, version, status_source, rating_source, note_source,
-		       started_at, completed_at, share_rating, share_review, shared_review
-		FROM user_media_states WHERE user_id = ? AND media_id = ?
-	`, userID, mediaID).Scan(
-		&state.Status, &rating, &note, &state.Version, &state.StatusSource,
-		&state.RatingSource, &state.NoteSource, &startedAt, &completedAt,
-		&shareRating, &shareReview, &sharedReview,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	state.Rating = nullableIntPointer(rating)
-	state.Note = nullableStringPointer(note)
-	state.StartedAt = nullableStringPointer(startedAt)
-	state.CompletedAt = nullableStringPointer(completedAt)
-	state.ShareRating = shareRating == 1
-	state.ShareReview = shareReview == 1
-	state.SharedReview = nullableStringPointer(sharedReview)
-	return &state, nil
-}
-
-func (repository *SQLiteRepository) exportEvents(ctx context.Context, userID, mediaID string) ([]exportEvent, error) {
-	rows, err := repository.db.Reader().QueryContext(ctx, `
-		SELECT event.id, event.episode_id, event.watched_at, event.viewing_method,
-		       CASE WHEN event.created_by_user_id = ? THEN event.source ELSE 'confirmed_import' END,
-		       CASE WHEN event.created_by_user_id = ? THEN event.external_event_id ELSE NULL END,
-		       event.completion,
-		       CASE WHEN event.created_by_user_id = ? THEN event.note ELSE NULL END
-		FROM watch_events event
-		JOIN watch_event_participants participant ON participant.event_id = event.id
-		WHERE participant.user_id = ? AND event.media_id = ?
-		ORDER BY event.watched_at, event.id
-	`, userID, userID, userID, userID, mediaID)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	events := make([]exportEvent, 0)
-	for rows.Next() {
-		var event exportEvent
-		var episodeID, viewingMethod, externalEventID, note sql.NullString
-		if err := rows.Scan(
-			&event.ID, &episodeID, &event.WatchedAt, &viewingMethod, &event.Source,
-			&externalEventID, &event.Completion, &note,
-		); err != nil {
-			return nil, err
-		}
-		event.EpisodeID = nullableStringPointer(episodeID)
-		event.ViewingMethod = nullableStringPointer(viewingMethod)
-		event.ExternalEventID = nullableStringPointer(externalEventID)
-		event.Note = nullableStringPointer(note)
-		events = append(events, event)
-	}
-	return events, rows.Err()
-}
-
-func (repository *SQLiteRepository) exportProgress(ctx context.Context, userID, mediaID string) ([]exportProgress, error) {
-	rows, err := repository.db.Reader().QueryContext(ctx, `
-		SELECT episode_id, watched_at, source, watch_event_id
-		FROM episode_progress WHERE user_id = ? AND media_id = ? ORDER BY episode_id
-	`, userID, mediaID)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	progress := make([]exportProgress, 0)
-	for rows.Next() {
-		var item exportProgress
-		if err := rows.Scan(&item.EpisodeID, &item.WatchedAt, &item.Source, &item.WatchEventID); err != nil {
-			return nil, err
-		}
-		progress = append(progress, item)
-	}
-	return progress, rows.Err()
 }
 
 func (repository *SQLiteRepository) exportCollections(ctx context.Context, userID string) ([]exportCollection, error) {

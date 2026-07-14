@@ -108,9 +108,6 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protected.Get("/records/{mediaID}/progress", recordAPI.episodeProgress)
 					protected.Get("/records/{mediaID}/tags", recordAPI.tags)
 					protected.With(protectedWriteMiddleware...).Put(
-						"/records/{mediaID}", recordAPI.updateState,
-					)
-					protected.With(protectedWriteMiddleware...).Put(
 						"/records/{mediaID}/rounds/current", recordAPI.updateCurrentRound,
 					)
 					protected.With(protectedWriteMiddleware...).Put(

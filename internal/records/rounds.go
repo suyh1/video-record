@@ -40,6 +40,7 @@ type WatchRound struct {
 	RatingSource   Source
 	NoteSource     Source
 	ProfileVersion int
+	ParticipantIDs []string
 }
 
 type UpdateRoundInput struct {
@@ -154,17 +155,23 @@ func (service *Service) UpdateRound(ctx context.Context, input UpdateRoundInput)
 		changed = changed || !equalStringPointers(next.ViewingMethod, input.ViewingMethod)
 		next.ViewingMethod = cloneStringPointer(input.ViewingMethod)
 	}
+	if input.ParticipantIDs != nil {
+		changed = true
+		next.ParticipantIDs = roundParticipantIDsWithoutOwner(input.Scope.UserID, input.ParticipantIDs)
+	}
 	if next.Status == StatusWatching && next.StartedAt == nil {
 		next.StartedAt = timePointerCopy(now)
 		changed = true
 	}
 	if next.Status == StatusCompleted {
-		if input.CompletedAt == nil {
+		if input.CompletedAt == nil && next.CompletedAt == nil {
 			return current, ErrInvalidWatchedAt
 		}
-		completed := input.CompletedAt.UTC()
-		changed = changed || next.CompletedAt == nil || !next.CompletedAt.Equal(completed)
-		next.CompletedAt = &completed
+		if input.CompletedAt != nil {
+			completed := input.CompletedAt.UTC()
+			changed = changed || next.CompletedAt == nil || !next.CompletedAt.Equal(completed)
+			next.CompletedAt = &completed
+		}
 	} else if next.CompletedAt != nil {
 		next.CompletedAt = nil
 		changed = true
@@ -249,10 +256,27 @@ func emptyRound(scope RoundScope) WatchRound {
 		UserID: scope.UserID, MediaID: scope.MediaID,
 		SeasonNumber: cloneIntPointer(scope.SeasonNumber),
 		RoundNumber:  1, Status: StatusNone,
+		ParticipantIDs: make([]string, 0),
 	}
 }
 
 func timePointerCopy(value time.Time) *time.Time {
 	copy := value
 	return &copy
+}
+
+func roundParticipantIDsWithoutOwner(ownerID string, participantIDs []string) []string {
+	result := make([]string, 0, len(participantIDs))
+	seen := make(map[string]struct{}, len(participantIDs))
+	for _, participantID := range participantIDs {
+		if participantID == ownerID {
+			continue
+		}
+		if _, exists := seen[participantID]; exists {
+			continue
+		}
+		seen[participantID] = struct{}{}
+		result = append(result, participantID)
+	}
+	return result
 }

@@ -92,6 +92,17 @@ func TestRoundScopeArchiveAndFutureTimeValidation(t *testing.T) {
 	now := time.Date(2026, 7, 14, 12, 30, 45, 0, time.UTC)
 	service := NewService(NewRepository(db), ServiceOptions{Now: func() time.Time { return now }})
 	seasonOne := 1
+	seasonZero := 0
+
+	for _, scope := range []RoundScope{
+		{MediaID: movieID},
+		{UserID: userID},
+		{UserID: userID, MediaID: "missing-media"},
+		{UserID: userID, MediaID: series.ID, SeasonNumber: &seasonZero},
+	} {
+		_, err = service.CurrentRound(context.Background(), scope)
+		require.ErrorIs(t, err, ErrInvalidRoundScope)
+	}
 
 	_, err = service.CurrentRound(context.Background(), RoundScope{
 		UserID: userID, MediaID: movieID, SeasonNumber: &seasonOne,
@@ -176,6 +187,12 @@ func TestRewatchRoundArchivesCompletedMovieAndStartsBlankRound(t *testing.T) {
 func TestRewatchRoundRequiresCompletedCurrentRound(t *testing.T) {
 	service, _, userID, mediaID := newTestRecordsService(t)
 	ctx := context.Background()
+	_, err := service.StartRewatch(ctx, RewatchInput{
+		Scope: RoundScope{UserID: userID, MediaID: mediaID}, ExpectedVersion: 0,
+	})
+	require.ErrorIs(t, err, ErrVersionConflict)
+	_, err = service.RoundDetail(ctx, RoundScope{UserID: userID, MediaID: mediaID}, "")
+	require.ErrorIs(t, err, ErrRoundNotFound)
 	watching, err := service.UpdateRound(ctx, UpdateRoundInput{
 		Scope:  RoundScope{UserID: userID, MediaID: mediaID},
 		Status: StatusWatching, Source: SourceManual,
@@ -267,6 +284,74 @@ func TestRewatchRoundRollsBackArchiveWhenNextRoundInsertFails(t *testing.T) {
 	var count int
 	require.NoError(t, db.Reader().QueryRowContext(ctx, "SELECT COUNT(*) FROM watch_rounds").Scan(&count))
 	require.Equal(t, 1, count)
+}
+
+func TestMovieRoundEventTracksCompletionEditsParticipantsAndWithdrawal(t *testing.T) {
+	service, db, userID, mediaID := newTestRecordsService(t)
+	ctx := context.Background()
+	guestID := insertTestUser(t, db, "movie-round-event-guest")
+	firstTime := time.Date(2026, 7, 13, 20, 1, 2, 0, time.UTC)
+	method := "客厅电视"
+	current, err := service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: userID, MediaID: mediaID}, Status: StatusCompleted,
+		CompletedAt: &firstTime, ViewingMethod: &method, ViewingMethodSet: true,
+		ParticipantIDs: []string{guestID}, Source: SourceManual,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{guestID}, current.ParticipantIDs)
+	reloaded, err := service.CurrentRound(ctx, RoundScope{UserID: userID, MediaID: mediaID})
+	require.NoError(t, err)
+	require.Equal(t, []string{guestID}, reloaded.ParticipantIDs)
+	var eventID, storedTime, storedMethod string
+	var participants int
+	require.NoError(t, db.Reader().QueryRowContext(ctx, `
+		SELECT event.id, event.watched_at, event.viewing_method, COUNT(participant.user_id)
+		FROM watch_events event
+		JOIN watch_event_participants participant ON participant.event_id = event.id
+		WHERE event.round_id = ? GROUP BY event.id
+	`, current.ID).Scan(&eventID, &storedTime, &storedMethod, &participants))
+	require.Equal(t, formatEventTime(firstTime), storedTime)
+	require.Equal(t, method, storedMethod)
+	require.Equal(t, 2, participants)
+
+	secondTime := firstTime.Add(time.Hour)
+	updatedMethod := "卧室投影"
+	current, err = service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: userID, MediaID: mediaID}, Status: StatusCompleted,
+		CompletedAt: &secondTime, ViewingMethod: &updatedMethod, ViewingMethodSet: true,
+		Source: SourceManual, ExpectedVersion: current.Version,
+	})
+	require.NoError(t, err)
+	var updatedEventID string
+	require.NoError(t, db.Reader().QueryRowContext(ctx, `
+		SELECT id, watched_at, viewing_method FROM watch_events WHERE round_id = ?
+	`, current.ID).Scan(&updatedEventID, &storedTime, &storedMethod))
+	require.Equal(t, eventID, updatedEventID)
+	require.Equal(t, formatEventTime(secondTime), storedTime)
+	require.Equal(t, updatedMethod, storedMethod)
+
+	current, err = service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: userID, MediaID: mediaID}, Status: StatusCompleted,
+		CompletedAt: &secondTime, Source: SourceManual, ExpectedVersion: current.Version,
+		ParticipantIDs: []string{},
+	})
+	require.NoError(t, err)
+	require.Empty(t, current.ParticipantIDs)
+	require.NoError(t, db.Reader().QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM watch_event_participants WHERE event_id = ?
+	`, eventID).Scan(&participants))
+	require.Equal(t, 1, participants)
+
+	current, err = service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: userID, MediaID: mediaID}, Status: StatusWatching,
+		Source: SourceManual, ExpectedVersion: current.Version,
+	})
+	require.NoError(t, err)
+	var events int
+	require.NoError(t, db.Reader().QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM watch_events WHERE round_id = ?", current.ID,
+	).Scan(&events))
+	require.Zero(t, events)
 }
 
 func integerPointer(value int) *int {

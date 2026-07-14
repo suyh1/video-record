@@ -571,3 +571,32 @@
 - 再刷的缓存提交必须发生在成功回调中：电影仅替换 movie scope，剧集仅替换所选季 current/progress/history；Profile、标签、片单和分享缓存不参与重置。
 - 归档详情通过独立 query key 按弹窗选择延迟读取；列表只包含完成时间和评分摘要，避免为不可见私人笔记和逐集时间预取所有历史详情。
 - 电影与季当前轮次的 Query key 使用明确 scope（`movie` 或季号），可防止电影的 `undefined` 与其他无作用域旧缓存混淆；旧无季号 progress API 已从前端类型入口删除。
+- Task 13 的真实 E2E trace 显示季工作区在 1280px 被计算为 `238px 400px 0px 218px` 四列，导致单集标题轨道为 `0px`；根因是后声明的 `.personal-record-panel { grid-area: record; }` 覆盖季面板的 `grid-area: auto`，命名区域在嵌套网格中生成隐式列。
+- 第二季“标记整季”请求携带本季 `totalEpisodes: 2` 与全剧累计 `absoluteNumber: 4/5`，后端错误以本季总数限制累计集数而返回 `invalid_episode_progress`；累计编号只需为正，本季完成判定继续使用本季总集数。
+- 整季完成后当前轮次查询已返回 `status: completed`，但 `RoundRecordForm` 的隐藏表单状态仍停留在同轮次先前的 `watching`；保存季级评分/笔记时该旧值覆盖了分集投影，使“再刷”重新禁用。季级提交必须使用最新 prop 状态，同时不能因同轮次版本刷新重置用户草稿。
+- 前端改用最新季状态后，请求仍因缺少 `watchedAt` 被服务端拒绝；`UpdateRound` 对任何 `completed` 更新都要求重新提供完成时间。已完成轮次更新评分/笔记/观看方式时应保留现有完成时间，仅“首次进入完成且无既有时间”继续返回 `invalid_watched_at`。
+- 移动端单集条目采用圆圈/集号/标题首行与时间次行后，375px 明暗全页基线中长标题、秒级时间入口、个人记录与多刷空态均保持完整；移动底栏未遮挡表单保存与多刷内容。
+- 季面板组合选择器修正后，1440px 基线中的主列和私人记录列恢复为稳定双栏；768px 按设计切单栏，375px 切单集两行，说明隐式命名网格问题已在三个结构断点被覆盖。
+- 0013 虽已破坏性删除旧表，但媒体级 PUT、事件写/delete、无季号进度仓储以及 version 1 import/export helper 仍曾编译存在；仅修 `FindState` 会留下用户可触发 500。新轮次上线必须同步删除旧路由、接口、仓储、OpenAPI 和测试。
+- 性能/恢复种子不能因旧表删除而直接移除；将同规模夹具迁为每部电影一个 Profile 和当前 Round、所有事件带 `round_id` 后，原子回滚和日历精确计数仍可继续验证新模型。
+- 季级进度响应始终返回当前季目录身份，包括未看集；E2E 应对 `watched=true` 子集做精确断言。若首个串行旅程在撤销前失败，后续季隔离旅程会观察到残留 S01E01 已看状态，这是前序中止造成的测试污染，不是跨季归档缺陷。
+- 完整 Playwright 串行套件在修正季目录断言后 16/16 通过，证明 S01E01 撤销恢复了测试隔离，第二季再刷不会改变第一季进度快照。
+- 最终覆盖率门禁应直接运行 `scripts/coverage-gate.sh`，它以 raw coverprofile 对 records、media、stats、household、storage、integrations、sync 七个包做 85% 精确比较；凭据门禁需同时运行 gitleaks `dir` 与 `git`，不能只扫描当前差异。
+- records 覆盖率 73.1504% 的最大新增空洞是 `sync_round.go` 四个函数全部为 0%；它们目前只由 `internal/sync` 包测试间接调用，而逐包 coverprofile 不会把跨包测试计入 records。修复方向是在 records 包补真实 SQLite 的同步轮次行为测试，并清除旧入口删除后确属无引用的 helper。
+- 工作树 gitleaks 的三项命中位置只在本地 `.tmdb-token` 与 `docker-compose-example.yml`；Git 69 个提交历史没有命中。必须先确认这两个文件是否被跟踪/由测试生成，期间不读取或输出凭据值。
+- `.tmdb-token` 与 `docker-compose-example.yml` 均由 `.gitignore` 和 `.dockerignore` 明确排除，Git 状态为 ignored；前者今天创建且包含本地凭据，不能为测试门禁删除、移动或读取。CI 的 `gitleaks dir .` 面向干净 checkout，等价的本地复验应扫描由 Git 控制文件构成的隔离副本。
+- records 级同步测试应覆盖三条生产流水线：非法必填/媒体作用域拒绝；电影部分观看、完成、已完成自动归档下一刷及高优先级来源冲突；剧集低完成度不标集、逐集完成、跨季隔离及完成后同季下一刷。
+- records 当前共 1,676 条语句、覆盖 1,226 条，85% 需要再覆盖 199 条；`sync_round.go` 只有 101 条，所以同步测试后仍需约 98 条。后续应根据新 profile 优先补 version 2 导入/导出与真实仓储行为分支，避免人为调用不可达 SQL 故障路径。
+- 同步轮次直接测试覆盖 84/101 条后，records 为 1,310/1,676（78.1623%），门禁仍差 115 条；未覆盖的同步分支主要是注入式 SQL/RowsAffected 故障，剩余增量应优先来自可观察的导入导出与电影事件同步行为。
+- 电影轮次只修改共同观看者时，`UpdateRound` 的 `changed` 判定会提前返回；同时 `RoundRecordForm` 对空数组不设置 `participantIds`。两层组合使用户无法移除最后一名共同观看者。正确契约是 completed 电影显式发送空数组，服务将非 nil 参与者集合视为版本化写入并由同一事件事务替换。
+- 不能让电影表单无条件发送 `participantIds: []`：`CurrentRound` 目前不返回已有参与者，`formValuesFromRound` 固定初始化空数组，这会让仅修改笔记的保存误删共同观看者。安全实现必须区分“字段未触碰”和“显式清空”；若要完整编辑已有选择，还需把参与者 ID 纳入当前轮次读模型。
+- 当前轮次现通过所属电影事件读取除创建者外的参与者 ID，响应始终编码数组；表单由该数组初始化，所以 completed 电影可以安全地始终提交当前选择。后端仅在输入切片非 nil 时把参与者集合计为显式版本化变更，缺省字段仍保留原集合。
+- rich v2 测试后 records 为 1,410/1,704（82.7465%），还差 39 条；`decodeImportCSV` 95.4%、`validateImportRecord`/`ImportDocument` 100%，剩余应覆盖版本化标签、空轮次作用域、rich 幂等重导入和跨用户轮次 ID 冲突，而非继续堆校验表。
+- 第二轮补测后 records 为 1,420/1,701（83.4803%），还差 26 条；接下来应覆盖轮次服务公开输入/并发错误契约和观看事件身份校验，这些是 HTTP 可触发分支，比 SQL 注入式错误更有价值。
+- storage failure 与公共输入测试后 `go test` 展示 84.5%，但 coverage gate 按 raw statements 得到 84.4797178131%，仍低于 85%；门禁判断必须使用精确值，不能接受显示四舍五入。
+- 最终 records 精确覆盖为 85.0088183422%；rich CSV 的自定义简介、归档时间和无轮次媒体占位行是越过门禁的最后真实分支。其余关键包也全部高于 85%。
+- 使用 `git ls-files -co --exclude-standard` 构造的隔离副本同时包含已跟踪修改和新测试文件、排除 ignored 本地凭据；gitleaks `dir` 对该实际待提交内容扫描零命中，等价于 CI 干净 checkout 的工作树门禁。
+- `TestSchedulerContinuesPollingAfterProviderFailures` 在全仓并行 race 下单次超过 3 秒，但同包 race 连续 20 次全过且总耗时仅 5.6 秒；现有证据指向跨包并行负载时序，而非数据竞争或调度器停止轮询。
+- 最终静态审查中，旧 `/records/{mediaID}/events` 只存在 405 回归和前端“不发请求”测试；`user_media_states`/旧 `episode_progress` 只存在 0005/0007/0009/0013 历史迁移与迁移测试，没有运行时消费者。
+- 实时电影详情中，完成时间原生控件的 `step=1`，`value` 与 `max` 都是本地 `YYYY-MM-DDTHH:mm:ss`；归档列表和详情均显示同一 `YYYY-MM-DD HH:mm:ss`，再刷后当前轮次变为 `watching`。
+- 移动 `375x812` 实测 `documentElement/body.scrollWidth` 均为 375、越界元素为空；多刷弹窗为 343px 宽，左右边界 16/359px、底边 587.5px，小于 812px 视口且不与底部导航重叠。

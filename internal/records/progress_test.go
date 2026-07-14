@@ -177,7 +177,7 @@ func TestSparseExternalEpisodeProgressRejectsInvalidReferences(t *testing.T) {
 	for _, input := range []EpisodeProgressInput{
 		{UserID: userID, MediaID: mediaID, SeasonNumber: 1, Action: EpisodeProgressSingle, Source: SourceManual, EpisodeRefs: []EpisodeReference{{SeasonNumber: 1, EpisodeNumber: 1, AbsoluteNumber: 1}}, TotalEpisodes: 1},
 		{UserID: userID, MediaID: mediaID, SeasonNumber: 1, Action: EpisodeProgressSingle, Source: SourceManual, EpisodeRefs: []EpisodeReference{{SourceID: "1", SeasonNumber: 2, EpisodeNumber: 1, AbsoluteNumber: 1}}, TotalEpisodes: 1},
-		{UserID: userID, MediaID: mediaID, SeasonNumber: 1, Action: EpisodeProgressSingle, Source: SourceManual, EpisodeRefs: []EpisodeReference{{SourceID: "1", SeasonNumber: 1, EpisodeNumber: 1, AbsoluteNumber: 2}}, TotalEpisodes: 1},
+		{UserID: userID, MediaID: mediaID, SeasonNumber: 1, Action: EpisodeProgressSingle, Source: SourceManual, EpisodeRefs: []EpisodeReference{{SourceID: "1", SeasonNumber: 1, EpisodeNumber: 1, AbsoluteNumber: 0}}, TotalEpisodes: 1},
 		{UserID: userID, MediaID: mediaID, SeasonNumber: 1, Action: EpisodeProgressSingle, Source: SourceManual, EpisodeRefs: []EpisodeReference{{SourceID: "1", SeasonNumber: 1, EpisodeNumber: 1, AbsoluteNumber: 1}, {SourceID: "1", SeasonNumber: 1, EpisodeNumber: 1, AbsoluteNumber: 1}}, TotalEpisodes: 1},
 	} {
 		_, err := service.UpdateEpisodeProgress(context.Background(), input)

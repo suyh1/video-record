@@ -1,6 +1,7 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator } from '@playwright/test'
 
 import {
+  baseURL,
   expectNoBlockingA11yViolations,
   expectNoFixedElementOverlap,
   expectNoHorizontalOverflow,
@@ -15,6 +16,41 @@ test('has no blocking WCAG 2.2 AA violations on major pages', async ({ page }) =
     if (path === '/media/e2e-series') await expect(page.getByText('低潮线')).toBeVisible()
     await expectNoBlockingA11yViolations(page)
   }
+})
+
+test('keeps movie and season archive dialogs accessible and within the viewport', async ({ page }) => {
+  await login(page)
+
+  const movieRoundResponse = await page.request.get(`${baseURL}/api/v1/records/e2e-movie/rounds/current`)
+  const movieRound = await movieRoundResponse.json() as { roundNumber: number }
+  await page.goto('/media/e2e-movie')
+  await page.getByRole('radio', { name: '看过' }).click()
+  await page.getByLabel('完成观看时间').fill('2026-07-13T20:30:45')
+  await page.getByRole('button', { name: '保存记录' }).click()
+  await expect(page.getByRole('status')).toContainText('记录已保存')
+  await page.getByRole('button', { name: '再刷' }).click()
+  await page.getByRole('button', { name: `查看第 ${movieRound.roundNumber} 刷` }).click()
+  const movieDialog = page.getByRole('dialog', { name: `第 ${movieRound.roundNumber} 刷记录` })
+  await expect(movieDialog).toBeVisible()
+  await expectDialogWithinViewport(movieDialog)
+  await expectNoBlockingA11yViolations(page)
+  await page.keyboard.press('Escape')
+
+  await page.setViewportSize({ width: 375, height: 812 })
+  const seasonRoundResponse = await page.request.get(`${baseURL}/api/v1/records/e2e-series/rounds/current?seasonNumber=1`)
+  const seasonRound = await seasonRoundResponse.json() as { roundNumber: number }
+  await page.goto('/media/e2e-series')
+  await page.getByRole('combobox', { name: '选择季' }).selectOption('1')
+  await page.getByText('批量记录', { exact: true }).click()
+  await page.getByRole('button', { name: '标记整季' }).click()
+  await expect(page.getByRole('button', { name: '本季已看完' })).toBeVisible()
+  await page.getByRole('button', { name: '再刷' }).click()
+  await page.getByRole('button', { name: `查看第 ${seasonRound.roundNumber} 刷` }).click()
+  const seasonDialog = page.getByRole('dialog', { name: `第 ${seasonRound.roundNumber} 刷记录` })
+  await expect(seasonDialog).toContainText('S01E01')
+  await expectDialogWithinViewport(seasonDialog)
+  await expectNoBlockingA11yViolations(page)
+  await page.keyboard.press('Escape')
 })
 
 test('keeps rich details within desktop, tablet, and mobile viewports', async ({ page }) => {
@@ -77,3 +113,21 @@ const detailViewports = [
   { width: 768, height: 1024 },
   { width: 375, height: 812 },
 ]
+
+async function expectDialogWithinViewport(dialog: Locator) {
+  const bounds = await dialog.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    return {
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      left: rect.left,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    }
+  })
+  expect(bounds.left).toBeGreaterThanOrEqual(0)
+  expect(bounds.top).toBeGreaterThanOrEqual(0)
+  expect(bounds.right).toBeLessThanOrEqual(bounds.viewportWidth)
+  expect(bounds.bottom).toBeLessThanOrEqual(bounds.viewportHeight)
+}

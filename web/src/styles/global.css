@@ -506,7 +506,7 @@ body {
   min-width: 0;
 }
 
-.season-record-panel {
+.personal-record-panel.season-record-panel {
   grid-area: auto;
 }
 

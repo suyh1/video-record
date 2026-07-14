@@ -22,6 +22,7 @@ const movieRound: CurrentRound = {
   note: null,
   viewingMethod: null,
   watchedAt: null,
+  participantIds: [],
   version: 0,
   profileVersion: 7,
 }
@@ -137,6 +138,46 @@ describe('RoundRecordForm', () => {
     })
   })
 
+  it('shows current movie participants and sends an explicit empty set when the last one is removed', async () => {
+    let requestBody: unknown
+    server.use(http.put('*/api/v1/records/media-1/rounds/current', async ({ request }) => {
+      requestBody = await request.json()
+      return HttpResponse.json({
+        ...movieRound,
+        roundId: 'round-movie-1',
+        status: 'completed',
+        watchedAt: now.toISOString(),
+        participantIds: [],
+        version: 5,
+      })
+    }))
+    const user = userEvent.setup()
+    renderWithQueryClient(
+      <RoundRecordForm
+        round={{
+          ...movieRound,
+          roundId: 'round-movie-1',
+          status: 'completed',
+          watchedAt: now.toISOString(),
+          participantIds: ['member-1'],
+          version: 4,
+        }}
+        now={now}
+        participants={[{ id: 'member-1', username: 'family', role: 'member', active: true }]}
+        onSaved={() => undefined}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: '更多记录选项' }))
+    const participant = screen.getByRole('checkbox', { name: 'family' })
+    expect(participant).toBeChecked()
+    await user.click(participant)
+    await user.click(screen.getByRole('button', { name: '保存记录' }))
+
+    await waitFor(() => expect(requestBody).toBeDefined())
+    expect(requestBody).toMatchObject({ participantIds: [] })
+  })
+
   it('keeps the season draft and reapplies it with the latest ETag after a conflict', async () => {
     let attempts = 0
     server.use(http.put('*/api/v1/records/media-1/rounds/current', async ({ request }) => {
@@ -167,6 +208,54 @@ describe('RoundRecordForm', () => {
     await user.click(screen.getByRole('button', { name: '使用最新版本重试' }))
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce())
     expect(attempts).toBe(2)
+  })
+
+  it('submits the latest projected season status after episode progress completes the same round', async () => {
+    let requestBody: unknown
+    server.use(http.put('*/api/v1/records/media-1/rounds/current', async ({ request }) => {
+      expect(request.headers.get('If-Match')).toBe('"4"')
+      requestBody = await request.json()
+      return HttpResponse.json({
+        ...seasonRound,
+        status: 'completed',
+        note: '完成后补充的季笔记',
+        watchedAt: '2026-07-14T12:00:00Z',
+        version: 5,
+      })
+    }))
+    const user = userEvent.setup()
+
+    function ProjectedSeasonForm() {
+      const [round, setRound] = useState<CurrentRound>(seasonRound)
+      return (
+        <>
+          <button type="button" onClick={() => setRound({
+            ...round,
+            status: 'completed',
+            watchedAt: '2026-07-14T12:00:00Z',
+            version: 4,
+          })}>
+            模拟整季完成
+          </button>
+          <RoundRecordForm round={round} now={now} onSaved={setRound} />
+        </>
+      )
+    }
+
+    renderWithQueryClient(<ProjectedSeasonForm />)
+    await user.click(screen.getByRole('button', { name: '模拟整季完成' }))
+    expect(screen.getByText('已看完')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '更多记录选项' }))
+    await user.type(screen.getByLabelText('私人笔记'), '完成后补充的季笔记')
+    await user.click(screen.getByRole('button', { name: '保存记录' }))
+
+    await waitFor(() => expect(requestBody).toBeDefined())
+    expect(requestBody).toEqual({
+      status: 'completed',
+      note: '完成后补充的季笔记',
+      rating: null,
+      viewingMethod: null,
+    })
   })
 
   it('preserves a draft after a network failure', async () => {

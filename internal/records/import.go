@@ -402,9 +402,6 @@ func validateImportRecord(record exportRecord) error {
 			}
 		}
 	}
-	if record.State != nil || len(record.Events) > 0 || len(record.Progress) > 0 {
-		return ErrInvalidImport
-	}
 	return nil
 }
 
@@ -615,30 +612,6 @@ func importSeasons(ctx context.Context, tx *sql.Tx, media exportMedia) error {
 	return nil
 }
 
-func importState(ctx context.Context, tx *sql.Tx, userID, mediaID string, state exportState) error {
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO user_media_states (
-			user_id, media_id, status, rating, note, version,
-			status_source, rating_source, note_source, started_at, completed_at,
-			share_rating, share_review, shared_review, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now') * 1000)
-		ON CONFLICT(user_id, media_id) DO UPDATE SET
-			status = excluded.status, rating = excluded.rating, note = excluded.note,
-			version = excluded.version, status_source = excluded.status_source,
-			rating_source = excluded.rating_source, note_source = excluded.note_source,
-			started_at = excluded.started_at, completed_at = excluded.completed_at,
-			share_rating = excluded.share_rating, share_review = excluded.share_review,
-			shared_review = excluded.shared_review,
-			updated_at = excluded.updated_at
-	`, userID, mediaID, state.Status, nullableInt(state.Rating), nullableText(state.Note),
-		state.Version, state.StatusSource, state.RatingSource, state.NoteSource,
-		nullableText(state.StartedAt), nullableText(state.CompletedAt), boolInt(state.ShareRating),
-		boolInt(state.ShareReview), nullableText(state.SharedReview)); err != nil {
-		return err
-	}
-	return nil
-}
-
 func importTags(ctx context.Context, tx *sql.Tx, userID, mediaID string, tags []string) error {
 	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM user_media_tags WHERE user_id = ? AND media_id = ?
@@ -670,79 +643,6 @@ func importTags(ctx context.Context, tx *sql.Tx, userID, mediaID string, tags []
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO user_media_tags (user_id, media_id, tag_id) VALUES (?, ?, ?)
 		`, userID, mediaID, tagID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func importEvents(ctx context.Context, tx *sql.Tx, userID, mediaID string, events []exportEvent) error {
-	for _, event := range events {
-		if event.ID == "" || event.WatchedAt == "" || sourcePriority(event.Source) == 0 ||
-			event.Completion < 0 || event.Completion > 100 {
-			return ErrInvalidImport
-		}
-		if _, err := time.Parse(eventTimeLayout, event.WatchedAt); err != nil {
-			return ErrInvalidImport
-		}
-		var owner, existingMedia string
-		err := tx.QueryRowContext(ctx, `
-			SELECT created_by_user_id, media_id FROM watch_events WHERE id = ?
-		`, event.ID).Scan(&owner, &existingMedia)
-		if err == nil && (owner != userID || existingMedia != mediaID) {
-			return ErrInvalidImport
-		}
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO watch_events (
-				id, created_by_user_id, media_id, episode_id, watched_at,
-				viewing_method, source, external_event_id, completion, note, created_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now') * 1000)
-			ON CONFLICT(id) DO UPDATE SET
-				episode_id = excluded.episode_id, watched_at = excluded.watched_at,
-				viewing_method = excluded.viewing_method, source = excluded.source,
-				external_event_id = excluded.external_event_id,
-				completion = excluded.completion, note = excluded.note
-		`, event.ID, userID, mediaID, nullableText(event.EpisodeID), event.WatchedAt,
-			nullableText(event.ViewingMethod), event.Source, nullableText(event.ExternalEventID),
-			event.Completion, nullableText(event.Note)); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO watch_event_participants (event_id, user_id) VALUES (?, ?)
-			ON CONFLICT(event_id, user_id) DO NOTHING
-		`, event.ID, userID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func importProgress(
-	ctx context.Context,
-	tx *sql.Tx,
-	userID, mediaID string,
-	progress []exportProgress,
-) error {
-	for _, item := range progress {
-		if item.EpisodeID == "" || item.WatchedAt == "" || item.WatchEventID == "" ||
-			sourcePriority(item.Source) == 0 {
-			return ErrInvalidImport
-		}
-		if _, err := time.Parse(eventTimeLayout, item.WatchedAt); err != nil {
-			return ErrInvalidImport
-		}
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO episode_progress (
-				user_id, media_id, episode_id, watched_at, source, watch_event_id, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, strftime('%s', 'now') * 1000)
-			ON CONFLICT(user_id, episode_id) DO UPDATE SET
-				media_id = excluded.media_id, watched_at = excluded.watched_at,
-				source = excluded.source, watch_event_id = excluded.watch_event_id,
-				updated_at = excluded.updated_at
-		`, userID, mediaID, item.EpisodeID, item.WatchedAt, item.Source, item.WatchEventID); err != nil {
 			return err
 		}
 	}

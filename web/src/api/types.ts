@@ -38,11 +38,12 @@ export type CurrentRound = {
 	note: string | null
 	viewingMethod: string | null
 	watchedAt: string | null
+	participantIds: string[]
 	version: number
 	profileVersion: number
 }
 
-export type ArchivedRound = Omit<CurrentRound, 'version' | 'profileVersion'> & {
+export type ArchivedRound = Omit<CurrentRound, 'version' | 'profileVersion' | 'participantIds'> & {
 	archivedAt: string | null
 }
 
