@@ -309,9 +309,21 @@ func (matcher *Matcher) withUserConflict(
 ) (MatchResult, error) {
 	var status string
 	var source records.Source
+	var seasonNumber sql.NullInt64
+	if result.EpisodeID != "" {
+		if err := matcher.db.Reader().QueryRowContext(ctx, `
+			SELECT season.season_number
+			FROM episodes episode
+			JOIN seasons season ON season.id = episode.season_id
+			WHERE episode.id = ? AND season.media_id = ?
+		`, result.EpisodeID, result.MediaID).Scan(&seasonNumber); err != nil {
+			return MatchResult{}, err
+		}
+	}
 	err := matcher.db.Reader().QueryRowContext(ctx, `
-		SELECT status, status_source FROM user_media_states WHERE user_id = ? AND media_id = ?
-	`, userID, result.MediaID).Scan(&status, &source)
+		SELECT status, status_source FROM watch_rounds
+		WHERE user_id = ? AND media_id = ? AND season_number IS ? AND archived_at IS NULL
+	`, userID, result.MediaID, nullableCandidateInt(int(seasonNumber.Int64))).Scan(&status, &source)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return MatchResult{}, err
 	}

@@ -97,8 +97,9 @@ func decodeImportCSV(data []byte) (exportDocument, error) {
 	}
 	wantedHeader := []string{
 		"media_id", "media_type", "title", "original_title", "release_date", "overview",
-		"external_source", "external_id", "status", "rating", "note", "started_at",
-		"completed_at", "tags",
+		"external_source", "external_id", "round_id", "round_number", "season_number",
+		"status", "rating", "note", "viewing_method", "started_at", "completed_at",
+		"archived_at", "tags",
 	}
 	if len(rows[0]) != len(wantedHeader) {
 		return exportDocument{}, ErrInvalidImport
@@ -131,7 +132,7 @@ func decodeImportCSV(data []byte) (exportDocument, error) {
 				ExternalIDs: make([]exportExternalID, 0), Genres: make([]exportGenre, 0),
 				Seasons: make([]exportSeason, 0),
 			},
-			Tags: make([]string, 0), Events: make([]exportEvent, 0), Progress: make([]exportProgress, 0),
+			Tags: make([]string, 0), Rounds: make([]exportRound, 0),
 		}
 		if record.Media.ExternalTitle == "" {
 			record.Media.ExternalTitle = "Imported item"
@@ -144,32 +145,58 @@ func decodeImportCSV(data []byte) (exportDocument, error) {
 				Source: row[6], SourceID: row[7], MediaType: record.Media.MediaType,
 			})
 		}
-		if row[8] != "" {
-			state := exportState{
-				Status: Status(row[8]), Version: 1,
+		if row[11] != "" {
+			round := exportRound{
+				ID: row[8], Status: Status(row[11]), Version: 1,
 				StatusSource: SourceConfirmedImport, RatingSource: SourceConfirmedImport,
 				NoteSource: SourceConfirmedImport,
+				Events:     make([]exportEvent, 0), Episodes: make([]exportRoundEpisode, 0),
 			}
-			if row[9] != "" {
-				rating, err := strconv.Atoi(row[9])
+			if round.ID == "" {
+				round.ID = uuid.NewString()
+			}
+			if row[9] == "" {
+				round.RoundNumber = 1
+			} else {
+				roundNumber, err := strconv.Atoi(row[9])
 				if err != nil {
 					return exportDocument{}, ErrInvalidImport
 				}
-				state.Rating = &rating
+				round.RoundNumber = roundNumber
 			}
 			if row[10] != "" {
-				state.Note = stringPointer(row[10])
-			}
-			if row[11] != "" {
-				state.StartedAt = stringPointer(row[11])
+				seasonNumber, err := strconv.Atoi(row[10])
+				if err != nil {
+					return exportDocument{}, ErrInvalidImport
+				}
+				round.SeasonNumber = &seasonNumber
 			}
 			if row[12] != "" {
-				state.CompletedAt = stringPointer(row[12])
+				rating, err := strconv.Atoi(row[12])
+				if err != nil {
+					return exportDocument{}, ErrInvalidImport
+				}
+				round.Rating = &rating
 			}
-			record.State = &state
+			if row[13] != "" {
+				round.Note = stringPointer(row[13])
+			}
+			if row[14] != "" {
+				round.ViewingMethod = stringPointer(row[14])
+			}
+			if row[15] != "" {
+				round.StartedAt = stringPointer(row[15])
+			}
+			if row[16] != "" {
+				round.CompletedAt = stringPointer(row[16])
+			}
+			if row[17] != "" {
+				round.ArchivedAt = stringPointer(row[17])
+			}
+			record.Rounds = append(record.Rounds, round)
 		}
-		if row[13] != "" {
-			for _, tag := range strings.Split(row[13], "|") {
+		if row[18] != "" {
+			for _, tag := range strings.Split(row[18], "|") {
 				if tag = strings.TrimSpace(tag); tag != "" {
 					record.Tags = append(record.Tags, tag)
 				}
@@ -283,19 +310,21 @@ func (repository *SQLiteRepository) importRecord(ctx context.Context, userID str
 			return err
 		}
 	}
-	if record.State != nil {
-		if err := importState(ctx, tx, userID, record.Media.ID, *record.State); err != nil {
+	if record.Profile != nil || len(record.Rounds) > 0 || len(record.Tags) > 0 {
+		if err := importProfile(ctx, tx, userID, record.Media.ID, record.Profile); err != nil {
 			return err
 		}
 	}
 	if err := importTags(ctx, tx, userID, record.Media.ID, record.Tags); err != nil {
 		return err
 	}
-	if err := importEvents(ctx, tx, userID, record.Media.ID, record.Events); err != nil {
+	if err := importRounds(ctx, tx, userID, record.Media.ID, record.Rounds); err != nil {
 		return err
 	}
-	if err := importProgress(ctx, tx, userID, record.Media.ID, record.Progress); err != nil {
-		return err
+	if len(record.Rounds) > 0 {
+		if err := projectMediaProfile(ctx, tx, userID, record.Media.ID); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
@@ -312,10 +341,181 @@ func validateImportRecord(record exportRecord) error {
 			return ErrInvalidImport
 		}
 	}
-	if record.State != nil {
-		if ValidateStatus(record.State.Status) != nil || record.State.Version < 1 ||
-			(record.State.Rating != nil && (*record.State.Rating < 0 || *record.State.Rating > 100)) {
+	if record.Tags == nil || record.Rounds == nil {
+		return ErrInvalidImport
+	}
+	if record.Profile != nil && record.Profile.Version < 1 {
+		return ErrInvalidImport
+	}
+	currentScopes := make(map[int]struct{})
+	roundNumbers := make(map[[2]int]struct{})
+	for _, round := range record.Rounds {
+		if round.ID == "" || round.RoundNumber < 1 || round.Version < 1 ||
+			ValidateStatus(round.Status) != nil || sourcePriority(round.StatusSource) == 0 ||
+			sourcePriority(round.RatingSource) == 0 || sourcePriority(round.NoteSource) == 0 ||
+			(round.Rating != nil && (*round.Rating < 0 || *round.Rating > 100)) ||
+			round.Events == nil || round.Episodes == nil {
 			return ErrInvalidImport
+		}
+		scope := 0
+		if round.SeasonNumber != nil {
+			scope = *round.SeasonNumber
+		}
+		if record.Media.MediaType == "movie" && round.SeasonNumber != nil ||
+			record.Media.MediaType == "tv" && (round.SeasonNumber == nil || scope < 1) {
+			return ErrInvalidImport
+		}
+		key := [2]int{scope, round.RoundNumber}
+		if _, exists := roundNumbers[key]; exists {
+			return ErrInvalidImport
+		}
+		roundNumbers[key] = struct{}{}
+		if round.ArchivedAt == nil {
+			if _, exists := currentScopes[scope]; exists {
+				return ErrInvalidImport
+			}
+			currentScopes[scope] = struct{}{}
+		}
+		for _, value := range []*string{round.StartedAt, round.CompletedAt, round.ArchivedAt} {
+			if value != nil {
+				if _, err := time.Parse(eventTimeLayout, *value); err != nil {
+					return ErrInvalidImport
+				}
+			}
+		}
+		for _, event := range round.Events {
+			if event.ID == "" || event.WatchedAt == "" || sourcePriority(event.Source) == 0 ||
+				event.Completion < 0 || event.Completion > 100 {
+				return ErrInvalidImport
+			}
+			if _, err := time.Parse(eventTimeLayout, event.WatchedAt); err != nil {
+				return ErrInvalidImport
+			}
+		}
+		for _, episode := range round.Episodes {
+			if episode.EpisodeID == "" || episode.WatchEventID == "" ||
+				sourcePriority(episode.Source) == 0 {
+				return ErrInvalidImport
+			}
+			if _, err := time.Parse(eventTimeLayout, episode.WatchedAt); err != nil {
+				return ErrInvalidImport
+			}
+		}
+	}
+	if record.State != nil || len(record.Events) > 0 || len(record.Progress) > 0 {
+		return ErrInvalidImport
+	}
+	return nil
+}
+
+func importProfile(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID, mediaID string,
+	profile *exportProfile,
+) error {
+	if err := ensureMediaProfile(ctx, tx, userID, mediaID); err != nil {
+		return err
+	}
+	if profile == nil {
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, `
+		UPDATE user_media_profiles SET
+			version = ?, share_rating = ?, share_review = ?, shared_review = ?,
+			updated_at = strftime('%s', 'now') * 1000
+		WHERE user_id = ? AND media_id = ?
+	`, profile.Version, boolInt(profile.ShareRating), boolInt(profile.ShareReview),
+		nullableText(profile.SharedReview), userID, mediaID)
+	return err
+}
+
+func importRounds(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID, mediaID string,
+	rounds []exportRound,
+) error {
+	for _, round := range rounds {
+		var owner, existingMedia string
+		err := tx.QueryRowContext(ctx, `
+			SELECT user_id, media_id FROM watch_rounds WHERE id = ?
+		`, round.ID).Scan(&owner, &existingMedia)
+		if err == nil && (owner != userID || existingMedia != mediaID) {
+			return ErrInvalidImport
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM watch_rounds WHERE user_id = ? AND media_id = ?
+	`, userID, mediaID); err != nil {
+		return err
+	}
+	for _, round := range rounds {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO watch_rounds (
+				id, user_id, media_id, season_number, round_number, status,
+				rating, note, viewing_method, started_at, completed_at, archived_at,
+				version, status_source, rating_source, note_source, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+			          strftime('%s', 'now') * 1000, strftime('%s', 'now') * 1000)
+		`, round.ID, userID, mediaID, nullableInt(round.SeasonNumber), round.RoundNumber,
+			round.Status, nullableInt(round.Rating), nullableText(round.Note), nullableText(round.ViewingMethod),
+			nullableText(round.StartedAt), nullableText(round.CompletedAt), nullableText(round.ArchivedAt),
+			round.Version, round.StatusSource, round.RatingSource, round.NoteSource); err != nil {
+			return err
+		}
+		if err := importRoundEvents(ctx, tx, userID, mediaID, round.ID, round.Events); err != nil {
+			return err
+		}
+		if err := importRoundEpisodes(ctx, tx, round.ID, round.Episodes); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func importRoundEvents(
+	ctx context.Context,
+	tx *sql.Tx,
+	userID, mediaID, roundID string,
+	events []exportEvent,
+) error {
+	for _, event := range events {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO watch_events (
+				id, round_id, created_by_user_id, media_id, episode_id, watched_at,
+				viewing_method, source, external_event_id, completion, note, created_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now') * 1000)
+		`, event.ID, roundID, userID, mediaID, nullableText(event.EpisodeID), event.WatchedAt,
+			nullableText(event.ViewingMethod), event.Source, nullableText(event.ExternalEventID),
+			event.Completion, nullableText(event.Note)); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO watch_event_participants (event_id, user_id) VALUES (?, ?)
+		`, event.ID, userID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func importRoundEpisodes(
+	ctx context.Context,
+	tx *sql.Tx,
+	roundID string,
+	episodes []exportRoundEpisode,
+) error {
+	for _, episode := range episodes {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO round_episode_progress (
+				round_id, episode_id, watched_at, source, watch_event_id, updated_at
+			) VALUES (?, ?, ?, ?, ?, strftime('%s', 'now') * 1000)
+		`, roundID, episode.EpisodeID, episode.WatchedAt, episode.Source, episode.WatchEventID); err != nil {
+			return err
 		}
 	}
 	return nil

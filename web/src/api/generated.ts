@@ -1518,18 +1518,8 @@ export interface components {
             genres: components["schemas"]["ExportGenre"][];
             seasons: components["schemas"]["ExportSeason"][];
         };
-        ExportState: {
-            status: components["schemas"]["RecordStatus"];
-            rating?: number;
-            note?: string;
+        ExportProfile: {
             version: number;
-            statusSource: components["schemas"]["RecordSource"];
-            ratingSource: components["schemas"]["RecordSource"];
-            noteSource: components["schemas"]["RecordSource"];
-            /** Format: date-time */
-            startedAt?: string;
-            /** Format: date-time */
-            completedAt?: string;
             shareRating: boolean;
             shareReview: boolean;
             sharedReview?: string;
@@ -1547,7 +1537,7 @@ export interface components {
             completion: number;
             note?: string;
         };
-        ExportProgress: {
+        ExportRoundEpisode: {
             /** Format: uuid */
             episodeId: string;
             /** Format: date-time */
@@ -1556,12 +1546,33 @@ export interface components {
             /** Format: uuid */
             watchEventId: string;
         };
+        ExportRound: {
+            /** Format: uuid */
+            id: string;
+            seasonNumber: number | null;
+            roundNumber: number;
+            status: components["schemas"]["RecordStatus"];
+            rating?: number;
+            note?: string;
+            viewingMethod?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            /** Format: date-time */
+            archivedAt?: string;
+            version: number;
+            statusSource: components["schemas"]["RecordSource"];
+            ratingSource: components["schemas"]["RecordSource"];
+            noteSource: components["schemas"]["RecordSource"];
+            events: components["schemas"]["ExportEvent"][];
+            episodes: components["schemas"]["ExportRoundEpisode"][];
+        };
         ExportRecord: {
             media: components["schemas"]["ExportMedia"];
-            state?: components["schemas"]["ExportState"];
+            profile?: components["schemas"]["ExportProfile"];
             tags: string[];
-            events: components["schemas"]["ExportEvent"][];
-            progress: components["schemas"]["ExportProgress"][];
+            rounds: components["schemas"]["ExportRound"][];
         };
         ExportCollection: {
             /** Format: uuid */
@@ -1571,7 +1582,7 @@ export interface components {
         };
         ExportDocument: {
             /** @constant */
-            version: 1;
+            version: 2;
             records: components["schemas"]["ExportRecord"][];
             collections: components["schemas"]["ExportCollection"][];
         };

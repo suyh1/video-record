@@ -16,7 +16,7 @@ func TestImportExportHandlersUseSafeDownloadsAndProtectedStreamingUploads(t *tes
 		"Cookie": cookie.String(), "Origin": "http://example.test",
 		"X-CSRF-Token": csrfToken, "Idempotency-Key": "prepare-export-record", "If-Match": `"0"`,
 	}
-	updated := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID, map[string]any{
+	updated := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID+"/rounds/current", map[string]any{
 		"status": "wishlist", "note": "portable note",
 	}, headers)
 	require.Equal(t, http.StatusOK, updated.Code)

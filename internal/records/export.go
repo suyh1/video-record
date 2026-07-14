@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-const exportVersion = 1
+const exportVersion = 2
 
 type ExportFormat string
 
@@ -34,11 +34,47 @@ type exportDocument struct {
 }
 
 type exportRecord struct {
-	Media    exportMedia      `json:"media"`
-	State    *exportState     `json:"state,omitempty"`
-	Tags     []string         `json:"tags"`
-	Events   []exportEvent    `json:"events"`
-	Progress []exportProgress `json:"progress"`
+	Media   exportMedia    `json:"media"`
+	Profile *exportProfile `json:"profile,omitempty"`
+	Tags    []string       `json:"tags"`
+	Rounds  []exportRound  `json:"rounds"`
+
+	State    *exportState     `json:"-"`
+	Events   []exportEvent    `json:"-"`
+	Progress []exportProgress `json:"-"`
+}
+
+type exportProfile struct {
+	Version      int     `json:"version"`
+	ShareRating  bool    `json:"shareRating"`
+	ShareReview  bool    `json:"shareReview"`
+	SharedReview *string `json:"sharedReview,omitempty"`
+}
+
+type exportRound struct {
+	ID            string               `json:"id"`
+	SeasonNumber  *int                 `json:"seasonNumber"`
+	RoundNumber   int                  `json:"roundNumber"`
+	Status        Status               `json:"status"`
+	Rating        *int                 `json:"rating,omitempty"`
+	Note          *string              `json:"note,omitempty"`
+	ViewingMethod *string              `json:"viewingMethod,omitempty"`
+	StartedAt     *string              `json:"startedAt,omitempty"`
+	CompletedAt   *string              `json:"completedAt,omitempty"`
+	ArchivedAt    *string              `json:"archivedAt,omitempty"`
+	Version       int                  `json:"version"`
+	StatusSource  Source               `json:"statusSource"`
+	RatingSource  Source               `json:"ratingSource"`
+	NoteSource    Source               `json:"noteSource"`
+	Events        []exportEvent        `json:"events"`
+	Episodes      []exportRoundEpisode `json:"episodes"`
+}
+
+type exportRoundEpisode struct {
+	EpisodeID    string `json:"episodeId"`
+	WatchedAt    string `json:"watchedAt"`
+	Source       Source `json:"source"`
+	WatchEventID string `json:"watchEventId"`
 }
 
 type exportMedia struct {
@@ -167,8 +203,9 @@ func encodeExportCSV(document exportDocument) ([]byte, error) {
 	writer := csv.NewWriter(&output)
 	if err := writer.Write([]string{
 		"media_id", "media_type", "title", "original_title", "release_date", "overview",
-		"external_source", "external_id", "status", "rating", "note", "started_at",
-		"completed_at", "tags",
+		"external_source", "external_id", "round_id", "round_number", "season_number",
+		"status", "rating", "note", "viewing_method", "started_at", "completed_at",
+		"archived_at", "tags",
 	}); err != nil {
 		return nil, err
 	}
@@ -186,32 +223,48 @@ func encodeExportCSV(document exportDocument) ([]byte, error) {
 			externalSource = record.Media.ExternalIDs[0].Source
 			externalID = record.Media.ExternalIDs[0].SourceID
 		}
-		var status, rating, note, startedAt, completedAt string
-		if record.State != nil {
-			status = string(record.State.Status)
-			if record.State.Rating != nil {
-				rating = strconv.Itoa(*record.State.Rating)
-			}
-			if record.State.Note != nil {
-				note = *record.State.Note
-			}
-			if record.State.StartedAt != nil {
-				startedAt = *record.State.StartedAt
-			}
-			if record.State.CompletedAt != nil {
-				completedAt = *record.State.CompletedAt
-			}
+		rounds := record.Rounds
+		if len(rounds) == 0 {
+			rounds = []exportRound{{}}
 		}
-		row := []string{
-			record.Media.ID, record.Media.MediaType, title, record.Media.OriginalTitle,
-			record.Media.ReleaseDate, overview, externalSource, externalID,
-			status, rating, note, startedAt, completedAt, strings.Join(record.Tags, "|"),
-		}
-		for index := range row {
-			row[index] = neutralizeSpreadsheetFormula(row[index])
-		}
-		if err := writer.Write(row); err != nil {
-			return nil, err
+		for _, round := range rounds {
+			var roundNumber, seasonNumber, rating, note, viewingMethod, startedAt, completedAt, archivedAt string
+			if round.RoundNumber > 0 {
+				roundNumber = strconv.Itoa(round.RoundNumber)
+			}
+			if round.SeasonNumber != nil {
+				seasonNumber = strconv.Itoa(*round.SeasonNumber)
+			}
+			if round.Rating != nil {
+				rating = strconv.Itoa(*round.Rating)
+			}
+			if round.Note != nil {
+				note = *round.Note
+			}
+			if round.ViewingMethod != nil {
+				viewingMethod = *round.ViewingMethod
+			}
+			if round.StartedAt != nil {
+				startedAt = *round.StartedAt
+			}
+			if round.CompletedAt != nil {
+				completedAt = *round.CompletedAt
+			}
+			if round.ArchivedAt != nil {
+				archivedAt = *round.ArchivedAt
+			}
+			row := []string{
+				record.Media.ID, record.Media.MediaType, title, record.Media.OriginalTitle,
+				record.Media.ReleaseDate, overview, externalSource, externalID,
+				round.ID, roundNumber, seasonNumber, string(round.Status), rating, note,
+				viewingMethod, startedAt, completedAt, archivedAt, strings.Join(record.Tags, "|"),
+			}
+			for index := range row {
+				row[index] = neutralizeSpreadsheetFormula(row[index])
+			}
+			if err := writer.Write(row); err != nil {
+				return nil, err
+			}
 		}
 	}
 	writer.Flush()
@@ -243,7 +296,9 @@ func (repository *SQLiteRepository) ExportDocument(ctx context.Context, userID s
 		       media.custom_title, media.custom_overview, media.custom_year, media.runtime_minutes
 		FROM media_items media
 		WHERE EXISTS (
-			SELECT 1 FROM user_media_states state WHERE state.user_id = ? AND state.media_id = media.id
+			SELECT 1 FROM user_media_profiles profile WHERE profile.user_id = ? AND profile.media_id = media.id
+		) OR EXISTS (
+			SELECT 1 FROM watch_rounds round WHERE round.user_id = ? AND round.media_id = media.id
 		) OR EXISTS (
 			SELECT 1 FROM watch_events event
 			JOIN watch_event_participants participant ON participant.event_id = event.id
@@ -254,7 +309,7 @@ func (repository *SQLiteRepository) ExportDocument(ctx context.Context, userID s
 			WHERE collection.user_id = ? AND item.media_id = media.id
 		)
 		ORDER BY media.id
-	`, userID, userID, userID)
+	`, userID, userID, userID, userID)
 	if err != nil {
 		return exportDocument{}, err
 	}
@@ -287,7 +342,7 @@ func (repository *SQLiteRepository) ExportDocument(ctx context.Context, userID s
 		if err != nil {
 			return exportDocument{}, err
 		}
-		record.State, err = repository.exportState(ctx, userID, record.Media.ID)
+		record.Profile, err = repository.exportProfile(ctx, userID, record.Media.ID)
 		if err != nil {
 			return exportDocument{}, err
 		}
@@ -295,11 +350,7 @@ func (repository *SQLiteRepository) ExportDocument(ctx context.Context, userID s
 		if err != nil {
 			return exportDocument{}, err
 		}
-		record.Events, err = repository.exportEvents(ctx, userID, record.Media.ID)
-		if err != nil {
-			return exportDocument{}, err
-		}
-		record.Progress, err = repository.exportProgress(ctx, userID, record.Media.ID)
+		record.Rounds, err = repository.exportRounds(ctx, userID, record.Media.ID)
 		if err != nil {
 			return exportDocument{}, err
 		}
@@ -313,6 +364,134 @@ func (repository *SQLiteRepository) ExportDocument(ctx context.Context, userID s
 		return exportDocument{}, err
 	}
 	return document, nil
+}
+
+func (repository *SQLiteRepository) exportProfile(
+	ctx context.Context,
+	userID, mediaID string,
+) (*exportProfile, error) {
+	var profile exportProfile
+	var shareRating, shareReview int
+	var sharedReview sql.NullString
+	err := repository.db.Reader().QueryRowContext(ctx, `
+		SELECT version, share_rating, share_review, shared_review
+		FROM user_media_profiles WHERE user_id = ? AND media_id = ?
+	`, userID, mediaID).Scan(&profile.Version, &shareRating, &shareReview, &sharedReview)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	profile.ShareRating = shareRating == 1
+	profile.ShareReview = shareReview == 1
+	profile.SharedReview = nullableStringPointer(sharedReview)
+	return &profile, nil
+}
+
+func (repository *SQLiteRepository) exportRounds(
+	ctx context.Context,
+	userID, mediaID string,
+) ([]exportRound, error) {
+	rows, err := repository.db.Reader().QueryContext(ctx, `
+		SELECT id, season_number, round_number, status, rating, note, viewing_method,
+		       started_at, completed_at, archived_at, version,
+		       status_source, rating_source, note_source
+		FROM watch_rounds
+		WHERE user_id = ? AND media_id = ?
+		ORDER BY COALESCE(season_number, 0), round_number, id
+	`, userID, mediaID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	rounds := make([]exportRound, 0)
+	for rows.Next() {
+		var round exportRound
+		var seasonNumber, rating sql.NullInt64
+		var note, viewingMethod, startedAt, completedAt, archivedAt sql.NullString
+		if err := rows.Scan(
+			&round.ID, &seasonNumber, &round.RoundNumber, &round.Status, &rating, &note, &viewingMethod,
+			&startedAt, &completedAt, &archivedAt, &round.Version,
+			&round.StatusSource, &round.RatingSource, &round.NoteSource,
+		); err != nil {
+			return nil, err
+		}
+		round.SeasonNumber = nullableIntPointer(seasonNumber)
+		round.Rating = nullableIntPointer(rating)
+		round.Note = nullableStringPointer(note)
+		round.ViewingMethod = nullableStringPointer(viewingMethod)
+		round.StartedAt = nullableStringPointer(startedAt)
+		round.CompletedAt = nullableStringPointer(completedAt)
+		round.ArchivedAt = nullableStringPointer(archivedAt)
+		round.Events, err = repository.exportRoundEvents(ctx, userID, round.ID)
+		if err != nil {
+			return nil, err
+		}
+		round.Episodes, err = repository.exportRoundEpisodes(ctx, round.ID)
+		if err != nil {
+			return nil, err
+		}
+		rounds = append(rounds, round)
+	}
+	return rounds, rows.Err()
+}
+
+func (repository *SQLiteRepository) exportRoundEvents(
+	ctx context.Context,
+	userID, roundID string,
+) ([]exportEvent, error) {
+	rows, err := repository.db.Reader().QueryContext(ctx, `
+		SELECT id, episode_id, watched_at, viewing_method, source,
+		       external_event_id, completion, note
+		FROM watch_events
+		WHERE round_id = ? AND created_by_user_id = ?
+		ORDER BY watched_at, id
+	`, roundID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	events := make([]exportEvent, 0)
+	for rows.Next() {
+		var event exportEvent
+		var episodeID, viewingMethod, externalEventID, note sql.NullString
+		if err := rows.Scan(
+			&event.ID, &episodeID, &event.WatchedAt, &viewingMethod, &event.Source,
+			&externalEventID, &event.Completion, &note,
+		); err != nil {
+			return nil, err
+		}
+		event.EpisodeID = nullableStringPointer(episodeID)
+		event.ViewingMethod = nullableStringPointer(viewingMethod)
+		event.ExternalEventID = nullableStringPointer(externalEventID)
+		event.Note = nullableStringPointer(note)
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
+func (repository *SQLiteRepository) exportRoundEpisodes(
+	ctx context.Context,
+	roundID string,
+) ([]exportRoundEpisode, error) {
+	rows, err := repository.db.Reader().QueryContext(ctx, `
+		SELECT episode_id, watched_at, source, watch_event_id
+		FROM round_episode_progress WHERE round_id = ? ORDER BY episode_id
+	`, roundID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	progress := make([]exportRoundEpisode, 0)
+	for rows.Next() {
+		var item exportRoundEpisode
+		if err := rows.Scan(&item.EpisodeID, &item.WatchedAt, &item.Source, &item.WatchEventID); err != nil {
+			return nil, err
+		}
+		progress = append(progress, item)
+	}
+	return progress, rows.Err()
 }
 
 func (repository *SQLiteRepository) exportExternalIDs(ctx context.Context, mediaID string) ([]exportExternalID, error) {

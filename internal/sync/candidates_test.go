@@ -111,7 +111,8 @@ func TestConfirmedMappingReusesEvidenceAndProjectsSyncState(t *testing.T) {
 	require.Equal(t, "confirmed_mapping", secondCandidate.Evidence[0].Code)
 	var state string
 	require.NoError(t, db.Reader().QueryRowContext(ctx, `
-		SELECT status FROM user_media_states WHERE user_id = ? AND media_id = 'mapped-media'
+		SELECT status FROM watch_rounds
+		WHERE user_id = ? AND media_id = 'mapped-media' AND archived_at IS NULL
 	`, userID).Scan(&state))
 	require.Equal(t, "completed", state)
 
@@ -215,6 +216,63 @@ func TestApplyCandidateIsIdempotentAndRejectsExternalEventRetargeting(t *testing
 		ctx, tx, userID, "jellyfin", candidate, "apply-media-b", "", now,
 	), ErrCandidateResolved)
 	require.NoError(t, tx.Rollback())
+}
+
+func TestSyncRoundCreatesMovieRepeatsAndScopesEpisodeProgress(t *testing.T) {
+	ctx := context.Background()
+	service, db, userID, accountID := newCandidateService(t)
+	insertCandidateMedia(t, db, "sync-round-movie", "movie", "Sync Round Movie", "2026")
+	insertCandidateExternalID(t, db, "sync-round-movie", "tmdb", "1701", "movie")
+	first := candidateMovieEvent("sync-round-event-1", "sync-round-provider", "Sync Round Movie", 2026)
+	first.Item.TMDBID = "1701"
+	first.PlayedAt = time.Date(2026, 7, 12, 12, 0, 1, 0, time.UTC)
+	confirmed, err := service.Ingest(ctx, accountID, first)
+	require.NoError(t, err)
+	require.Equal(t, CandidateConfirmed, confirmed.Status)
+	second := candidateMovieEvent("sync-round-event-2", "sync-round-provider", "Sync Round Movie", 2026)
+	second.Item.TMDBID = "1701"
+	second.PlayedAt = first.PlayedAt.Add(24 * time.Hour)
+	confirmed, err = service.Ingest(ctx, accountID, second)
+	require.NoError(t, err)
+	require.Equal(t, CandidateConfirmed, confirmed.Status)
+	replayed, err := service.Ingest(ctx, accountID, second)
+	require.NoError(t, err)
+	require.Equal(t, confirmed.ID, replayed.ID)
+	var archived, current int
+	require.NoError(t, db.Reader().QueryRowContext(ctx, `
+		SELECT COUNT(*) FILTER (WHERE archived_at IS NOT NULL),
+		       COUNT(*) FILTER (WHERE archived_at IS NULL)
+		FROM watch_rounds WHERE user_id = ? AND media_id = 'sync-round-movie'
+	`, userID).Scan(&archived, &current))
+	require.Equal(t, 1, archived)
+	require.Equal(t, 1, current)
+	require.Equal(t, 2, countRows(t, db, "watch_events"))
+
+	insertCandidateMedia(t, db, "sync-round-series", "tv", "Sync Round Series", "2026")
+	insertCandidateExternalID(t, db, "sync-round-series", "tmdb", "1702", "tv")
+	insertCandidateEpisode(t, db, "sync-round-series", "sync-round-season", "sync-round-episode")
+	episode := candidateEpisodeEvent(
+		"sync-round-episode-event", "sync-round-episode-provider", "Sync Round Series", 2026, 1, 1,
+	)
+	episode.Item.TMDBID = "1702"
+	confirmed, err = service.Ingest(ctx, accountID, episode)
+	require.NoError(t, err)
+	require.Equal(t, CandidatePossible, confirmed.Status)
+	confirmed, err = service.Rematch(
+		ctx, userID, confirmed.ID, "sync-round-series", "sync-round-episode",
+	)
+	require.NoError(t, err)
+	require.Equal(t, CandidateConfirmed, confirmed.Status)
+	var seasonNumber, progressCount int
+	require.NoError(t, db.Reader().QueryRowContext(ctx, `
+		SELECT round.season_number, COUNT(progress.episode_id)
+		FROM watch_rounds round
+		LEFT JOIN round_episode_progress progress ON progress.round_id = round.id
+		WHERE round.user_id = ? AND round.media_id = 'sync-round-series' AND round.archived_at IS NULL
+		GROUP BY round.id
+	`, userID).Scan(&seasonNumber, &progressCount))
+	require.Equal(t, 1, seasonNumber)
+	require.Equal(t, 1, progressCount)
 }
 
 func insertCandidateEpisode(t *testing.T, db *storage.DB, mediaID, seasonID, episodeID string) {

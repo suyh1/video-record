@@ -1877,20 +1877,12 @@ components:
         seasons:
           type: array
           items: { $ref: '#/components/schemas/ExportSeason' }
-    ExportState:
+    ExportProfile:
       type: object
       additionalProperties: false
-      required: [status, version, statusSource, ratingSource, noteSource, shareRating, shareReview]
+      required: [version, shareRating, shareReview]
       properties:
-        status: { $ref: '#/components/schemas/RecordStatus' }
-        rating: { type: integer, minimum: 0, maximum: 100 }
-        note: { type: string }
         version: { type: integer, minimum: 1 }
-        statusSource: { $ref: '#/components/schemas/RecordSource' }
-        ratingSource: { $ref: '#/components/schemas/RecordSource' }
-        noteSource: { $ref: '#/components/schemas/RecordSource' }
-        startedAt: { type: string, format: date-time }
-        completedAt: { type: string, format: date-time }
         shareRating: { type: boolean }
         shareReview: { type: boolean }
         sharedReview: { type: string }
@@ -1907,7 +1899,7 @@ components:
         externalEventId: { type: string }
         completion: { type: integer, minimum: 0, maximum: 100 }
         note: { type: string }
-    ExportProgress:
+    ExportRoundEpisode:
       type: object
       additionalProperties: false
       required: [episodeId, watchedAt, source, watchEventId]
@@ -1916,22 +1908,44 @@ components:
         watchedAt: { type: string, format: date-time }
         source: { $ref: '#/components/schemas/RecordSource' }
         watchEventId: { type: string, format: uuid }
-    ExportRecord:
+    ExportRound:
       type: object
       additionalProperties: false
-      required: [media, tags, events, progress]
+      required: [id, seasonNumber, roundNumber, status, version, statusSource, ratingSource, noteSource, events, episodes]
       properties:
-        media: { $ref: '#/components/schemas/ExportMedia' }
-        state: { $ref: '#/components/schemas/ExportState' }
-        tags:
-          type: array
-          items: { type: string }
+        id: { type: string, format: uuid }
+        seasonNumber: { type: [integer, 'null'], minimum: 1 }
+        roundNumber: { type: integer, minimum: 1 }
+        status: { $ref: '#/components/schemas/RecordStatus' }
+        rating: { type: integer, minimum: 0, maximum: 100 }
+        note: { type: string }
+        viewingMethod: { type: string }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+        archivedAt: { type: string, format: date-time }
+        version: { type: integer, minimum: 1 }
+        statusSource: { $ref: '#/components/schemas/RecordSource' }
+        ratingSource: { $ref: '#/components/schemas/RecordSource' }
+        noteSource: { $ref: '#/components/schemas/RecordSource' }
         events:
           type: array
           items: { $ref: '#/components/schemas/ExportEvent' }
-        progress:
+        episodes:
           type: array
-          items: { $ref: '#/components/schemas/ExportProgress' }
+          items: { $ref: '#/components/schemas/ExportRoundEpisode' }
+    ExportRecord:
+      type: object
+      additionalProperties: false
+      required: [media, tags, rounds]
+      properties:
+        media: { $ref: '#/components/schemas/ExportMedia' }
+        profile: { $ref: '#/components/schemas/ExportProfile' }
+        tags:
+          type: array
+          items: { type: string }
+        rounds:
+          type: array
+          items: { $ref: '#/components/schemas/ExportRound' }
     ExportCollection:
       type: object
       additionalProperties: false
@@ -1947,7 +1961,7 @@ components:
       additionalProperties: false
       required: [version, records, collections]
       properties:
-        version: { type: integer, const: 1 }
+        version: { type: integer, const: 2 }
         records:
           type: array
           items: { $ref: '#/components/schemas/ExportRecord' }

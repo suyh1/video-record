@@ -468,37 +468,11 @@ func (service *CandidateService) applyCandidate(
 		return err
 	}
 	completion := syncCompletion(candidate.Event)
-	eventID := uuid.NewString()
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO watch_events (
-			id, created_by_user_id, media_id, episode_id, watched_at,
-			viewing_method, source, external_event_id, completion, note, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, 'confirmed_sync', ?, ?, NULL, ?)
-	`, eventID, userID, mediaID, nullableCandidateString(episodeID),
-		candidate.Event.PlayedAt.UTC().Format(syncEventTimeLayout), providerDisplayName(provider),
-		externalEventID, completion, now.UnixMilli())
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO watch_event_participants (event_id, user_id) VALUES (?, ?)
-	`, eventID, userID); err != nil {
-		return err
-	}
-	if episodeID != "" && completion >= 90 {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT OR IGNORE INTO episode_progress (
-				user_id, media_id, episode_id, watched_at, source, watch_event_id, updated_at
-			) VALUES (?, ?, ?, ?, 'confirmed_sync', ?, ?)
-		`, userID, mediaID, episodeID, candidate.Event.PlayedAt.UTC().Format(syncEventTimeLayout),
-			eventID, now.UnixMilli()); err != nil {
-			return err
-		}
-	}
-	if err := ensureSyncedState(ctx, tx, userID, mediaID, episodeID != "", completion, now); err != nil {
-		return err
-	}
-	if err := recomputeSyncedDates(ctx, tx, userID, mediaID, now); err != nil {
+	if _, err := records.ApplySyncedWatch(ctx, tx, records.SyncedWatchInput{
+		UserID: userID, MediaID: mediaID, EpisodeID: episodeID,
+		WatchedAt: candidate.Event.PlayedAt, ViewingMethod: providerDisplayName(provider),
+		ExternalEventID: externalEventID, Completion: completion, Now: now,
+	}); err != nil {
 		return err
 	}
 	return upsertExternalMapping(ctx, tx, candidate, mediaID, episodeID, now)
