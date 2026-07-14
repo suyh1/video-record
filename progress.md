@@ -503,3 +503,9 @@
 - Task 11 新增 `EpisodeTimeEditor`：原生秒级 `datetime-local`、动态 max、前端未来时间拦截、未看集 `set_time`、已看集时间修改、取消恢复焦点和目标行独立 pending 状态均有组件覆盖。
 - Task 11 首页会先读取所有常规季当前轮次，选择最高的 `watching` 季后才请求该季进度；不会在轮次查询尚未稳定时误读默认季，TMDB 失败也不会被禁用 query 的 pending 状态卡住。
 - Task 11 定向验证通过：5 个文件 14 项测试、前端 typecheck、lint 和 `git diff --check`；详情页已开始接入季工作区，电影旧历史将在 Task 12 统一替换。
+- Task 12 完成：电影与剧集详情均移除“观看历史”，新增统一“多刷”区域；当前轮次未完成时“再刷”禁用，完成后由单次原子 API 归档旧轮并创建状态为 `watching` 的下一轮。
+- Task 12 再刷成功后只更新对应电影/季的当前轮次、归档摘要和当前季进度缓存；失败时保留表单、分集和历史，页面显示内联错误。
+- Task 12 多刷列表显示第 N 刷、秒级完成时间和评分摘要；点击“查看”才请求只读轮次详情，弹窗展示完成时间、评分、观看方式和私人笔记，剧集额外展示逐集秒级时间。
+- Task 12 电影详情改用 `RoundRecordForm` 和 movie current round；标签、片单和分享继续使用 `profileVersion`。剧集 DOM 顺序为季选择、分集、季级个人记录、多刷。
+- 已删除 `QuickRecordForm`、`WatchHistory` 及其测试，移除前端事件 GET/POST/DELETE 客户端、媒体级 update 客户端和无季号 progress 重载；源码中相关旧符号无残留。
+- Task 12 完整前端验证通过：28 个测试文件 72 项测试、typecheck、lint 和 `git diff --check`。

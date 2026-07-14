@@ -33,7 +33,6 @@ import type {
   TMDBSeasonDetails,
   TMDBTVDetails,
   EpisodeReference,
-  WatchEvent,
   VisibleHouseholdRecord,
   LoginResponse,
 } from './types'
@@ -127,15 +126,6 @@ export async function getTMDBCredits(mediaType: MediaType, id: number, signal?: 
   return response.cast
 }
 
-export type UpdateRecordPayload = {
-  status: RecordStatus
-  rating?: number | null
-  note?: string | null
-  watchedAt?: string
-  viewingMethod?: string | null
-  participantIds?: string[]
-}
-
 export type UpdateCurrentRoundPayload = {
 	status: RecordStatus
 	rating?: number | null
@@ -212,20 +202,6 @@ export function startRewatch(mediaID: string, seasonNumber: number | undefined, 
 	)
 }
 
-export async function updateRecord(mediaID: string, version: number, payload: UpdateRecordPayload): Promise<RecordState> {
-  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
-  return requestJSON<RecordState>(`/api/v1/records/${encodeURIComponent(mediaID)}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Idempotency-Key': createIdempotencyKey(),
-      'If-Match': `"${version}"`,
-      'X-CSRF-Token': csrfToken,
-    },
-    body: JSON.stringify(payload),
-  })
-}
-
 export function getMedia(mediaID: string, signal?: AbortSignal) {
   return requestJSON<MediaDetails>(`/api/v1/media/${encodeURIComponent(mediaID)}`, signal ? { signal } : undefined)
 }
@@ -288,36 +264,10 @@ export function getVisibleHouseholdRecord(ownerID: string, mediaID: string, sign
   )
 }
 
-export function getWatchEvents(mediaID: string, signal?: AbortSignal) {
-  return requestJSON<WatchEvent[]>(`/api/v1/records/${encodeURIComponent(mediaID)}/events`, signal ? { signal } : undefined)
-}
-
-export function createRewatch(mediaID: string, payload: { watchedAt: string; viewingMethod?: string }) {
-  return protectedWrite<WatchEvent>(`/api/v1/records/${encodeURIComponent(mediaID)}/events`, payload)
-}
-
-export function deleteWatchEvent(mediaID: string, eventID: string) {
-  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
-  return requestJSON<void>(
-    `/api/v1/records/${encodeURIComponent(mediaID)}/events/${encodeURIComponent(eventID)}`,
-    {
-      method: 'DELETE',
-      headers: {
-        'Idempotency-Key': createIdempotencyKey(),
-        'X-CSRF-Token': csrfToken,
-      },
-    },
-  )
-}
-
-export function getEpisodeProgress(mediaID: string, seasonNumber: number, signal?: AbortSignal): Promise<SeriesProgress>
-export function getEpisodeProgress(mediaID: string, signal?: AbortSignal): Promise<SeriesProgress>
-export function getEpisodeProgress(mediaID: string, seasonNumberOrSignal?: number | AbortSignal, signal?: AbortSignal) {
-	const seasonNumber = typeof seasonNumberOrSignal === 'number' ? seasonNumberOrSignal : undefined
-	const requestSignal = typeof seasonNumberOrSignal === 'number' ? signal : seasonNumberOrSignal
+export function getEpisodeProgress(mediaID: string, seasonNumber: number, signal?: AbortSignal) {
 	return requestJSON<SeriesProgress>(
 		`/api/v1/records/${encodeURIComponent(mediaID)}/progress${roundScopeQuery(seasonNumber)}`,
-		requestSignal ? { signal: requestSignal } : undefined,
+		signal ? { signal } : undefined,
 	)
 }
 
@@ -488,16 +438,11 @@ export type UpdateEpisodeProgressPayload = {
   totalEpisodes?: number
 }
 
-export function updateEpisodeProgress(mediaID: string, seasonNumber: number, payload: UpdateEpisodeProgressPayload): Promise<SeriesProgress>
-export function updateEpisodeProgress(mediaID: string, payload: UpdateEpisodeProgressPayload): Promise<SeriesProgress>
 export function updateEpisodeProgress(
 	mediaID: string,
-	seasonNumberOrPayload: number | UpdateEpisodeProgressPayload,
-	maybePayload?: UpdateEpisodeProgressPayload,
+	seasonNumber: number,
+	payload: UpdateEpisodeProgressPayload,
 ) {
-	const seasonNumber = typeof seasonNumberOrPayload === 'number' ? seasonNumberOrPayload : undefined
-	const payload = typeof seasonNumberOrPayload === 'number' ? maybePayload : seasonNumberOrPayload
-	if (!payload) throw new Error('Missing episode progress payload')
 	const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
 	return requestJSON<SeriesProgress>(`/api/v1/records/${encodeURIComponent(mediaID)}/progress${roundScopeQuery(seasonNumber)}`, {
     method: 'POST',

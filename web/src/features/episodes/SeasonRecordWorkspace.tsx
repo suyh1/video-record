@@ -4,6 +4,7 @@ import { useState } from 'react'
 
 import { getCurrentRound, getTMDBTV } from '../../api/client'
 import type { HouseholdMember } from '../../api/types'
+import { RewatchSection } from '../records/RewatchSection'
 import { RoundRecordForm } from '../records/RoundRecordForm'
 import { EpisodeProgress } from './EpisodeProgress'
 import { regularSeasons, selectActiveSeason } from './episodeCatalog'
@@ -76,7 +77,6 @@ export function SeasonRecordWorkspace({
       <div className="season-workspace-toolbar">
         <div>
           <h2 id="season-workspace-heading">按季记录</h2>
-          <p>当前季的进度与私人记录相互独立</p>
         </div>
         <label className="episode-season-select">
           <span>选择季</span>
@@ -122,6 +122,15 @@ export function SeasonRecordWorkspace({
           ) : null}
         </aside>
       </div>
+      {activeRound?.data ? (
+        <RewatchSection
+          round={activeRound.data}
+          onRewatched={(saved) => queryClient.setQueryData(
+            ['current-round', mediaId, activeSeason],
+            saved,
+          )}
+        />
+      ) : null}
     </section>
   )
 }

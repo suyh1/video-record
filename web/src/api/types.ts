@@ -103,18 +103,6 @@ export type MediaDetails = {
   genres: string[]
 }
 
-export type WatchEvent = {
-  id: string
-  mediaId: string
-  episodeId?: string
-  watchedAt: string
-  viewingMethod?: string
-  source: 'manual' | 'confirmed_import' | 'confirmed_sync' | 'external_default'
-  externalEventId?: string
-  completion: number
-  note?: string
-}
-
 export type EpisodeProgressItem = {
   id: string
   sourceId?: string

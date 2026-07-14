@@ -1,25 +1,24 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Star } from 'lucide-react'
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import {
+  getCurrentRound,
   getHouseholdParticipants,
   getMedia,
   getRecord,
   getTMDBCredits,
   getTMDBMovie,
   getTMDBTV,
-  getWatchEvents,
 } from '../../api/client'
-import type { RecordState, TMDBMovieDetails, TMDBTVDetails } from '../../api/types'
+import type { CurrentRound, RecordState, TMDBMovieDetails, TMDBTVDetails } from '../../api/types'
 import { CollectionPicker } from '../collections/CollectionPicker'
 import { SeasonRecordWorkspace } from '../episodes/SeasonRecordWorkspace'
 import { HouseholdSharedRecords } from '../records/HouseholdSharedRecords'
-import { QuickRecordForm } from '../records/QuickRecordForm'
 import { RecordSharingEditor } from '../records/RecordSharingEditor'
 import { RecordTagsEditor } from '../records/RecordTagsEditor'
-import { WatchHistory } from '../records/WatchHistory'
+import { RewatchSection } from '../records/RewatchSection'
+import { RoundRecordForm } from '../records/RoundRecordForm'
 import { CastStrip } from './CastStrip'
 import { MediaHero } from './MediaHero'
 import { TMDBLinker } from './TMDBLinker'
@@ -38,10 +37,10 @@ export function MediaDetailsPage() {
     queryFn: ({ signal }) => getRecord(mediaId, signal),
     enabled: Boolean(mediaId),
   })
-  const events = useQuery({
-    queryKey: ['watch-events', mediaId],
-    queryFn: ({ signal }) => getWatchEvents(mediaId, signal),
-    enabled: Boolean(mediaId && media.data?.mediaType === 'movie'),
+  const movieRound = useQuery({
+    queryKey: ['current-round', mediaId, 'movie'],
+    queryFn: ({ signal }) => getCurrentRound(mediaId, undefined, signal),
+    enabled: media.data?.mediaType === 'movie',
   })
   const participants = useQuery({
     queryKey: ['household-participants'],
@@ -63,10 +62,10 @@ export function MediaDetailsPage() {
     enabled: Boolean(tmdbID && mediaType),
   })
 
-  const eventsPending = media.data?.mediaType === 'movie' && events.isPending
-  const eventsError = media.data?.mediaType === 'movie' && events.isError
-  if (media.isPending || record.isPending || eventsPending) return <DetailsSkeleton />
-  if (media.isError || record.isError || eventsError) {
+  const movieRoundPending = media.data?.mediaType === 'movie' && movieRound.isPending
+  const movieRoundError = media.data?.mediaType === 'movie' && movieRound.isError
+  if (media.isPending || record.isPending || movieRoundPending) return <DetailsSkeleton />
+  if (media.isError || record.isError || movieRoundError) {
     return (
       <div className="page page-error" role="alert">
         <h1>无法打开影视详情</h1>
@@ -75,16 +74,8 @@ export function MediaDetailsPage() {
     )
   }
 
-  const savedRecord = (nextRecord: RecordState) => {
-    queryClient.setQueryData(['record', mediaId], nextRecord)
-    void queryClient.invalidateQueries({ queryKey: ['watch-events', mediaId] })
-  }
-  const updateVersion = (version: number) => queryClient.setQueryData<RecordState>(
-    ['record', mediaId],
-    (current) => current ? { ...current, version } : current,
-  )
   const updateProfileVersion = (version: number) => {
-    updateVersion(version)
+    queryClient.setQueryData<RecordState>(['record', mediaId], (current) => current ? { ...current, version } : current)
     queryClient.setQueriesData({ queryKey: ['current-round', mediaId] }, (current: unknown) => {
       if (!current || typeof current !== 'object') return current
       return { ...current, profileVersion: version }
@@ -103,7 +94,17 @@ export function MediaDetailsPage() {
       ) : null}
     </details>
   )
-  const movieEvents = events.data ?? []
+  const savedMovieRound = (saved: CurrentRound) => {
+    queryClient.setQueryData(['current-round', mediaId, 'movie'], saved)
+    queryClient.setQueryData<RecordState>(['record', mediaId], (current) => current ? {
+      ...current,
+      status: saved.status,
+      rating: saved.rating,
+      note: saved.note,
+      watchedAt: saved.watchedAt,
+      viewingMethod: saved.viewingMethod,
+    } : current)
+  }
 
   return (
     <div className="page media-details-page">
@@ -129,35 +130,20 @@ export function MediaDetailsPage() {
           participants={participants.data ?? []}
           organizing={organizing}
         />
-      ) : <div className="media-details-layout">
-        <aside className="personal-record-panel" aria-labelledby="personal-record-heading">
-          <div className="details-section-heading">
-            <div><h2 id="personal-record-heading">个人记录</h2><p>评分和私人笔记仅自己可见</p></div>
-            {record.data.rating !== null ? (
-              <span className="personal-rating"><Star aria-hidden="true" size={16} />{record.data.rating.toFixed(1)} / 10</span>
-            ) : null}
-          </div>
-          {record.data.note ? <p className="personal-note">{record.data.note}</p> : null}
-          <QuickRecordForm
-            record={record.data}
-            now={new Date()}
-            participants={participants.data ?? []}
-            onSaved={savedRecord}
-            onRewatched={() => void queryClient.invalidateQueries({ queryKey: ['watch-events', mediaId] })}
-          />
-
-          {organizing(record.data.version)}
-        </aside>
-
-        <div className="media-details-primary">
-          <section className="details-section" aria-labelledby="history-heading">
-            <div className="details-section-heading">
-              <div><h2 id="history-heading">观看历史</h2><p>{movieEvents.length} 次记录</p></div>
-            </div>
-            <WatchHistory mediaID={mediaId} events={movieEvents} />
-          </section>
-        </div>
-      </div>}
+      ) : movieRound.data ? (
+        <section className="movie-record-workspace">
+          <aside className="personal-record-panel movie-record-panel" aria-label="个人记录">
+            <RoundRecordForm
+              round={movieRound.data}
+              now={new Date()}
+              participants={participants.data ?? []}
+              onSaved={savedMovieRound}
+            />
+            {organizing(movieRound.data.profileVersion)}
+          </aside>
+          <RewatchSection round={movieRound.data} onRewatched={savedMovieRound} />
+        </section>
+      ) : null}
     </div>
   )
 }
