@@ -10,11 +10,78 @@ import {
 
 test('has no blocking WCAG 2.2 AA violations on major pages', async ({ page }) => {
   await login(page)
-  for (const path of ['/', '/library', '/calendar', '/stats', '/settings', '/settings/sync', '/media/e2e-series']) {
+  for (const path of ['/', '/library', '/calendar', '/stats', '/settings', '/settings/sync', '/media/e2e-series', '/missing-archive']) {
     await page.goto(path)
     await expect(page.locator('main')).toBeVisible()
     if (path === '/media/e2e-series') await expect(page.getByText('低潮线')).toBeVisible()
     await expectNoBlockingA11yViolations(page)
+  }
+})
+
+test('keeps ordinary and immersive navigation stable across responsive viewports', async ({ page }) => {
+  await login(page)
+
+  for (const viewport of detailViewports) {
+    await page.setViewportSize(viewport)
+
+    await page.goto('/library')
+    const ordinaryHeader = page.getByRole('banner', { name: '应用导航' })
+    const primaryNavigation = page.getByRole('navigation', { name: '主导航' })
+    const mobileNavigation = page.getByRole('navigation', { name: '移动导航' })
+    await expect(ordinaryHeader).toHaveClass(/solid-header/)
+    await expect(ordinaryHeader).not.toHaveClass(/immersive-header/)
+    await expect(ordinaryHeader).toHaveCSS('height', viewport.width < 768 ? '56px' : '64px')
+    const ordinaryLayout = await page.locator('#main-content').evaluate((main) => {
+      const header = document.querySelector<HTMLElement>('.app-header')
+      if (!header) throw new Error('Application header is missing')
+      return {
+        headerBottom: header.getBoundingClientRect().bottom,
+        mainTop: main.getBoundingClientRect().top,
+      }
+    })
+    expect(ordinaryLayout.mainTop).toBeGreaterThanOrEqual(ordinaryLayout.headerBottom)
+
+    if (viewport.width < 768) {
+      await expect(primaryNavigation).toBeHidden()
+      await expect(mobileNavigation).toBeVisible()
+      await expect(page.getByRole('link', { name: 'video-record 首页' })).toBeVisible()
+      await expect(ordinaryHeader.getByRole('button', { name: '记录', exact: true })).toBeVisible()
+      const clearance = await page.locator('#main-content').evaluate((main) => {
+        const mobile = document.querySelector<HTMLElement>('.mobile-navigation')
+        if (!mobile) throw new Error('Mobile navigation is missing')
+        return {
+          navigationHeight: mobile.getBoundingClientRect().height,
+          paddingBottom: Number.parseFloat(getComputedStyle(main).paddingBottom),
+        }
+      })
+      expect(clearance.paddingBottom).toBeGreaterThanOrEqual(clearance.navigationHeight)
+    } else {
+      await expect(primaryNavigation).toBeVisible()
+      await expect(mobileNavigation).toBeHidden()
+      for (const name of ['首页', '影库', '日历', '统计', '设置']) {
+        await expect(primaryNavigation.getByRole('link', { name, exact: true })).toBeVisible()
+      }
+    }
+    await expectNoHorizontalOverflow(page)
+    await expectNoFixedElementOverlap(page)
+
+    await page.goto('/')
+    const immersiveHeader = page.getByRole('banner', { name: '应用导航' })
+    await expect(immersiveHeader).toHaveClass(/immersive-header/)
+    await expect(immersiveHeader).not.toHaveClass(/is-scrolled/)
+    const immersiveLayout = await page.locator('#main-content').evaluate((main) => {
+      const header = document.querySelector<HTMLElement>('.app-header')
+      if (!header) throw new Error('Application header is missing')
+      return {
+        headerBottom: header.getBoundingClientRect().bottom,
+        mainTop: main.getBoundingClientRect().top,
+      }
+    })
+    expect(immersiveLayout.mainTop).toBeLessThan(immersiveLayout.headerBottom)
+    await page.evaluate(() => window.scrollTo(0, 40))
+    await expect(immersiveHeader).toHaveClass(/is-scrolled/)
+    await expectNoHorizontalOverflow(page)
+    await expectNoFixedElementOverlap(page)
   }
 })
 
@@ -188,6 +255,8 @@ test('supports keyboard navigation, 200 percent zoom, and reduced motion', async
   await expect(primaryNavigation).toBeVisible()
   await page.keyboard.press('Tab')
   await page.keyboard.press('Tab')
+  await expect(page.getByRole('link', { name: 'video-record 首页' })).toBeFocused()
+  await page.keyboard.press('Tab')
   await expect(primaryNavigation.getByRole('link', { name: '首页', exact: true })).toBeFocused()
   for (const name of ['影库', '日历', '统计', '设置']) {
     await page.keyboard.press('Tab')
@@ -198,15 +267,22 @@ test('supports keyboard navigation, 200 percent zoom, and reduced motion', async
 
   await page.reload()
   await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible()
-  for (let index = 0; index < 7; index += 1) await page.keyboard.press('Tab')
+  for (let index = 0; index < 8; index += 1) await page.keyboard.press('Tab')
   const dialogSearch = page.getByRole('dialog', { name: '搜索影视' }).getByRole('searchbox', { name: '搜索影视' })
   await expect(dialogSearch).toBeFocused()
   await dialogSearch.fill('静默轨道')
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog', { name: '搜索影视' })).toHaveCount(0)
+  expect(await page.evaluate(() => ({
+    ariaLabel: document.activeElement?.getAttribute('aria-label'),
+    tagName: document.activeElement?.tagName,
+  }))).toEqual({ ariaLabel: '搜索影视', tagName: 'INPUT' })
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('banner', { name: '应用导航' }).getByRole('button', { name: '记录', exact: true })).toBeFocused()
 
   await page.evaluate(() => { document.documentElement.style.zoom = '2' })
   await expectNoHorizontalOverflow(page)
+  await expectNoFixedElementOverlap(page)
   const duration = await page.locator('.nav-link').first().evaluate((element) => getComputedStyle(element).transitionDuration)
   expect(Number.parseFloat(duration)).toBeLessThanOrEqual(0.001)
 })

@@ -9,12 +9,13 @@ import {
   Settings,
   type LucideIcon,
 } from 'lucide-react'
-import { type FormEvent, useRef, useState } from 'react'
-import { BrowserRouter, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
 import { createMediaFromTMDB, getSetupStatus } from '../api/client'
 import type { MediaSearchResult } from '../api/types'
 import { BrandMark } from './BrandMark'
+import { NotFoundPage } from './NotFoundPage'
 import { CalendarPage } from '../features/calendar/CalendarPage'
 import { AuthGate } from '../features/auth/AuthGate'
 import { HomePage } from '../features/home/HomePage'
@@ -66,17 +67,57 @@ export function App() {
 }
 
 function ApplicationShell() {
-  const searchInput = useRef<HTMLInputElement>(null)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [headerScrolled, setHeaderScrolled] = useState(false)
+  const searchTrigger = useRef<HTMLElement | null>(null)
+  const restoreFocusTimer = useRef<number | null>(null)
+  const restoringSearchFocus = useRef(false)
+  const location = useLocation()
   const navigate = useNavigate()
+  const immersiveHeader = location.pathname === '/' || /^\/media\/[^/]+\/?$/.test(location.pathname)
 
-  const focusSearch = () => {
+  useEffect(() => {
+    if (!immersiveHeader) {
+      setHeaderScrolled(false)
+      return
+    }
+    const updateHeader = () => setHeaderScrolled(window.scrollY > 32)
+    updateHeader()
+    window.addEventListener('scroll', updateHeader, { passive: true })
+    return () => window.removeEventListener('scroll', updateHeader)
+  }, [immersiveHeader])
+
+  useEffect(() => () => {
+    if (restoreFocusTimer.current !== null) window.clearTimeout(restoreFocusTimer.current)
+  }, [])
+
+  const focusSearch = (trigger?: HTMLElement) => {
+    if (restoringSearchFocus.current) return
+    const activeElement = document.activeElement
+    searchTrigger.current = trigger
+      ?? (activeElement instanceof HTMLElement && activeElement !== document.body ? activeElement : null)
     setSearchOpen(true)
+  }
+
+  const closeSearch = () => {
+    const trigger = searchTrigger.current
+    setSearchOpen(false)
+    if (restoreFocusTimer.current !== null) window.clearTimeout(restoreFocusTimer.current)
+    restoreFocusTimer.current = window.setTimeout(() => {
+      restoreFocusTimer.current = null
+      if (!trigger?.isConnected) return
+      restoringSearchFocus.current = true
+      try {
+        trigger.focus()
+      } finally {
+        restoringSearchFocus.current = false
+      }
+    })
   }
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    setSearchOpen(true)
+    focusSearch()
   }
 
   const selectSearchResult = async (item: MediaSearchResult) => {
@@ -96,61 +137,58 @@ function ApplicationShell() {
         跳到主要内容
       </a>
 
-      <aside className="sidebar">
-        <Brand />
-        <PrimaryNavigation className="sidebar-navigation" />
-      </aside>
-
-      <div className="app-column">
-        <header className="topbar">
-          <div className="mobile-brand" aria-hidden="true">
-            <BrandMark size={22} />
-          </div>
+      <header
+        aria-label="应用导航"
+        className={`app-header ${immersiveHeader ? 'immersive-header' : 'solid-header'}${headerScrolled ? ' is-scrolled' : ''}`}
+      >
+        <div className="app-header-inner">
+          <Brand />
+          <PrimaryNavigation className="app-primary-navigation" />
           <form className="global-search" role="search" onSubmit={submitSearch}>
             <Search aria-hidden="true" size={18} strokeWidth={1.8} />
             <input
-              ref={searchInput}
               type="search"
               aria-label="搜索影视"
               placeholder="搜索电影或剧集"
               readOnly
-              onFocus={() => setSearchOpen(true)}
-              onClick={() => setSearchOpen(true)}
+              onFocus={(event) => focusSearch(event.currentTarget)}
+              onClick={(event) => focusSearch(event.currentTarget)}
             />
           </form>
-          <button className="record-button" type="button" onClick={() => setSearchOpen(true)}>
+          <button className="record-button" type="button" onClick={(event) => focusSearch(event.currentTarget)}>
             <Plus aria-hidden="true" size={18} strokeWidth={2} />
             <span>记录</span>
           </button>
-        </header>
+        </div>
+      </header>
 
-        <main id="main-content" className="main-content" tabIndex={-1}>
-          <Routes>
-            <Route path="/" element={<HomePage onSearch={() => setSearchOpen(true)} />} />
-            <Route path="/library" element={<LibraryPage onSearch={() => setSearchOpen(true)} />} />
-            <Route path="/media/:mediaId" element={<MediaDetailsPage />} />
-            <Route path="/calendar" element={<CalendarPage />} />
-            <Route path="/stats" element={<StatsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/settings/sync" element={<CandidateReviewPage />} />
-          </Routes>
-        </main>
-      </div>
+      <main id="main-content" className={`main-content${immersiveHeader ? ' immersive-content' : ''}`} tabIndex={-1}>
+        <Routes>
+          <Route path="/" element={<HomePage onSearch={() => focusSearch()} />} />
+          <Route path="/library" element={<LibraryPage onSearch={() => focusSearch()} />} />
+          <Route path="/media/:mediaId" element={<MediaDetailsPage />} />
+          <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/stats" element={<StatsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/sync" element={<CandidateReviewPage />} />
+          <Route path="*" element={<NotFoundPage onSearch={() => focusSearch()} />} />
+        </Routes>
+      </main>
 
       <MobileNavigation onSearch={focusSearch} />
-      <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} onSelect={selectSearchResult} />
+      <SearchDialog open={searchOpen} onClose={closeSearch} onSelect={selectSearchResult} />
     </div>
   )
 }
 
 function Brand() {
   return (
-    <div className="brand" aria-label="video-record">
+    <Link className="brand" to="/" aria-label="video-record 首页">
       <span className="brand-mark" aria-hidden="true">
         <BrandMark size={22} />
       </span>
       <span className="brand-name">video-record</span>
-    </div>
+    </Link>
   )
 }
 
@@ -167,7 +205,7 @@ function PrimaryNavigation({ className }: { className: string }) {
   )
 }
 
-function MobileNavigation({ onSearch }: { onSearch: () => void }) {
+function MobileNavigation({ onSearch }: { onSearch: (trigger: HTMLButtonElement) => void }) {
   const leadingItems = navigationItems.slice(0, 2)
   const trailingItems = navigationItems.slice(2)
 
@@ -176,7 +214,7 @@ function MobileNavigation({ onSearch }: { onSearch: () => void }) {
       {leadingItems.map((item) => (
         <MobileNavigationLink key={item.path} item={item} />
       ))}
-      <button className="mobile-nav-link search-trigger" type="button" onClick={onSearch}>
+      <button className="mobile-nav-link search-trigger" type="button" onClick={(event) => onSearch(event.currentTarget)}>
         <Search aria-hidden="true" size={20} strokeWidth={1.8} />
         <span>搜索</span>
       </button>
