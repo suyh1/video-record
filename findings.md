@@ -616,3 +616,10 @@
 - 首页 TMDB hero 不能直接复用允许自定义外链的通用 `mediaImageURL`；专用原始字符串 allowlist 必须限定相对 `w1280` 签名代理 URL，并在解析前拒绝空 fragment 与 CR/LF/TAB 规范化绕过。
 - 末集快速推进的 10 秒撤销窗口跨越 React Query、后端状态投影和组件生命周期；正确同步顺序是 next 立即更新 progress 与 all，watching 等 undo/timeout/unmount 的终态再 exact 刷新，并显式协调慢速 undo 与 pending next 卸载。
 - 图片成功不等于 header 可读；即使 hero 有暗色内容遮罩，顶部可能是雪景或白片头。`home-image-header` 必须提供与图片内容无关的全宽稳定深色表面，并用成功解码的纯白 PNG 逐项验证导航 4.5:1 对比度。
+- Task 10 的产品型界面复审准则已重新确认：娱乐感由 TMDB 海报、进度与选择状态承担；影库和搜索继续使用固定字号、熟悉控件、150–250ms 状态动效及单一强调色，避免装饰性动效、混排结果和重复的页面 eyebrow。移动两列必须保持标题、年份、状态与触屏入口稳定，不以 hover 作为唯一反馈。
+- Task 10 六张影库基线已由主控按 375/768/1440 明暗主题逐张检查：手机稳定两列且底部导航无遮挡，平板/桌面海报列宽受限，标题、元信息、状态、筛选选中态和片单创建入口均无溢出、横向滚动或仅 hover 可见的操作。
+- Task 10 首轮独立规格审查证明仅有“默认折叠”视觉不够：展开触发器被卸载后，取消/成功也会卸载当前焦点控件并把焦点落回 body。渐进披露必须同时维护动态 `aria-expanded`/`aria-controls` 与折叠后的触发器焦点恢复；完整 accessibility 旅程要先真实展开再检查输入尺寸。
+- Task 10 搜索质量审查确认三类异步边界必须显式协调：`query` 与 `debouncedQuery` 不一致时旧结果必须不可操作；自定义 mutation 的成功回调也要受 close epoch 保护；pending 时不能用原生 disabled 卸载结果焦点，失败后必须保留或恢复到原结果。
+- `customMutation.reset()` 只重置 observer 可见状态，不取消已经发出的 mutation，也不会阻止 hook 级 `onSuccess`；搜索词变化隐藏自定义表单时还必须显式失效对应 submission token/epoch，否则旧成功会沿用导航和最近搜索副作用。
+- 首页 image header 的 axe 低对比并非最终 token 错误，而是浅色到深色的 140ms 颜色/背景过渡穿过 1.96–2.09:1 的中间帧；只对未滚动 image-header 的导航与搜索禁用该过渡即可保持最终视觉和其他 header 状态不变。
+- Task 10 最终将普通结果选择与自定义创建拆为独立 epoch：普通结果保留 settled-query 语义，自定义提交在 query change/close/unmount 时失效；late success/error/pending 不再导航、写 recent 或污染重开表单。

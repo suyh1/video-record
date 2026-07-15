@@ -573,3 +573,10 @@
 - Task 9 个性化首页最终提交链为 `966d858`、`4f084d7`、`308af86`、`92e59ef`、`84f3623`；私人 hero、热门补足、白底降级、TV CTA、继续轨道、最近记录与视觉矩阵完成。
 - Task 9 规格复审关闭签名同源 hero、返回首页 header 状态与失败源精准重试差距；质量复审进一步关闭末集撤销、亮图 header 对比、自动 live 播报、快照计时器及慢速/卸载竞态。
 - Task 9 最终全量 Vitest 179/179、visual 9/9、typecheck、lint、build、API 漂移、diff check 与 Impeccable detector 均通过；最终质量审查 Critical/Important/Minor 均无，工作树干净。
+- 2026-07-15 续作恢复：`main` 基线为 `a729359`；Task 10 实现代理已按 TDD 开始 `MediaPoster` 图片失败降级，当前仅有该组件及其测试的未提交改动，规格与质量复审仍待实现提交后执行。
+- Task 10 实现提交为 `9758809`：海报失败降级、互斥影库/片单筛选、渐进片单创建、本地/TMDB 搜索分区、键盘导航和 sessionStorage 最近搜索已完成；实现者报告定向 25/25、全量 Vitest 198/198、visual 9/9、键盘/缩放链 10/10，主控已独立检查提交范围、diff check 与六张快照，正在执行独立规格复审。
+- Task 10 首轮规格复审未通过：完整 accessibility 为 19/21；片单取消/成功折叠后的焦点恢复与旧 E2E 旅程是两个 Important，首页全局搜索 placeholder 1.38:1 对比度虽非 Task 10 引入但仍阻断门禁，已交回原实现者按 TDD 修复。
+- Task 10 规格修复提交 `5422231` 已关闭片单焦点与 header 过渡对比度，复审规格通过；首轮质量审查随后以 Chromium 复现 3 个搜索异步 Important（旧结果窗口、关闭后自定义晚到导航、失败后焦点丢失），已交回实现者继续 TDD 修复。
+- Task 10 异步修复提交 `be2324a` 已关闭原 3 个质量问题；第二轮质量复审又复现 custom pending 时改 query 仍触发旧成功导航并写 recent，剩余 1 个 Important 已交回实现者继续 TDD。
+- Task 10 最终修复 `471485c` 以独立 custom submission epoch 关闭 query-change 迟到响应；最终质量复审 Critical/Important/Minor 均无，Ready to proceed。
+- Task 10 主控新鲜验证通过：37 文件 Vitest 204/204、typecheck、lint、production build、API 漂移、`git diff --check`、完整 accessibility 21/21、视觉非更新 9/9、Impeccable detector `[]`；六张影库快照已逐张检查，Task 10 完成。
