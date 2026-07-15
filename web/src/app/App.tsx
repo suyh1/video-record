@@ -82,6 +82,10 @@ function ApplicationShell() {
   const imageHomeHeader = location.pathname === '/' && homeHeroBackdropState === 'ready'
 
   useLayoutEffect(() => {
+    if (location.pathname !== '/') setHomeHeroBackdropState('loading')
+  }, [location.pathname])
+
+  useLayoutEffect(() => {
     if (navigationType !== 'POP') window.scrollTo({ behavior: 'auto', left: 0, top: 0 })
     setHeaderScrolled(immersiveHeader && window.scrollY > 32)
   }, [immersiveHeader, location.pathname, navigationType])

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { mediaImageURL } from './mediaImage'
+import { mediaImageURL, signedTMDBProxyImageURL } from './mediaImage'
 
 const signature = 'a'.repeat(64)
 const signedImage = `/api/v1/public/tmdb/images/w1280/tide-backdrop.png?expires=1784200000&signature=${signature}`
@@ -32,5 +32,32 @@ describe('mediaImageURL', () => {
   it('rejects an unsigned lookalike proxy path', () => {
     expect(mediaImageURL('/api/v1/public/tmdb/images/w1280/tide-backdrop.png')).toBeNull()
     expect(mediaImageURL(`/api/v1/public/tmdb/images/original/tide-backdrop.png?expires=1784200000&signature=${signature}`)).toBeNull()
+  })
+})
+
+describe('signedTMDBProxyImageURL', () => {
+  it('accepts only a signed relative w1280 TMDB proxy image', () => {
+    expect(signedTMDBProxyImageURL(signedImage)).toBe(signedImage)
+    expect(signedTMDBProxyImageURL(
+      `/api/v1/public/tmdb/images/w1280/tide-backdrop.webp?signature=${signature}&expires=1784200000`,
+    )).toContain('/api/v1/public/tmdb/images/w1280/tide-backdrop.webp')
+  })
+
+  it.each([
+    'https://media.example.test/hero.jpg',
+    `${window.location.origin}${signedImage}`,
+    `//${window.location.host}${signedImage}`,
+    signedImage.replace('/w1280/', '/w780/'),
+    signedImage.replace('tide-backdrop.png', 'folder/tide-backdrop.png'),
+    `${signedImage}&width=1280`,
+    `${signedImage}&expires=1784200001`,
+    `${signedImage}&signature=${signature}`,
+    `${signedImage}#`,
+    `${signedImage}#hero`,
+    signedImage.replace('?', '?\n'),
+    signedImage.replace('?', '?\r'),
+    signedImage.replace('?', '?\t'),
+  ])('rejects a non-canonical hero proxy source: %s', (source) => {
+    expect(signedTMDBProxyImageURL(source)).toBeNull()
   })
 })

@@ -15,7 +15,7 @@ import {
   type UpdateEpisodeProgressPayload,
 } from '../../api/client'
 import type { EpisodeProgressItem, EpisodeReference, MediaSearchResult, RecordStatus } from '../../api/types'
-import { mediaImageURL } from '../../lib/mediaImage'
+import { signedTMDBProxyImageURL } from '../../lib/mediaImage'
 import { findNextEpisode, mergeSeason, regularSeasons, selectActiveSeason } from '../episodes/episodeCatalog'
 import { MediaPoster } from '../media/MediaPoster'
 import { HomeHero, type HomeHeroBackdropState, type HomeHeroItem } from './HomeHero'
@@ -55,7 +55,7 @@ export function HomePage({ onHeroBackdropStateChange, onSearch }: {
   const privateDetailsPending = privateDetails.some((detail) => detail.isPending)
   const privateHeroItems = useMemo(() => privateCandidates.flatMap((item, index) => {
     const detail = privateDetails[index]?.data
-    const backdropURL = mediaImageURL(detail?.backdropPath)
+    const backdropURL = signedTMDBProxyImageURL(detail?.backdropPath)
     if (!detail || !backdropURL || !item.tmdbId) return []
     return [{
       id: item.tmdbId,
@@ -78,7 +78,7 @@ export function HomePage({ onHeroBackdropStateChange, onSearch }: {
   const heroItems = useMemo(() => {
     const seen = new Set(privateHeroItems.map((item) => `${item.mediaType}:${item.id}`))
     const popular = (highlights.data ?? []).flatMap((item) => {
-      const backdropURL = mediaImageURL(item.backdropURL)
+      const backdropURL = signedTMDBProxyImageURL(item.backdropURL)
       const key = `${item.mediaType}:${item.id}`
       if (!backdropURL || seen.has(key)) return []
       seen.add(key)
@@ -91,11 +91,9 @@ export function HomePage({ onHeroBackdropStateChange, onSearch }: {
     || (needsHighlights && highlights.isPending)
   const heroError = !heroLoading
     && heroItems.length === 0
-    && (continuing.isError || recent.isError || privateDetails.some((detail) => detail.isError) || highlights.isError)
+    && (privateDetails.some((detail) => detail.isError) || highlights.isError)
 
   const retryHero = () => {
-    void continuing.refetch()
-    void recent.refetch()
     privateDetails.forEach((detail) => {
       if (detail.isError) void detail.refetch()
     })

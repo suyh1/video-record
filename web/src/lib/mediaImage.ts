@@ -1,4 +1,5 @@
 const proxyImagePath = /^\/api\/v1\/public\/tmdb\/images\/(?:w300|w342|w780|w1280)\/[A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp)$/
+const signedHeroProxyImage = /^\/api\/v1\/public\/tmdb\/images\/w1280\/[A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp)\?(?:expires=\d+&signature=[a-f0-9]{64}|signature=[a-f0-9]{64}&expires=\d+)$/i
 const signaturePattern = /^[a-f0-9]{64}$/i
 
 export function mediaImageURL(source: string | null | undefined): string | null {
@@ -27,6 +28,10 @@ export function mediaImageURL(source: string | null | undefined): string | null 
   const hostname = normalizeHostname(parsed.hostname)
   if (hostname === 'image.tmdb.org' || hostname.endsWith('.image.tmdb.org')) return null
   return source
+}
+
+export function signedTMDBProxyImageURL(source: string | null | undefined): string | null {
+  return source && source === source.trim() && signedHeroProxyImage.test(source) ? source : null
 }
 
 function normalizeHostname(hostname: string) {

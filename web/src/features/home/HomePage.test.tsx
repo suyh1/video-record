@@ -72,6 +72,42 @@ describe('HomePage', () => {
     expect(highlightRequests).toBe(1)
   })
 
+  it('rejects a cross-origin private detail backdrop before image decoding', async () => {
+    const imageSources = installInstantImageMock()
+    const privateItem = libraryMovie('private-external', 302, '跨域私人背景', 'completed')
+    server.use(
+      http.get('*/api/v1/library', () => HttpResponse.json({ items: [privateItem], nextCursor: null })),
+      http.get('*/api/v1/tmdb/movie/302', () => HttpResponse.json({
+        ...movieDetails(privateItem),
+        backdropPath: 'https://media.example.test/hero.jpg',
+      })),
+      http.get('*/api/v1/public/tmdb/highlights', () => HttpResponse.json({ items: [] })),
+    )
+
+    renderWithQueryClient(<MemoryRouter><HomePage /></MemoryRouter>)
+
+    await waitFor(() => expect(screen.getByRole('region', { name: '首页主视觉' })).toHaveAttribute('data-backdrop-state', 'empty'))
+    expect(screen.queryByRole('heading', { level: 1, name: '跨域私人背景' })).not.toBeInTheDocument()
+    expect(imageSources).not.toContain('https://media.example.test/hero.jpg')
+  })
+
+  it('rejects a cross-origin popular backdrop before image decoding', async () => {
+    const imageSources = installInstantImageMock()
+    server.use(
+      http.get('*/api/v1/library', () => HttpResponse.json({ items: [], nextCursor: null })),
+      http.get('*/api/v1/public/tmdb/highlights', () => HttpResponse.json({ items: [{
+        ...popularHighlight(903, '跨域热门背景'),
+        backdropURL: 'https://media.example.test/hero.jpg',
+      }] })),
+    )
+
+    renderWithQueryClient(<MemoryRouter><HomePage /></MemoryRouter>)
+
+    await waitFor(() => expect(screen.getByRole('region', { name: '首页主视觉' })).toHaveAttribute('data-backdrop-state', 'empty'))
+    expect(screen.queryByRole('heading', { level: 1, name: '跨域热门背景' })).not.toBeInTheDocument()
+    expect(imageSources).not.toContain('https://media.example.test/hero.jpg')
+  })
+
   it('isolates continuing and popular errors while recent private records stay usable', async () => {
     installInstantImageMock()
     const recentItem = libraryMovie('recent-safe', 401, '仍可打开的记录', 'completed')
@@ -95,6 +131,63 @@ describe('HomePage', () => {
     expect(within(recentSection).getByRole('link', { name: /仍可打开的记录/ })).toHaveAttribute('href', '/media/recent-safe')
     expect(within(recentSection).queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByText('主视觉暂时无法加载')).not.toBeInTheDocument()
+  })
+
+  it('retries only the failed highlights source from the hero error', async () => {
+    let libraryRequests = 0
+    let highlightRequests = 0
+    server.use(
+      http.get('*/api/v1/library', () => {
+        libraryRequests += 1
+        return HttpResponse.json({ items: [], nextCursor: null })
+      }),
+      http.get('*/api/v1/public/tmdb/highlights', () => {
+        highlightRequests += 1
+        return HttpResponse.json({ code: 'tmdb_unavailable' }, { status: 502 })
+      }),
+    )
+    const user = userEvent.setup()
+
+    renderWithQueryClient(<MemoryRouter><HomePage /></MemoryRouter>)
+
+    await waitFor(() => expect(libraryRequests).toBe(2))
+    expect(highlightRequests).toBe(1)
+    await user.click(await screen.findByRole('button', { name: '重试主视觉' }))
+
+    await waitFor(() => expect(highlightRequests).toBe(2))
+    expect(libraryRequests).toBe(2)
+  })
+
+  it('retries only a failed private detail source from the hero error', async () => {
+    const privateItem = libraryMovie('private-retry', 402, '私人详情重试', 'completed')
+    let libraryRequests = 0
+    let detailRequests = 0
+    let highlightRequests = 0
+    server.use(
+      http.get('*/api/v1/library', () => {
+        libraryRequests += 1
+        return HttpResponse.json({ items: [privateItem], nextCursor: null })
+      }),
+      http.get('*/api/v1/tmdb/movie/402', () => {
+        detailRequests += 1
+        return HttpResponse.json({ code: 'tmdb_unavailable' }, { status: 502 })
+      }),
+      http.get('*/api/v1/public/tmdb/highlights', () => {
+        highlightRequests += 1
+        return HttpResponse.json({ items: [] })
+      }),
+    )
+    const user = userEvent.setup()
+
+    renderWithQueryClient(<MemoryRouter><HomePage /></MemoryRouter>)
+
+    await waitFor(() => expect(highlightRequests).toBe(1))
+    expect({ detailRequests, libraryRequests }).toEqual({ detailRequests: 1, libraryRequests: 2 })
+    await user.click(await screen.findByRole('button', { name: '重试主视觉' }))
+
+    await waitFor(() => expect(detailRequests).toBe(2))
+    expect(libraryRequests).toBe(2)
+    expect(highlightRequests).toBe(1)
   })
 
   it('loads the next episode only from the active current season round', async () => {
@@ -364,12 +457,23 @@ function popularHighlight(id: number, title: string) {
 }
 
 function installInstantImageMock() {
+  const sources: string[] = []
   class TestImage {
     fetchPriority = 'auto'
     onerror: ((event: Event) => void) | null = null
     onload: ((event: Event) => void) | null = null
-    src = ''
+    private source = ''
     decode = vi.fn(() => Promise.resolve())
+
+    get src() {
+      return this.source
+    }
+
+    set src(value: string) {
+      this.source = value
+      sources.push(value)
+    }
   }
   vi.stubGlobal('Image', TestImage)
+  return sources
 }
