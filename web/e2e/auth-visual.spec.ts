@@ -166,6 +166,35 @@ test('preserves password toggle focus by activation source', async ({ page }) =>
     const input = element as HTMLInputElement
     return { direction: input.selectionDirection, end: input.selectionEnd, start: input.selectionStart }
   })).toEqual({ direction: 'backward', end: 15, start: 8 })
+
+  await password.evaluate((element) => {
+    const input = element as HTMLInputElement
+    input.setSelectionRange(8, 15, 'forward')
+  })
+  await showPassword.evaluate((button) => {
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+  })
+  await expect(password).toHaveAttribute('type', 'password')
+  await expect.poll(() => password.evaluate((element) => {
+    const input = element as HTMLInputElement
+    return { direction: input.selectionDirection, end: input.selectionEnd, start: input.selectionStart }
+  })).toEqual({ direction: 'forward', end: 15, start: 8 })
+
+  await password.evaluate((element) => {
+    const input = element as HTMLInputElement
+    input.setSelectionRange(8, 15, 'forward')
+  })
+  await showPassword.evaluate((button) => {
+    for (let index = 0; index < 3; index += 1) {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+    }
+  })
+  await expect(password).toHaveAttribute('type', 'text')
+  await expect.poll(() => password.evaluate((element) => {
+    const input = element as HTMLInputElement
+    return { direction: input.selectionDirection, end: input.selectionEnd, start: input.selectionStart }
+  })).toEqual({ direction: 'forward', end: 15, start: 8 })
 })
 
 const viewports = [

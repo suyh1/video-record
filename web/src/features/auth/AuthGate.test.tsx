@@ -243,6 +243,55 @@ describe('AuthGate', () => {
     expect(password).toHaveProperty('selectionEnd', 15)
   })
 
+  it('keeps the original pointer selection across rapid toggles before the restoration frame', async () => {
+    const frames = new Map<number, FrameRequestCallback>()
+    let nextFrame = 1
+    const requestFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      const frame = nextFrame
+      nextFrame += 1
+      frames.set(frame, callback)
+      return frame
+    })
+    const cancelFrame = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((frame) => {
+      frames.delete(frame)
+    })
+    server.use(...closedInstanceHandlers())
+    renderWithQueryClient(<AuthGate><p>已登录</p></AuthGate>)
+
+    const password = await screen.findByLabelText<HTMLInputElement>('密码')
+    fireEvent.change(password, { target: { value: 'correct horse battery staple' } })
+    password.focus()
+    password.setSelectionRange(8, 15, 'forward')
+
+    fireEvent.click(screen.getByRole('button', { name: '显示密码' }), { detail: 1 })
+    password.setSelectionRange(0, 0, 'forward')
+    fireEvent.click(screen.getByRole('button', { name: '隐藏密码' }), { detail: 1 })
+    expect(password).toHaveAttribute('type', 'password')
+    flushLatestFrame(frames)
+    expect(password).toHaveFocus()
+    expect(password).toHaveValue('correct horse battery staple')
+    expect(password).toHaveProperty('selectionStart', 8)
+    expect(password).toHaveProperty('selectionEnd', 15)
+    expect(password).toHaveProperty('selectionDirection', 'forward')
+
+    password.setSelectionRange(8, 15, 'forward')
+    fireEvent.click(screen.getByRole('button', { name: '显示密码' }), { detail: 1 })
+    password.setSelectionRange(0, 0, 'forward')
+    fireEvent.click(screen.getByRole('button', { name: '隐藏密码' }), { detail: 1 })
+    password.setSelectionRange(0, 0, 'forward')
+    fireEvent.click(screen.getByRole('button', { name: '显示密码' }), { detail: 1 })
+    expect(password).toHaveAttribute('type', 'text')
+    flushLatestFrame(frames)
+    expect(password).toHaveFocus()
+    expect(password).toHaveValue('correct horse battery staple')
+    expect(password).toHaveProperty('selectionStart', 8)
+    expect(password).toHaveProperty('selectionEnd', 15)
+    expect(password).toHaveProperty('selectionDirection', 'forward')
+
+    requestFrame.mockRestore()
+    cancelFrame.mockRestore()
+  })
+
   it('keeps keyboard focus on the password toggle for Enter and Space activation', async () => {
     const user = userEvent.setup()
     server.use(...closedInstanceHandlers())
@@ -430,3 +479,11 @@ describe('AuthGate', () => {
     expect(statusAttempts).toBe(2)
   })
 })
+
+function flushLatestFrame(frames: Map<number, FrameRequestCallback>) {
+  const latest = Math.max(...frames.keys())
+  const callback = frames.get(latest)
+  expect(callback).toBeDefined()
+  frames.delete(latest)
+  act(() => callback!(performance.now()))
+}

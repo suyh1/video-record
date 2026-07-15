@@ -303,18 +303,23 @@ function PasswordField({ autoComplete, id, label, minLength, onChange, toggleLab
   const pendingPointerRestore = useRef<{
     direction: 'backward' | 'forward' | 'none' | null
     end: number | null
+    generation: number
     start: number | null
   } | null>(null)
+  const restoreGeneration = useRef(0)
   const actionLabel = visible ? '隐藏' : '显示'
   const accessibleLabel = `${actionLabel}${toggleLabel}`
 
   const toggleVisibility = (event: MouseEvent<HTMLButtonElement>) => {
     if (event.detail > 0 && inputRef.current) {
-      pendingPointerRestore.current = {
+      restoreGeneration.current += 1
+      const snapshot = pendingPointerRestore.current ?? {
         direction: inputRef.current.selectionDirection,
         end: inputRef.current.selectionEnd,
+        generation: restoreGeneration.current,
         start: inputRef.current.selectionStart,
       }
+      pendingPointerRestore.current = { ...snapshot, generation: restoreGeneration.current }
     }
     setVisible((current) => !current)
   }
@@ -322,20 +327,27 @@ function PasswordField({ autoComplete, id, label, minLength, onChange, toggleLab
   useLayoutEffect(() => {
     const pending = pendingPointerRestore.current
     if (!pending) return
-    pendingPointerRestore.current = null
+    const generation = pending.generation
     const frame = window.requestAnimationFrame(() => {
+      if (pendingPointerRestore.current?.generation !== generation) return
       const input = inputRef.current
       if (!input) return
       input.focus()
-      if (pending.start === null || pending.end === null) return
-      try {
-        input.setSelectionRange(pending.start, pending.end, pending.direction ?? 'none')
-      } catch {
-        // Selection APIs are unavailable for some input types.
+      if (pending.start !== null && pending.end !== null) {
+        try {
+          input.setSelectionRange(pending.start, pending.end, pending.direction ?? 'none')
+        } catch {
+          // Selection APIs are unavailable for some input types.
+        }
       }
+      if (pendingPointerRestore.current?.generation === generation) pendingPointerRestore.current = null
     })
     return () => window.cancelAnimationFrame(frame)
   }, [visible])
+
+  useLayoutEffect(() => () => {
+    pendingPointerRestore.current = null
+  }, [])
 
   return (
     <div className="auth-field">
