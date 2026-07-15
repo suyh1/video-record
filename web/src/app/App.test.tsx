@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,11 +14,18 @@ describe('App', () => {
     )
   })
 
-  it('provides the primary navigation and global search', async () => {
+  it('provides an accessible current page and operable global record action', async () => {
+    const user = userEvent.setup()
     render(<App />)
 
-    expect(await screen.findByRole('navigation', { name: '主导航' })).toBeVisible()
+    const navigation = await screen.findByRole('navigation', { name: '主导航' })
+    expect(navigation).toBeVisible()
+    expect(within(navigation).getByRole('link', { name: '首页' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('searchbox', { name: '搜索影视' })).toBeVisible()
+    const recordAction = screen.getByRole('button', { name: '记录' })
+    expect(recordAction).toBeEnabled()
+    await user.click(recordAction)
+    expect(screen.getByRole('dialog', { name: '搜索影视' })).toBeVisible()
     expect(document.querySelectorAll('[data-brand-mark="film-archive"]')).toHaveLength(2)
   })
 
