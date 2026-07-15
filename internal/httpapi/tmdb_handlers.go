@@ -302,7 +302,15 @@ func signedTMDBImageURL(client *tmdb.Client, size, imagePath string, now time.Ti
 	return buildPublicTMDBImageURL(size, imagePath, expires, signature)
 }
 
-func proxiedTMDBOrCustomImageURL(client *tmdb.Client, size, imagePath string, now time.Time) string {
+func sourceAwareMediaImageURL(
+	client *tmdb.Client,
+	size, imagePath string,
+	tmdbID *int,
+	now time.Time,
+) string {
+	if tmdbID != nil {
+		return signedTMDBImageURL(client, size, imagePath, now)
+	}
 	parsed, err := url.Parse(imagePath)
 	if err == nil && (strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")) &&
 		parsed.Host != "" {
@@ -311,7 +319,7 @@ func proxiedTMDBOrCustomImageURL(client *tmdb.Client, size, imagePath string, no
 		}
 		return imagePath
 	}
-	return signedTMDBImageURL(client, size, imagePath, now)
+	return ""
 }
 
 func handlerTime(now func() time.Time) time.Time {

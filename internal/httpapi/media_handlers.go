@@ -152,8 +152,12 @@ func (handlers mediaHandlers) newMediaItemResponse(item media.Item) mediaItemRes
 		ID: item.ID, TMDBID: item.TMDBID, MediaType: item.MediaType, Title: item.Title, Overview: item.Overview,
 		ExternalTitle: item.ExternalTitle, ExternalOverview: item.ExternalOverview,
 		OriginalTitle: item.OriginalTitle, ReleaseDate: item.ReleaseDate,
-		PosterPath:     proxiedTMDBOrCustomImageURL(handlers.tmdb, "w342", item.PosterPath, handlerTime(handlers.now)),
-		BackdropPath:   proxiedTMDBOrCustomImageURL(handlers.tmdb, "w1280", item.BackdropPath, handlerTime(handlers.now)),
+		PosterPath: sourceAwareMediaImageURL(
+			handlers.tmdb, "w342", item.PosterPath, item.TMDBID, handlerTime(handlers.now),
+		),
+		BackdropPath: sourceAwareMediaImageURL(
+			handlers.tmdb, "w1280", item.BackdropPath, item.TMDBID, handlerTime(handlers.now),
+		),
 		RuntimeMinutes: item.RuntimeMinutes, Genres: item.Genres,
 	}
 }

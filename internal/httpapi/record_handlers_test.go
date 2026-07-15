@@ -151,7 +151,7 @@ func TestRecordHandlerClearsExplicitNullRatingAndNote(t *testing.T) {
 }
 
 func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
-	router, cookie, csrfToken, mediaID, _, db := newRecordsTestRouter(t)
+	router, cookie, csrfToken, mediaID, recordService, db := newRecordsTestRouter(t)
 	roundURL := "http://example.test/api/v1/records/" + mediaID + "/rounds/current"
 	headers := map[string]string{
 		"Cookie": cookie.String(), "Origin": "http://example.test", "X-CSRF-Token": csrfToken,
@@ -172,7 +172,21 @@ func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
 	require.Contains(t, read.Body.String(), `"watchedAt":"2026-07-13T20:30:00Z"`)
 	require.Contains(t, read.Body.String(), `"viewingMethod":"家庭投影"`)
 
-	library := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/library?status=completed", nil, map[string]string{
+	mediaService := media.NewService(media.NewRepository(db))
+	untrustedTMDBItem, err := mediaService.UpsertExternal(context.Background(), media.ExternalSnapshot{
+		Source: "tmdb", SourceID: "999999", MediaType: media.MediaTypeMovie,
+		Title: "测试不可信 TMDB 海报", PosterPath: "https://cdn.example.test/untrusted-library.jpg",
+	})
+	require.NoError(t, err)
+	_, err = recordService.UpdateRound(context.Background(), records.UpdateRoundInput{
+		Scope: records.RoundScope{
+			UserID: currentUserID(t, router, cookie), MediaID: untrustedTMDBItem.ID,
+		},
+		Status: records.StatusWishlist, Source: records.SourceManual, ExpectedVersion: 0,
+	})
+	require.NoError(t, err)
+
+	library := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/library", nil, map[string]string{
 		"Cookie": cookie.String(),
 	})
 	require.Equal(t, http.StatusOK, library.Code)
@@ -184,14 +198,19 @@ func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
 		Items []catalogItemResponse `json:"items"`
 	}
 	require.NoError(t, json.Unmarshal(library.Body.Bytes(), &libraryBody))
-	require.Len(t, libraryBody.Items, 1)
-	require.NotNil(t, libraryBody.Items[0].PosterPath)
-	requireSignedTMDBImageURL(t, *libraryBody.Items[0].PosterPath, "w342", "library.jpg")
+	require.Len(t, libraryBody.Items, 2)
+	libraryItemsByTitle := make(map[string]catalogItemResponse, len(libraryBody.Items))
+	for _, item := range libraryBody.Items {
+		libraryItemsByTitle[item.Title] = item
+	}
+	require.NotNil(t, libraryItemsByTitle["测试电影"].PosterPath)
+	requireSignedTMDBImageURL(t, *libraryItemsByTitle["测试电影"].PosterPath, "w342", "library.jpg")
+	require.NotNil(t, libraryItemsByTitle["测试不可信 TMDB 海报"].TMDBID)
+	require.Nil(t, libraryItemsByTitle["测试不可信 TMDB 海报"].PosterPath)
 	require.NotContains(t, library.Body.String(), `"posterPath":"/library.jpg"`)
-	require.NotContains(t, library.Body.String(), "https://image.tmdb.org")
+	require.NotContains(t, library.Body.String(), "cdn.example.test")
 
-	mediaService := media.NewService(media.NewRepository(db))
-	_, err := mediaService.CreateCustom(context.Background(), media.CreateCustomInput{
+	_, err = mediaService.CreateCustom(context.Background(), media.CreateCustomInput{
 		MediaType: media.MediaTypeMovie, Title: "测试空海报",
 	})
 	require.NoError(t, err)
@@ -224,18 +243,20 @@ func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
 		Items []catalogItemResponse `json:"items"`
 	}
 	require.NoError(t, json.Unmarshal(search.Body.Bytes(), &searchBody))
-	require.Len(t, searchBody.Items, 4)
+	require.Len(t, searchBody.Items, 5)
 	itemsByTitle := make(map[string]catalogItemResponse, len(searchBody.Items))
 	for _, item := range searchBody.Items {
 		itemsByTitle[item.Title] = item
 	}
 	require.NotNil(t, itemsByTitle["测试电影"].PosterPath)
 	requireSignedTMDBImageURL(t, *itemsByTitle["测试电影"].PosterPath, "w342", "library.jpg")
+	require.NotNil(t, itemsByTitle["测试不可信 TMDB 海报"].TMDBID)
+	require.Nil(t, itemsByTitle["测试不可信 TMDB 海报"].PosterPath)
 	require.Nil(t, itemsByTitle["测试空海报"].PosterPath)
 	require.NotNil(t, itemsByTitle["测试绝对海报"].PosterPath)
 	require.Equal(t, "https://cdn.example.test/custom-library.jpg", *itemsByTitle["测试绝对海报"].PosterPath)
 	require.Nil(t, itemsByTitle["测试非法海报"].PosterPath)
-	require.NotContains(t, search.Body.String(), "https://image.tmdb.org")
+	require.NotContains(t, search.Body.String(), "untrusted-library.jpg")
 
 	events := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/records/"+mediaID+"/events", nil, map[string]string{
 		"Cookie": cookie.String(),

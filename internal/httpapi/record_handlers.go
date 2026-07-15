@@ -260,7 +260,9 @@ func (handlers recordHandlers) newCatalogResponses(items []records.CatalogItem) 
 	for _, item := range items {
 		var posterPath *string
 		if item.PosterPath != "" {
-			value := proxiedTMDBOrCustomImageURL(handlers.tmdb, "w342", item.PosterPath, handlerTime(handlers.now))
+			value := sourceAwareMediaImageURL(
+				handlers.tmdb, "w342", item.PosterPath, item.TMDBID, handlerTime(handlers.now),
+			)
 			if value != "" {
 				posterPath = &value
 			}

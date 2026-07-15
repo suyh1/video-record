@@ -85,9 +85,20 @@ func TestMediaHandlersCreateReadAndLinkTMDBItems(t *testing.T) {
 	require.Contains(t, linked.Body.String(), `"tmdbId":329866`)
 	var linkedBody mediaItemResponse
 	require.NoError(t, json.Unmarshal(linked.Body.Bytes(), &linkedBody))
-	requireSignedTMDBImageURL(t, linkedBody.PosterPath, "w342", "updated.jpg")
+	require.Empty(t, linkedBody.PosterPath)
 	require.Empty(t, linkedBody.BackdropPath)
-	require.NotContains(t, linked.Body.String(), "https://image.tmdb.org")
+	require.NotContains(t, linked.Body.String(), "cdn.example.test")
+
+	linkedRead := performJSONRequest(router, http.MethodGet,
+		"http://example.test/api/v1/media/"+customBody.ID, nil,
+		map[string]string{"Cookie": cookie.String()})
+	require.Equal(t, http.StatusOK, linkedRead.Code)
+	var linkedReadBody mediaItemResponse
+	require.NoError(t, json.Unmarshal(linkedRead.Body.Bytes(), &linkedReadBody))
+	require.NotNil(t, linkedReadBody.TMDBID)
+	require.Empty(t, linkedReadBody.PosterPath)
+	require.Empty(t, linkedReadBody.BackdropPath)
+	require.NotContains(t, linkedRead.Body.String(), "cdn.example.test")
 
 	customImageItem, err := mediaService.CreateCustom(context.Background(), media.CreateCustomInput{
 		MediaType: media.MediaTypeMovie, Title: "自定义图片",
@@ -123,7 +134,7 @@ func newMediaTestRouter(t *testing.T) (http.Handler, *http.Cookie, string, *medi
 		case "/movie/329865":
 			_, _ = w.Write([]byte(`{"id":329865,"title":"降临","original_title":"Arrival","release_date":"2016-11-10","overview":"外部简介","poster_path":"/arrival.jpg","backdrop_path":"/arrival-bg.jpg","runtime":116,"genres":[{"id":18,"name":"剧情"}]}`))
 		case "/movie/329866":
-			_, _ = w.Write([]byte(`{"id":329866,"title":"外部更新","original_title":"Updated","release_date":"2016-11-10","overview":"外部简介 v2","poster_path":"/updated.jpg","backdrop_path":"https://image.tmdb.org/t/p/w1280/invalid.jpg"}`))
+			_, _ = w.Write([]byte(`{"id":329866,"title":"外部更新","original_title":"Updated","release_date":"2016-11-10","overview":"外部简介 v2","poster_path":"https://cdn.example.test/untrusted-poster.jpg","backdrop_path":"http://cdn.example.test/untrusted-backdrop.jpg"}`))
 		default:
 			http.NotFound(w, r)
 		}
