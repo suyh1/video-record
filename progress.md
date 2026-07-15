@@ -7,6 +7,15 @@
 - 已确定按用户指定方案在展示层复用当前季目录，以季号和集号匹配归档条目。
 - 已写入 `docs/plans/2026-07-15-rewatch-episode-title-design.md`；下一步按 TDD 先补能稳定复现该差异的组件红测。
 - 已写入 `docs/plans/2026-07-15-rewatch-episode-title-implementation.md`，拆为标题合并、活动季装配和最终验证三个任务。
+- Task 1 RED 已确认：归档 API 返回空名称、目录提供“重逢”时，弹窗仍显示“未命名”，5 项组件测试中仅新增断言失败。
+- Task 1 GREEN：`RewatchSection` 按季号和集号优先使用目录标题，保留本地名称与“未命名”兜底；定向测试 5/5 通过。
+- Task 2 RED 已确认：同一 `SeasonRecordWorkspace` 内当前列表已显示 TMDB 标题，归档弹窗仍显示 `S01E01 未命名`，新增页面级断言准确失败。
+- Task 2 GREEN：活动季用与 `EpisodeProgress` 相同的 React Query key 订阅 TMDB season catalog 并传入多刷区域；两个相关测试文件 7/7 通过。
+- 前端全量验证通过：29 个测试文件 76/76、TypeScript、oxlint、生产构建和 `git diff --check` 均退出 0。
+- 本地浏览器成功刷新并登录现有测试实例，但该账号影库当前仅有 1 部电影，没有剧集归档可重走原截图场景；继续复用现有 E2E 剧集种子进行真实页面验收。
+- 已扩展真实剧集 E2E：第二季归档弹窗必须显示“重返北堤”“潮汐尽头”且不得含“未命名”，既有两条秒级观看时间断言保留。
+- 完整 Playwright 套件 16/16 通过；临时停用的 `18081` 验收后端已按原 `DATA_DIR=/tmp/video-record-live-20260714` 恢复，`5174` 影库加载正常且浏览器控制台无错误。
+- 最终新鲜门禁再次通过：前端 29 个测试文件 76/76、TypeScript、oxlint、生产构建和补丁检查全部退出 0。
 
 ## 2026-07-14：详情与记录页改造
 

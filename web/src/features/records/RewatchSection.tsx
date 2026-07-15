@@ -9,15 +9,19 @@ import type {
   CurrentRound,
   RoundSummary,
   SeriesProgress,
+  TMDBEpisodeDetails,
 } from '../../api/types'
 import { formatLocalSeconds } from '../../lib/dateTime'
 
+type EpisodeTitle = Pick<TMDBEpisodeDetails, 'seasonNumber' | 'episodeNumber' | 'name'>
+
 type RewatchSectionProps = {
   round: CurrentRound
+  episodeCatalog?: readonly EpisodeTitle[]
   onRewatched?: (round: CurrentRound) => void
 }
 
-export function RewatchSection({ round, onRewatched }: RewatchSectionProps) {
+export function RewatchSection({ round, episodeCatalog = [], onRewatched }: RewatchSectionProps) {
   const queryClient = useQueryClient()
   const [selected, setSelected] = useState<RoundSummary | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
@@ -70,6 +74,10 @@ export function RewatchSection({ round, onRewatched }: RewatchSectionProps) {
   })
   const canRewatch = round.status === 'completed'
   const rounds = history.data ?? []
+  const episodeTitles = new Map(episodeCatalog.map((episode) => [
+    episodeTitleKey(episode.seasonNumber, episode.episodeNumber),
+    episode.name,
+  ]))
 
   return (
     <section className="details-section rewatch-section" aria-labelledby={headingID}>
@@ -141,7 +149,7 @@ export function RewatchSection({ round, onRewatched }: RewatchSectionProps) {
                     {detail.data.episodes.map((episode) => (
                       <li key={episode.id}>
                         <strong>{episodeLabel(episode.seasonNumber, episode.episodeNumber)}</strong>
-                        <span>{episode.name || '未命名'}</span>
+                        <span>{episodeTitles.get(episodeTitleKey(episode.seasonNumber, episode.episodeNumber)) || episode.name || '未命名'}</span>
                         <time>{displayTime(episode.watchedAt)}</time>
                       </li>
                     ))}
@@ -173,4 +181,8 @@ function displayTime(value: string | null) {
 
 function episodeLabel(seasonNumber: number, episodeNumber: number) {
   return `S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`
+}
+
+function episodeTitleKey(seasonNumber: number, episodeNumber: number) {
+  return `${seasonNumber}:${episodeNumber}`
 }

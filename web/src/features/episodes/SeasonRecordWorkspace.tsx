@@ -2,7 +2,7 @@ import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 
-import { getCurrentRound, getTMDBTV } from '../../api/client'
+import { getCurrentRound, getTMDBSeason, getTMDBTV } from '../../api/client'
 import type { HouseholdMember } from '../../api/types'
 import { RewatchSection } from '../records/RewatchSection'
 import { RoundRecordForm } from '../records/RoundRecordForm'
@@ -44,6 +44,12 @@ export function SeasonRecordWorkspace({
     : selectActiveSeason(seasons, rounds.flatMap((round) => round.data ? [round.data] : []))
   const activeSeason = selectedSeason ?? defaultSeason
   const activeRound = rounds.find((_, index) => seasons[index]?.seasonNumber === activeSeason)
+  const season = useQuery({
+    queryKey: ['tmdb-season', tmdbId, activeSeason],
+    queryFn: ({ signal }) => getTMDBSeason(tmdbId ?? 0, activeSeason ?? 0, signal),
+    enabled: tmdbId !== null && activeSeason !== null,
+    staleTime: 30_000,
+  })
 
   if (tmdbId === null) {
     return (
@@ -125,6 +131,7 @@ export function SeasonRecordWorkspace({
       {activeRound?.data ? (
         <RewatchSection
           round={activeRound.data}
+          episodeCatalog={season.data?.episodes ?? []}
           onRewatched={(saved) => queryClient.setQueryData(
             ['current-round', mediaId, activeSeason],
             saved,

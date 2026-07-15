@@ -90,13 +90,18 @@ it('opens a private season archive with second-precision episode times', async (
       round: { ...seasonRound, roundId: 'season-round-1', archivedAt: '2026-07-14T12:00:00Z' },
       episodes: [{
         id: 'episode-201', sourceId: '201', seasonId: 'season-2', seasonNumber: 2,
-        episodeNumber: 1, absoluteNumber: 4, name: '重逢', watched: true,
+        episodeNumber: 1, absoluteNumber: 4, name: '', watched: true,
         watchedAt: '2026-07-12T11:10:12Z',
       }],
     })),
   )
   const user = userEvent.setup()
-  renderWithQueryClient(<RewatchSection round={seasonRound} />)
+  renderWithQueryClient(
+    <RewatchSection
+      round={seasonRound}
+      episodeCatalog={[{ seasonNumber: 2, episodeNumber: 1, name: '重逢' }]}
+    />,
+  )
 
   expect(await screen.findByText('9.2 / 10')).toBeVisible()
   await user.click(screen.getByRole('button', { name: '查看第 1 刷' }))
@@ -105,6 +110,8 @@ it('opens a private season archive with second-precision episode times', async (
   expect(dialog).toHaveTextContent('第一刷笔记')
   expect(dialog).toHaveTextContent('影院')
   expect(dialog).toHaveTextContent('S02E01')
+  expect(dialog).toHaveTextContent('重逢')
+  expect(dialog).not.toHaveTextContent('未命名')
   expect(dialog).toHaveTextContent(formatLocalSeconds('2026-07-12T11:10:12Z'))
 })
 
