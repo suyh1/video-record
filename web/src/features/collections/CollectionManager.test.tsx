@@ -22,16 +22,23 @@ describe('CollectionManager', () => {
       <CollectionManager mediaItems={mediaItems} selectedCollectionID="" onSelect={() => undefined} />,
     )
 
-    expect(await screen.findByRole('button', { name: '创建片单' })).toHaveAttribute('title', '创建片单')
+    const createTrigger = await screen.findByRole('button', { name: '创建片单' })
+    expect(createTrigger).toHaveAttribute('title', '创建片单')
+    expect(createTrigger).toHaveAttribute('aria-expanded', 'false')
+    const controlledFormID = createTrigger.getAttribute('aria-controls')
+    expect(controlledFormID).toBeTruthy()
     expect(screen.queryByLabelText('片单名称')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '创建片单' }))
+    await user.click(createTrigger)
+    expect(createTrigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByLabelText('片单名称').closest('form')).toHaveAttribute('id', controlledFormID)
     expect(document.activeElement).toBe(screen.getByLabelText('片单名称'))
     await user.type(screen.getByLabelText('片单名称'), '稍后再建')
     await user.click(screen.getByRole('button', { name: '取消创建片单' }))
 
     expect(screen.queryByLabelText('片单名称')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '创建片单' })).toBeVisible()
+    expect(createTrigger).toHaveAttribute('aria-expanded', 'false')
+    expect(document.activeElement).toBe(createTrigger)
   })
 
   it('creates, collapses, selects, and reorders a private collection', async () => {
@@ -64,11 +71,14 @@ describe('CollectionManager', () => {
     }
     renderWithQueryClient(<Harness />)
 
-    await user.click(await screen.findByRole('button', { name: '创建片单' }))
+    const createTrigger = await screen.findByRole('button', { name: '创建片单' })
+    await user.click(createTrigger)
     await user.type(screen.getByLabelText('片单名称'), '家庭精选')
     await user.click(screen.getByRole('button', { name: '确认创建片单' }))
     expect(await screen.findByRole('button', { name: '家庭精选，0 部影视' })).toBeVisible()
     expect(screen.queryByLabelText('片单名称')).not.toBeInTheDocument()
+    expect(createTrigger).toHaveAttribute('aria-expanded', 'false')
+    expect(document.activeElement).toBe(createTrigger)
 
     await user.click(screen.getByRole('button', { name: '家庭精选，0 部影视' }))
     expect(onSelect).toHaveBeenCalledWith('collection-2')

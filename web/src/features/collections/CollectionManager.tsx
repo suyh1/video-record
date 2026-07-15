@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Check, Folder, LoaderCircle, Plus, RefreshCw, X } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useId, useRef, useState } from 'react'
 
 import { createCollection, getCollections, replaceCollectionItems } from '../../api/client'
 import type { Collection, MediaSearchResult } from '../../api/types'
@@ -16,6 +16,8 @@ export function CollectionManager({ mediaItems, selectedCollectionID, onSelect }
   const [name, setName] = useState('')
   const [message, setMessage] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  const createFormID = useId()
+  const createTriggerRef = useRef<HTMLButtonElement>(null)
   const collections = useQuery({ queryKey: ['collections'], queryFn: ({ signal }) => getCollections(signal) })
   const createMutation = useMutation({
     mutationFn: () => createCollection(name),
@@ -24,6 +26,7 @@ export function CollectionManager({ mediaItems, selectedCollectionID, onSelect }
       setName('')
       setCreateOpen(false)
       setMessage(`已创建${created.name}`)
+      createTriggerRef.current?.focus()
     },
     onError: () => setMessage('创建片单失败，名称已保留。'),
   })
@@ -56,6 +59,7 @@ export function CollectionManager({ mediaItems, selectedCollectionID, onSelect }
     setName('')
     setMessage('')
     createMutation.reset()
+    createTriggerRef.current?.focus()
   }
 
   return (
@@ -93,26 +97,30 @@ export function CollectionManager({ mediaItems, selectedCollectionID, onSelect }
             ))}
           </div>
         ) : null}
-        {!createOpen ? (
-          <button
-            className="icon-button collection-create-trigger"
-            type="button"
-            aria-label="创建片单"
-            title="创建片单"
-            aria-expanded="false"
-            onClick={() => {
+        <button
+          ref={createTriggerRef}
+          className="icon-button collection-create-trigger"
+          type="button"
+          aria-label="创建片单"
+          title="创建片单"
+          aria-expanded={createOpen}
+          aria-controls={createFormID}
+          onClick={() => {
+            if (createOpen) {
+              closeCreate()
+            } else {
               setCreateOpen(true)
               setMessage('')
               createMutation.reset()
-            }}
-          >
-            <Plus aria-hidden="true" size={18} />
-          </button>
-        ) : null}
+            }
+          }}
+        >
+          <Plus aria-hidden="true" size={18} />
+        </button>
       </div>
 
       {createOpen ? (
-        <form className="collection-create-form" onSubmit={submit}>
+        <form id={createFormID} className="collection-create-form" onSubmit={submit}>
           <label>
             <span>片单名称</span>
             <input autoFocus value={name} maxLength={100} onChange={(event) => setName(event.target.value)} />

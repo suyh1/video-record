@@ -261,7 +261,14 @@ test('keeps specialized form controls at the shared minimum height', async ({ pa
   await expectControlMinHeight(page.getByRole('combobox', { name: '选择季' }))
 
   await page.goto('/library')
+  const createCollection = page.getByRole('button', { name: '创建片单', exact: true })
+  await expect(createCollection).toHaveAttribute('aria-expanded', 'false')
+  await createCollection.click()
+  await expect(createCollection).toHaveAttribute('aria-expanded', 'true')
   await expectControlMinHeight(page.getByLabel('片单名称'))
+  await page.getByRole('button', { name: '取消创建片单' }).click()
+  await expect(createCollection).toHaveAttribute('aria-expanded', 'false')
+  await expect(createCollection).toBeFocused()
 
   await page.goto('/settings')
   await expectControlMinHeight(page.getByLabel('服务类型'))
