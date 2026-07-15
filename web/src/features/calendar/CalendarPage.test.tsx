@@ -159,18 +159,28 @@ it('moves focus to the agenda view after selecting a date with the keyboard', as
   expect(document.querySelector('#calendar-agenda-view')).toHaveFocus()
 })
 
-it('keeps focus in the agenda view after restoring the full month', async () => {
+it('restores and focuses the agenda view when clearing a date from the month view', async () => {
   server.use(http.get('*/api/v1/calendar', () => HttpResponse.json(response)))
   const user = userEvent.setup()
   renderWithQueryClient(<MemoryRouter><CalendarPage now={new Date('2026-07-13T12:00:00Z')} timezone="Asia/Shanghai" /></MemoryRouter>)
 
+  const viewControl = await screen.findByRole('group', { name: '日历视图' })
+  const agendaButton = within(viewControl).getByRole('button', { name: '日程' })
+  const monthButton = within(viewControl).getByRole('button', { name: '月历' })
   const month = await screen.findByRole('table', { name: '2026年7月观影日历' })
   await user.click(within(month).getByRole('button', { name: '7月13日，2 条记录' }))
   const agendaView = document.querySelector('#calendar-agenda-view')
   expect(agendaView).toBeInTheDocument()
 
+  await user.click(monthButton)
+
+  expect(monthButton).toHaveAttribute('aria-pressed', 'true')
+  expect(agendaView).not.toHaveClass('is-active')
+
   await user.click(screen.getByRole('button', { name: '查看全月' }))
 
+  expect(agendaButton).toHaveAttribute('aria-pressed', 'true')
+  expect(agendaView).toHaveClass('is-active')
   expect(agendaView).toHaveFocus()
   expect(document.body).not.toHaveFocus()
 })

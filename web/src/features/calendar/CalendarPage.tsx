@@ -102,6 +102,7 @@ export function CalendarPage({
             type="button"
             onClick={() => {
               setSelectedDate(null)
+              setView('agenda')
               requestAgendaFocus()
             }}
           >
