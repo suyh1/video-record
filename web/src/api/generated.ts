@@ -707,6 +707,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/tmdb/highlights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List anonymous TMDB movie and series highlights */
+        get: operations["listPublicTMDBHighlights"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/tmdb/images/{size}/{filename}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a signed anonymous TMDB image */
+        get: operations["getPublicTMDBImage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tmdb/status": {
         parameters: {
             query?: never;
@@ -1350,6 +1384,19 @@ export interface components {
             participants: string[];
         };
         SharedEventList: components["schemas"]["SharedEvent"][];
+        PublicTMDBHighlight: {
+            id: number;
+            mediaType: components["schemas"]["MediaType"];
+            title: string;
+            originalTitle: string;
+            year: string;
+            overview: string;
+            /** Format: uri-reference */
+            backdropURL: string;
+        };
+        PublicTMDBHighlights: {
+            items: components["schemas"]["PublicTMDBHighlight"][];
+        };
         TMDBStatus: {
             configured: boolean;
         };
@@ -2817,6 +2864,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SharingResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listPublicTMDBHighlights: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Alternating popular movies and series with signed backdrop URLs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicTMDBHighlights"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getPublicTMDBImage: {
+        parameters: {
+            query: {
+                expires: number;
+                signature: string;
+            };
+            header?: never;
+            path: {
+                size: "w300" | "w342" | "w780" | "w1280";
+                filename: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Proxied TMDB image bytes. */
+            200: {
+                headers: {
+                    "Cache-Control": string;
+                    "X-Content-Type-Options": "nosniff";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
                 };
             };
             default: components["responses"]["Problem"];

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -60,6 +61,11 @@ func NewRouter(dependencies Dependencies) http.Handler {
 			api.Get("/setup/status", handlers.setupStatus)
 			api.With(RequireSameOrigin).Post("/setup/admin", handlers.initialize)
 			api.With(RequireSameOrigin).Post("/auth/login", handlers.login)
+			if dependencies.TMDB != nil {
+				publicTMDB := publicTMDBHandlers{client: dependencies.TMDB, now: time.Now}
+				api.Get("/public/tmdb/highlights", publicTMDB.highlights)
+				api.Get("/public/tmdb/images/{size}/{filename}", publicTMDB.image)
+			}
 			api.Group(func(protected chi.Router) {
 				protected.Use(Authenticate(dependencies.Auth))
 				protectedWriteMiddleware := []func(http.Handler) http.Handler{

@@ -796,6 +796,54 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SharingResponse' }
         default: { $ref: '#/components/responses/Problem' }
+  /api/v1/public/tmdb/highlights:
+    get:
+      operationId: listPublicTMDBHighlights
+      summary: List anonymous TMDB movie and series highlights
+      security: []
+      responses:
+        '200':
+          description: Alternating popular movies and series with signed backdrop URLs.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicTMDBHighlights' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/public/tmdb/images/{size}/{filename}:
+    get:
+      operationId: getPublicTMDBImage
+      summary: Read a signed anonymous TMDB image
+      security: []
+      parameters:
+        - name: size
+          in: path
+          required: true
+          schema: { type: string, enum: [w300, w342, w780, w1280] }
+        - name: filename
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9_-]+\.(jpg|jpeg|png|webp)$' }
+        - name: expires
+          in: query
+          required: true
+          schema: { type: integer, format: int64 }
+        - name: signature
+          in: query
+          required: true
+          schema: { type: string, pattern: '^[a-f0-9]{64}$' }
+      responses:
+        '200':
+          description: Proxied TMDB image bytes.
+          headers:
+            Cache-Control: { required: true, schema: { type: string } }
+            X-Content-Type-Options: { required: true, schema: { type: string, const: nosniff } }
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+            image/webp:
+              schema: { type: string, format: binary }
+        default: { $ref: '#/components/responses/Problem' }
   /api/v1/tmdb/status:
     get:
       operationId: getTMDBStatus
@@ -1608,6 +1656,27 @@ components:
     SharedEventList:
       type: array
       items: { $ref: '#/components/schemas/SharedEvent' }
+    PublicTMDBHighlight:
+      type: object
+      additionalProperties: false
+      required: [id, mediaType, title, originalTitle, year, overview, backdropURL]
+      properties:
+        id: { type: integer, minimum: 1 }
+        mediaType: { $ref: '#/components/schemas/MediaType' }
+        title: { type: string }
+        originalTitle: { type: string }
+        year: { type: string }
+        overview: { type: string }
+        backdropURL: { type: string, format: uri-reference }
+    PublicTMDBHighlights:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/PublicTMDBHighlight' }
     TMDBStatus:
       type: object
       additionalProperties: false
