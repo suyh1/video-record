@@ -210,26 +210,37 @@ describe('AuthGate', () => {
     expect(container.querySelector('.auth-backdrop img')).toBeNull()
   })
 
-  it('restores password input focus after a pointer toggle without changing its value', async () => {
+  it('restores password input focus and selection after pointer toggles in both directions', async () => {
     server.use(...closedInstanceHandlers())
     renderWithQueryClient(<AuthGate><p>已登录</p></AuthGate>)
 
     const password = await screen.findByLabelText<HTMLInputElement>('密码')
     fireEvent.change(password, { target: { value: 'correct horse battery staple' } })
     password.focus()
+    password.setSelectionRange(8, 15, 'forward')
+    const restoreSelection = vi.spyOn(password, 'setSelectionRange')
 
     const toggle = screen.getByRole('button', { name: '显示密码' })
     expect(toggle).toHaveAttribute('aria-pressed', 'false')
     fireEvent.click(toggle, { detail: 1 })
     expect(password).toHaveAttribute('type', 'text')
     expect(password).toHaveValue('correct horse battery staple')
+    await waitFor(() => expect(restoreSelection).toHaveBeenCalledWith(8, 15, 'forward'))
     expect(password).toHaveFocus()
+    expect(password).toHaveProperty('selectionStart', 8)
+    expect(password).toHaveProperty('selectionEnd', 15)
     expect(screen.getByRole('button', { name: '隐藏密码' })).toHaveAttribute('aria-pressed', 'true')
 
+    restoreSelection.mockClear()
+    password.setSelectionRange(8, 15, 'backward')
+    restoreSelection.mockClear()
     fireEvent.click(screen.getByRole('button', { name: '隐藏密码' }), { detail: 1 })
     expect(password).toHaveAttribute('type', 'password')
     expect(password).toHaveValue('correct horse battery staple')
+    await waitFor(() => expect(restoreSelection).toHaveBeenCalledWith(8, 15, 'backward'))
     expect(password).toHaveFocus()
+    expect(password).toHaveProperty('selectionStart', 8)
+    expect(password).toHaveProperty('selectionEnd', 15)
   })
 
   it('keeps keyboard focus on the password toggle for Enter and Space activation', async () => {

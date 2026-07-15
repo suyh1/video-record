@@ -140,10 +140,32 @@ test('preserves password toggle focus by activation source', async ({ page }) =>
   await expect(showPassword).toHaveAttribute('aria-pressed', 'false')
   await expect(password).toHaveAttribute('type', 'password')
 
+  await password.evaluate((element) => {
+    const input = element as HTMLInputElement
+    input.focus()
+    input.setSelectionRange(8, 15, 'forward')
+  })
   await showPassword.click()
   await expect(password).toBeFocused()
   await expect(password).toHaveAttribute('type', 'text')
   await expect(password).toHaveValue('correct horse battery staple')
+  await expect.poll(() => password.evaluate((element) => {
+    const input = element as HTMLInputElement
+    return { direction: input.selectionDirection, end: input.selectionEnd, start: input.selectionStart }
+  })).toEqual({ direction: 'forward', end: 15, start: 8 })
+
+  await password.evaluate((element) => {
+    const input = element as HTMLInputElement
+    input.setSelectionRange(8, 15, 'backward')
+  })
+  await hidePassword.click()
+  await expect(password).toBeFocused()
+  await expect(password).toHaveAttribute('type', 'password')
+  await expect(password).toHaveValue('correct horse battery staple')
+  await expect.poll(() => password.evaluate((element) => {
+    const input = element as HTMLInputElement
+    return { direction: input.selectionDirection, end: input.selectionEnd, start: input.selectionStart }
+  })).toEqual({ direction: 'backward', end: 15, start: 8 })
 })
 
 const viewports = [

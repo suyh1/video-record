@@ -11,7 +11,16 @@ import {
   UserRound,
   UserRoundPlus,
 } from 'lucide-react'
-import { type FormEvent, type MouseEvent, type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
+import {
+  type FormEvent,
+  type MouseEvent,
+  type ReactNode,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 import {
   APIError,
@@ -291,13 +300,42 @@ function PasswordField({ autoComplete, id, label, minLength, onChange, toggleLab
 }) {
   const [visible, setVisible] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const pendingPointerRestore = useRef<{
+    direction: 'backward' | 'forward' | 'none' | null
+    end: number | null
+    start: number | null
+  } | null>(null)
   const actionLabel = visible ? '隐藏' : '显示'
   const accessibleLabel = `${actionLabel}${toggleLabel}`
 
   const toggleVisibility = (event: MouseEvent<HTMLButtonElement>) => {
+    if (event.detail > 0 && inputRef.current) {
+      pendingPointerRestore.current = {
+        direction: inputRef.current.selectionDirection,
+        end: inputRef.current.selectionEnd,
+        start: inputRef.current.selectionStart,
+      }
+    }
     setVisible((current) => !current)
-    if (event.detail > 0) inputRef.current?.focus()
   }
+
+  useLayoutEffect(() => {
+    const pending = pendingPointerRestore.current
+    if (!pending) return
+    pendingPointerRestore.current = null
+    const frame = window.requestAnimationFrame(() => {
+      const input = inputRef.current
+      if (!input) return
+      input.focus()
+      if (pending.start === null || pending.end === null) return
+      try {
+        input.setSelectionRange(pending.start, pending.end, pending.direction ?? 'none')
+      } catch {
+        // Selection APIs are unavailable for some input types.
+      }
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [visible])
 
   return (
     <div className="auth-field">
