@@ -2721,6 +2721,12 @@ body:has(.media-details-page .media-hero.has-backdrop) .app-header.immersive-hea
 
   background: oklch(0.08 0.008 240 / 0.92);
   backdrop-filter: blur(8px);
+  transition: none;
+}
+
+body:has(.media-details-page .media-hero.has-backdrop) .app-header.immersive-header:not(.is-scrolled) .nav-link,
+body:has(.media-details-page .media-hero.has-backdrop) .app-header.immersive-header:not(.is-scrolled) .global-search {
+  transition: none;
 }
 
 .app-header-inner {

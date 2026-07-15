@@ -28,10 +28,10 @@ export function CastStrip({ cast = [], pending, error, linked, onRetry }: CastSt
       {!pending && !error && !linked ? <p className="quiet-empty">关联 TMDB 后可显示演员</p> : null}
       {!pending && !error && cast.length > 0 ? (
         <ul className="cast-strip" aria-label="主要演员列表" tabIndex={0}>
-          {cast.map((member) => {
+          {cast.map((member, index) => {
             const portraitURL = mediaImageURL(member.profilePath)
             return (
-              <li key={`${member.id}-${member.character}`}>
+              <li key={`${member.id}:${member.character}:${member.order}:${index}`}>
                 <CastPortrait
                   key={`${member.id}:${member.name}:${member.character}:${portraitURL ?? ''}`}
                   name={member.name}

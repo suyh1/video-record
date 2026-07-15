@@ -224,11 +224,140 @@ test('keeps failed details imagery and a long title neutral, named, and usable',
   expect(directTMDBImages).toEqual([])
 })
 
+test('keeps the details header readable throughout normal-motion backdrop readiness', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await page.route('**/api/v1/public/tmdb/highlights', (route) => route.fulfill({
+    json: { items: [] },
+    status: 200,
+  }))
+  await login(page)
+
+  const contrastBackdrop = `/api/v1/public/tmdb/images/w1280/contrast-backdrop.png?expires=4102444800&signature=${'d'.repeat(64)}`
+  await page.route('**/api/v1/tmdb/tv/1001', async (route) => {
+    const response = await route.fetch()
+    const body = await response.json() as Record<string, unknown>
+    await route.fulfill({ response, json: { ...body, backdropPath: contrastBackdrop } })
+  })
+  let markBackdropRequested!: () => void
+  let releaseBackdrop!: () => void
+  const backdropRequested = new Promise<void>((resolve) => { markBackdropRequested = resolve })
+  const backdropHeld = new Promise<void>((resolve) => { releaseBackdrop = resolve })
+  await page.route('**/api/v1/public/tmdb/images/w1280/contrast-backdrop.png**', async (route) => {
+    markBackdropRequested()
+    await backdropHeld
+    await route.fulfill({
+      body: createSolidPNG(16, 9, [255, 255, 255]),
+      contentType: 'image/png',
+      status: 200,
+    })
+  })
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/media/e2e-series', { waitUntil: 'domcontentloaded' })
+  await backdropRequested
+  const hero = page.locator('.media-hero')
+  await expect(hero).toHaveAttribute('data-backdrop-state', 'loading')
+  await installDetailsHeaderTransitionSampler(page)
+  releaseBackdrop()
+  const samples = await readDetailsHeaderTransitionSamples(page)
+
+  await expect(hero).toHaveAttribute('data-backdrop-state', 'ready')
+  expect(samples.length).toBeGreaterThanOrEqual(21)
+  for (const sample of samples) {
+    for (const entry of sample.entries) {
+      expect(
+        minimumCompositedContrast(sample.headerBackground, entry.background, entry.foreground),
+        `${sample.phase} ${entry.name}: ${entry.foreground} on ${entry.background} / ${sample.headerBackground}`,
+      ).toBeGreaterThanOrEqual(4.5)
+    }
+  }
+
+  const transitionDurations = await page.evaluate(() => [
+    getComputedStyle(document.querySelector<HTMLElement>('.app-header')!).transitionDuration,
+    getComputedStyle(document.querySelector<HTMLElement>('.app-primary-navigation .nav-link')!).transitionDuration,
+    getComputedStyle(document.querySelector<HTMLElement>('.global-search')!).transitionDuration,
+  ])
+  for (const duration of transitionDurations.flatMap((value) => value.split(', '))) {
+    expect(Number.parseFloat(duration)).toBeLessThanOrEqual(0.001)
+  }
+})
+
 const viewports = [
   { width: 375, height: 812 },
   { width: 768, height: 1024 },
   { width: 1440, height: 900 },
 ]
+
+type HeaderTransitionSample = {
+  phase: string
+  headerBackground: string
+  entries: Array<{ name: string; background: string; foreground: string }>
+}
+
+function installDetailsHeaderTransitionSampler(page: import('@playwright/test').Page) {
+  return page.evaluate(() => {
+    const target = globalThis as typeof globalThis & {
+      __detailsHeaderTransitionSamples?: Promise<HeaderTransitionSample[]>
+    }
+    const hero = document.querySelector<HTMLElement>('.media-hero')!
+    const header = document.querySelector<HTMLElement>('.app-header')!
+    target.__detailsHeaderTransitionSamples = new Promise<HeaderTransitionSample[]>((resolve) => {
+      const samples: HeaderTransitionSample[] = []
+      let readyFrames = 0
+
+      const capture = (phase: string) => {
+        const navEntries = [...document.querySelectorAll<HTMLElement>('.app-primary-navigation .nav-link')]
+          .map((element) => ({
+            name: `nav:${element.textContent?.trim() ?? ''}`,
+            background: getComputedStyle(element).backgroundColor,
+            foreground: getComputedStyle(element).color,
+          }))
+        const search = document.querySelector<HTMLElement>('.global-search')!
+        const searchInput = search.querySelector<HTMLInputElement>('input')!
+        samples.push({
+          phase,
+          headerBackground: getComputedStyle(header).backgroundColor,
+          entries: [
+            {
+              name: 'brand',
+              background: getComputedStyle(document.querySelector<HTMLElement>('.brand')!).backgroundColor,
+              foreground: getComputedStyle(document.querySelector<HTMLElement>('.brand')!).color,
+            },
+            ...navEntries,
+            {
+              name: 'search-placeholder',
+              background: getComputedStyle(search).backgroundColor,
+              foreground: getComputedStyle(searchInput, '::placeholder').color,
+            },
+          ],
+        })
+      }
+      const captureFrame = () => {
+        capture(`rAF-${readyFrames}`)
+        readyFrames += 1
+        if (readyFrames >= 20) resolve(samples)
+        else requestAnimationFrame(captureFrame)
+      }
+      const observer = new MutationObserver(() => {
+        if (!hero.classList.contains('has-backdrop')) return
+        observer.disconnect()
+        capture('ready-mutation')
+        requestAnimationFrame(captureFrame)
+      })
+      observer.observe(hero, { attributeFilter: ['class'], attributes: true })
+    })
+  })
+}
+
+function readDetailsHeaderTransitionSamples(page: import('@playwright/test').Page) {
+  return page.evaluate(() => {
+    const target = globalThis as typeof globalThis & {
+      __detailsHeaderTransitionSamples?: Promise<HeaderTransitionSample[]>
+    }
+    if (!target.__detailsHeaderTransitionSamples) throw new Error('Header transition sampler was not installed')
+    return target.__detailsHeaderTransitionSamples
+  })
+}
 
 async function expectDetailsHeaderLayout(page: import('@playwright/test').Page) {
   const header = page.getByRole('banner', { name: '应用导航' })
@@ -361,6 +490,100 @@ function colorAlpha(color: string) {
   const alpha = color.match(/\/\s*([\d.]+)(%)?\s*\)$/)
   if (!alpha) return 1
   return Number(alpha[1]) / (alpha[2] ? 100 : 1)
+}
+
+type RGBA = { red: number; green: number; blue: number; alpha: number }
+
+function minimumCompositedContrast(headerColor: string, elementColor: string, foregroundColor: string) {
+  const header = parseRGBA(headerColor)
+  const element = parseRGBA(elementColor)
+  const foreground = parseRGBA(foregroundColor)
+  return Math.min(...[
+    { red: 0, green: 0, blue: 0, alpha: 1 },
+    { red: 1, green: 1, blue: 1, alpha: 1 },
+  ].map((underlay) => {
+    const headerBackground = compositeRGBA(header, underlay)
+    const elementBackground = compositeRGBA(element, headerBackground)
+    const visibleForeground = compositeRGBA(foreground, elementBackground)
+    const backgroundLuminance = rgbaLuminance(elementBackground)
+    const foregroundLuminance = rgbaLuminance(visibleForeground)
+    const lighter = Math.max(backgroundLuminance, foregroundLuminance)
+    const darker = Math.min(backgroundLuminance, foregroundLuminance)
+    return (lighter + 0.05) / (darker + 0.05)
+  }))
+}
+
+function parseRGBA(color: string): RGBA {
+  if (color === 'transparent') return { red: 0, green: 0, blue: 0, alpha: 0 }
+  if (color.startsWith('rgb')) {
+    const channels = color.match(/[\d.]+/g)?.map(Number) ?? []
+    if (channels.length < 3) throw new Error(`Unsupported computed color: ${color}`)
+    return {
+      red: channels[0]! / 255,
+      green: channels[1]! / 255,
+      blue: channels[2]! / 255,
+      alpha: channels[3] ?? 1,
+    }
+  }
+
+  const labMatch = color.match(/^oklab\(([-\d.]+)(%)?\s+([-\d.]+)\s+([-\d.]+)(?:\s*\/\s*([\d.]+)(%)?)?\)$/)
+  if (labMatch) {
+    return oklabToRGBA(
+      Number(labMatch[1]) / (labMatch[2] ? 100 : 1),
+      Number(labMatch[3]),
+      Number(labMatch[4]),
+      labMatch[5] ? Number(labMatch[5]) / (labMatch[6] ? 100 : 1) : 1,
+    )
+  }
+
+  const match = color.match(/^oklch\(([\d.]+)(%)?\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+)(%)?)?\)$/)
+  if (!match) throw new Error(`Unsupported computed color: ${color}`)
+  const lightness = Number(match[1]) / (match[2] ? 100 : 1)
+  const chroma = Number(match[3])
+  const hue = Number(match[4]) * Math.PI / 180
+  return oklabToRGBA(
+    lightness,
+    chroma * Math.cos(hue),
+    chroma * Math.sin(hue),
+    match[5] ? Number(match[5]) / (match[6] ? 100 : 1) : 1,
+  )
+}
+
+function oklabToRGBA(lightness: number, a: number, b: number, alpha: number): RGBA {
+  const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3
+  const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3
+  const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3
+  return {
+    red: linearToSRGB(clampLinear(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s)),
+    green: linearToSRGB(clampLinear(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)),
+    blue: linearToSRGB(clampLinear(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s)),
+    alpha,
+  }
+}
+
+function compositeRGBA(foreground: RGBA, background: RGBA): RGBA {
+  const alpha = foreground.alpha + background.alpha * (1 - foreground.alpha)
+  if (alpha === 0) return { red: 0, green: 0, blue: 0, alpha: 0 }
+  return {
+    red: (foreground.red * foreground.alpha + background.red * background.alpha * (1 - foreground.alpha)) / alpha,
+    green: (foreground.green * foreground.alpha + background.green * background.alpha * (1 - foreground.alpha)) / alpha,
+    blue: (foreground.blue * foreground.alpha + background.blue * background.alpha * (1 - foreground.alpha)) / alpha,
+    alpha,
+  }
+}
+
+function rgbaLuminance(color: RGBA) {
+  return 0.2126 * srgbToLinear(color.red)
+    + 0.7152 * srgbToLinear(color.green)
+    + 0.0722 * srgbToLinear(color.blue)
+}
+
+function srgbToLinear(value: number) {
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+}
+
+function linearToSRGB(value: number) {
+  return value <= 0.0031308 ? value * 12.92 : 1.055 * value ** (1 / 2.4) - 0.055
 }
 
 function createSolidPNG(width: number, height: number, color: [number, number, number]) {

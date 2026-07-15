@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { TMDBCastMember } from '../../api/types'
 import { CastStrip } from './CastStrip'
@@ -61,5 +61,27 @@ describe('CastStrip portraits', () => {
     fireEvent.error(screen.getByRole('img', { name: '林见川 饰 顾潮' }))
     rerender(<CastStrip cast={[member({ name: '周远', profilePath: restoredURL })]} pending={false} error={false} linked onRetry={() => undefined} />)
     expect(screen.getByRole('img', { name: '周远 饰 顾潮' })).toHaveAttribute('src', restoredURL)
+  })
+
+  it('keeps duplicate credits independent without duplicate React keys', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const secondProfile = `/api/v1/public/tmdb/images/w300/cast-two.png?expires=1784200000&signature=${signature}`
+    try {
+      renderCast([
+        member(),
+        member({ name: '周聆', profilePath: secondProfile, order: 1 }),
+      ])
+
+      const first = screen.getByRole('img', { name: '林见川 饰 顾潮' })
+      const second = screen.getByRole('img', { name: '周聆 饰 顾潮' })
+      fireEvent.error(first)
+      fireEvent.error(second)
+
+      expect(screen.getByRole('img', { name: '林见川 饰 顾潮 暂无头像' })).toHaveTextContent('林')
+      expect(screen.getByRole('img', { name: '周聆 饰 顾潮 暂无头像' })).toHaveTextContent('周')
+      expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key')
+    } finally {
+      consoleError.mockRestore()
+    }
   })
 })

@@ -56,6 +56,7 @@ export function MediaHero({ media, record, external, linker }: MediaHeroProps) {
     >
       {backdropURL && !backdropFailed ? (
         <img
+          key={backdropIdentity}
           className="media-hero-backdrop"
           src={backdropURL}
           alt=""

@@ -37,6 +37,33 @@ describe('TMDB-backed media images', () => {
     expect(hero).toHaveClass('has-backdrop')
   })
 
+  it('remounts a ready same-source backdrop when its title changes and ignores the old load event', () => {
+    vi.mocked(sampleMediaAccent).mockReturnValue('oklch(0.610 0.130 210.0)')
+    const { container, rerender } = render(
+      <MediaHero media={{ ...media, title: '标题 A', backdropPath: backdropURL }} record={record} linker={null} />,
+    )
+    const hero = container.querySelector<HTMLElement>('.media-hero')!
+    const firstBackdrop = container.querySelector<HTMLImageElement>('.media-hero-backdrop')!
+    fireEvent.load(firstBackdrop)
+    expect(hero).toHaveAttribute('data-backdrop-state', 'ready')
+    expect(hero.style.getPropertyValue('--media-accent')).toBe('oklch(0.610 0.130 210.0)')
+
+    rerender(<MediaHero media={{ ...media, title: '标题 B', backdropPath: backdropURL }} record={record} linker={null} />)
+    const secondBackdrop = container.querySelector<HTMLImageElement>('.media-hero-backdrop')!
+    expect(secondBackdrop).not.toBe(firstBackdrop)
+    expect(hero).toHaveAttribute('data-backdrop-state', 'loading')
+    expect(screen.getByRole('heading', { level: 1, name: '标题 B' })).toBeVisible()
+    expect(hero.style.getPropertyValue('--media-accent')).toBe('var(--brand)')
+
+    fireEvent.load(firstBackdrop)
+    expect(hero).toHaveAttribute('data-backdrop-state', 'loading')
+
+    vi.mocked(sampleMediaAccent).mockReturnValue('oklch(0.580 0.120 28.0)')
+    fireEvent.load(secondBackdrop)
+    expect(hero).toHaveAttribute('data-backdrop-state', 'ready')
+    expect(hero.style.getPropertyValue('--media-accent')).toBe('oklch(0.580 0.120 28.0)')
+  })
+
   it('uses existing placeholders for direct or raw TMDB paths', () => {
     const poster: MediaSearchResult = {
       id: 'media-1', source: 'local', mediaType: 'movie', title: '潮汐档案', originalTitle: '',
