@@ -12,6 +12,11 @@ export type BackdropCarouselProps = {
 
 type ImageStatus = 'idle' | 'ready' | 'failed'
 
+type NavigationIntent = {
+  direction: 1 | -1
+  originIndex: number
+}
+
 export function BackdropCarousel(props: BackdropCarouselProps) {
   const sessionKey = useMemo(
     () => props.items.map((item) => `${item.mediaType}:${item.id}:${item.backdropURL}`).join('|'),
@@ -32,10 +37,42 @@ function BackdropCarouselSession({
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const [previousIndex, setPreviousIndex] = useState<number | null>(null)
   const [manuallyPaused, setManuallyPaused] = useState(false)
+  const [navigationIntent, setNavigationIntent] = useState<NavigationIntent | null>(null)
   const documentVisible = useDocumentVisibility()
   const reducedMotion = useReducedMotion()
 
   useEffect(() => {
+    if (navigationIntent) {
+      if (activeIndex !== navigationIntent.originIndex) {
+        setNavigationIntent(null)
+        return
+      }
+
+      for (let offset = 1; offset < items.length; offset += 1) {
+        const candidateIndex = (
+          navigationIntent.originIndex
+          + navigationIntent.direction * offset
+          + items.length
+        ) % items.length
+        const status = statuses[candidateIndex]
+        if (status === 'failed') continue
+        if (status === 'ready') {
+          if (loadingIndex !== null) setLoadingIndex(null)
+          setPreviousIndex(activeIndex)
+          setActiveIndex(candidateIndex)
+          setNavigationIntent(null)
+          return
+        }
+        if (status === 'idle' && loadingIndex !== candidateIndex) {
+          setLoadingIndex(candidateIndex)
+        }
+        return
+      }
+
+      setNavigationIntent(null)
+      return
+    }
+
     if (loadingIndex !== null) return
 
     if (activeIndex === null) {
@@ -59,7 +96,7 @@ function BackdropCarouselSession({
         return
       }
     }
-  }, [activeIndex, items.length, loadingIndex, statuses])
+  }, [activeIndex, items.length, loadingIndex, navigationIntent, statuses])
 
   useEffect(() => {
     if (loadingIndex === null) return
@@ -139,7 +176,7 @@ function BackdropCarouselSession({
 
   const navigate = (direction: 1 | -1) => {
     setManuallyPaused(true)
-    advance(direction)
+    if (activeIndex !== null) setNavigationIntent({ direction, originIndex: activeIndex })
   }
 
   const handleLayerError = (failedIndex: number) => {
@@ -171,6 +208,7 @@ function BackdropCarouselSession({
       <div className="backdrop-carousel__layers">
         {previousItem && previousIndex !== activeIndex ? (
           <img
+            key={`${previousIndex}:${previousItem.mediaType}:${previousItem.id}:${previousItem.backdropURL}`}
             alt=""
             aria-hidden="true"
             className="backdrop-carousel__image is-previous"
@@ -181,6 +219,7 @@ function BackdropCarouselSession({
         ) : null}
         {activeItem ? (
           <img
+            key={`${activeIndex}:${activeItem.mediaType}:${activeItem.id}:${activeItem.backdropURL}`}
             alt=""
             aria-hidden="true"
             className="backdrop-carousel__image is-active"

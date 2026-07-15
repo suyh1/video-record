@@ -206,6 +206,128 @@ describe('BackdropCarousel', () => {
     expect(activeImage(container)).toHaveAttribute('src', items[1]!.backdropURL)
   })
 
+  it('retains each image node as the active layer becomes the previous layer', async () => {
+    const items = [highlight(1, '第一张'), highlight(2, '第二张')]
+    const { container } = render(<BackdropCarousel items={items} intervalMs={7_000} showControls />)
+    await resolveImage(0)
+    await resolveImage(1)
+    const firstNode = activeImage(container)
+
+    fireEvent.click(screen.getByRole('button', { name: '下一张背景' }))
+
+    const firstPrevious = container.querySelector<HTMLImageElement>('.backdrop-carousel__image.is-previous')
+    const secondNode = activeImage(container)
+    expect(firstPrevious).toBe(firstNode)
+    expect(firstPrevious).toHaveAttribute('src', items[0]!.backdropURL)
+    expect(secondNode).not.toBe(firstNode)
+    expect(secondNode).toHaveAttribute('src', items[1]!.backdropURL)
+
+    fireEvent.click(screen.getByRole('button', { name: '下一张背景' }))
+
+    expect(container.querySelector('.backdrop-carousel__image.is-previous')).toBe(secondNode)
+    expect(activeImage(container)).toBe(firstNode)
+    expect(container.querySelectorAll('.backdrop-carousel__image')).toHaveLength(2)
+  })
+
+  it('loads the exact previous item on demand instead of using the ready next item', async () => {
+    const items = [highlight(1, '第一张'), highlight(2, '第二张'), highlight(3, '第三张')]
+    const onActiveItemChange = vi.fn()
+    const { container } = render(
+      <BackdropCarousel items={items} intervalMs={7_000} onActiveItemChange={onActiveItemChange} showControls />,
+    )
+    await resolveImage(0)
+    await resolveImage(1)
+    expect(decodedImages).toHaveLength(2)
+
+    fireEvent.click(screen.getByRole('button', { name: '上一张背景' }))
+
+    expect(activeImage(container)).toHaveAttribute('src', items[0]!.backdropURL)
+    expect(decodedImages).toHaveLength(3)
+    expect(decodedImages[2]!.src).toBe(items[2]!.backdropURL)
+
+    await resolveImage(2)
+
+    expect(activeImage(container)).toHaveAttribute('src', items[2]!.backdropURL)
+    expect(onActiveItemChange).not.toHaveBeenCalledWith(items[1])
+  })
+
+  it('continues skipping failed manual targets in the requested direction', async () => {
+    const items = [
+      highlight(1, '第一张'),
+      highlight(2, '第二张'),
+      highlight(3, '第三张'),
+      highlight(4, '第四张'),
+    ]
+    const { container } = render(<BackdropCarousel items={items} intervalMs={7_000} showControls />)
+    await resolveImage(0)
+    await resolveImage(1)
+
+    fireEvent.click(screen.getByRole('button', { name: '上一张背景' }))
+    fireEvent.click(screen.getByRole('button', { name: '上一张背景' }))
+    expect(decodedImages[2]!.src).toBe(items[3]!.backdropURL)
+
+    await rejectImage(2)
+
+    expect(activeImage(container)).toHaveAttribute('src', items[0]!.backdropURL)
+    expect(decodedImages[3]!.src).toBe(items[2]!.backdropURL)
+
+    await resolveImage(3)
+
+    expect(activeImage(container)).toHaveAttribute('src', items[2]!.backdropURL)
+    expect(activeImage(container)).not.toHaveAttribute('src', items[1]!.backdropURL)
+  })
+
+  it('ignores a manual target decode after the items generation changes', async () => {
+    const oldItems = [highlight(1, '旧一'), highlight(2, '旧二'), highlight(3, '旧三')]
+    const newItem = highlight(9, '新图片')
+    const oldCallback = vi.fn()
+    const newCallback = vi.fn()
+    const { container, rerender } = render(
+      <BackdropCarousel items={oldItems} intervalMs={7_000} onActiveItemChange={oldCallback} showControls />,
+    )
+    await resolveImage(0)
+    await resolveImage(1)
+    fireEvent.click(screen.getByRole('button', { name: '上一张背景' }))
+    const staleManualImage = decodedImages[2]!
+
+    rerender(
+      <BackdropCarousel items={[newItem]} intervalMs={7_000} onActiveItemChange={newCallback} showControls />,
+    )
+    expect(decodedImages[3]!.src).toBe(newItem.backdropURL)
+
+    await act(async () => {
+      staleManualImage.resolveDecode()
+      await Promise.resolve()
+    })
+
+    expect(activeImage(container)).toBeNull()
+    expect(oldCallback).not.toHaveBeenCalledWith(oldItems[2])
+
+    await resolveImage(3)
+    expect(activeImage(container)).toHaveAttribute('src', newItem.backdropURL)
+  })
+
+  it('ignores a pending manual target decode after unmount', async () => {
+    const items = [highlight(1, '第一张'), highlight(2, '第二张'), highlight(3, '第三张')]
+    const onActiveItemChange = vi.fn()
+    const { unmount } = render(
+      <BackdropCarousel items={items} intervalMs={7_000} onActiveItemChange={onActiveItemChange} showControls />,
+    )
+    await resolveImage(0)
+    await resolveImage(1)
+    fireEvent.click(screen.getByRole('button', { name: '上一张背景' }))
+    const pendingManualImage = decodedImages[2]!
+    const callsAtUnmount = onActiveItemChange.mock.calls.length
+
+    unmount()
+    await act(async () => {
+      pendingManualImage.resolveDecode()
+      await Promise.resolve()
+    })
+
+    expect(onActiveItemChange).toHaveBeenCalledTimes(callsAtUnmount)
+  })
+
   it('stops while hidden and restarts a full interval after becoming visible', async () => {
     const items = [highlight(1, '第一张'), highlight(2, '第二张')]
     const { container } = render(<BackdropCarousel items={items} intervalMs={7_000} />)
