@@ -48,6 +48,17 @@ test('captures responsive TMDB-backed authentication scenes', async ({ page }) =
       fullPage: true,
       maxDiffPixelRatio: 0.01,
     })
+
+    if (viewport.width !== 768) {
+      const initialSource = await backdrop.getAttribute('src')
+      await page.getByRole('button', { name: '暂停轮播' }).click({ timeout: 2_000 })
+      await expect(page.getByRole('button', { name: '继续轮播' })).toHaveAttribute('aria-pressed', 'true')
+      await page.getByRole('button', { name: '下一张背景' }).click({ timeout: 2_000 })
+      await expect(backdrop).toHaveAttribute('src', imagePaths[1]!)
+      expect(await backdrop.getAttribute('src')).not.toBe(initialSource)
+      await username.click()
+      await expect(username).toBeFocused()
+    }
   }
 
   expect(consoleErrors).toEqual([])
@@ -103,6 +114,36 @@ test('stops authentication backdrop motion when reduced motion is requested', as
   })
   expect(Number.parseFloat(motion.animationDuration)).toBeLessThanOrEqual(0.001)
   expect(Number.parseFloat(motion.transitionDuration)).toBeLessThanOrEqual(0.001)
+})
+
+test('preserves password toggle focus by activation source', async ({ page }) => {
+  await installAuthRoutes(page, false)
+  await page.goto('/')
+  await waitForAuthReady(page)
+
+  const password = page.getByLabel('密码', { exact: true })
+  await password.fill('correct horse battery staple')
+  await password.focus()
+  await page.keyboard.press('Tab')
+  const showPassword = page.getByRole('button', { name: '显示密码' })
+  await expect(showPassword).toBeFocused()
+
+  await page.keyboard.press('Enter')
+  const hidePassword = page.getByRole('button', { name: '隐藏密码' })
+  await expect(hidePassword).toBeFocused()
+  await expect(hidePassword).toHaveAttribute('aria-pressed', 'true')
+  await expect(password).toHaveAttribute('type', 'text')
+  await expect(password).toHaveValue('correct horse battery staple')
+
+  await page.keyboard.press('Space')
+  await expect(showPassword).toBeFocused()
+  await expect(showPassword).toHaveAttribute('aria-pressed', 'false')
+  await expect(password).toHaveAttribute('type', 'password')
+
+  await showPassword.click()
+  await expect(password).toBeFocused()
+  await expect(password).toHaveAttribute('type', 'text')
+  await expect(password).toHaveValue('correct horse battery staple')
 })
 
 const viewports = [

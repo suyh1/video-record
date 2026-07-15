@@ -11,7 +11,7 @@ import {
   UserRound,
   UserRoundPlus,
 } from 'lucide-react'
-import { type FormEvent, type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
+import { type FormEvent, type MouseEvent, type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
 
 import {
   APIError,
@@ -294,9 +294,9 @@ function PasswordField({ autoComplete, id, label, minLength, onChange, toggleLab
   const actionLabel = visible ? '隐藏' : '显示'
   const accessibleLabel = `${actionLabel}${toggleLabel}`
 
-  const toggleVisibility = () => {
+  const toggleVisibility = (event: MouseEvent<HTMLButtonElement>) => {
     setVisible((current) => !current)
-    inputRef.current?.focus()
+    if (event.detail > 0) inputRef.current?.focus()
   }
 
   return (

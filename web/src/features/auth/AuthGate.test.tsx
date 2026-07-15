@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -209,26 +210,54 @@ describe('AuthGate', () => {
     expect(container.querySelector('.auth-backdrop img')).toBeNull()
   })
 
-  it('shows and hides the password without changing its value or moving focus', async () => {
+  it('restores password input focus after a pointer toggle without changing its value', async () => {
     server.use(...closedInstanceHandlers())
     renderWithQueryClient(<AuthGate><p>已登录</p></AuthGate>)
 
-    const password = await screen.findByLabelText('密码')
+    const password = await screen.findByLabelText<HTMLInputElement>('密码')
     fireEvent.change(password, { target: { value: 'correct horse battery staple' } })
     password.focus()
 
     const toggle = screen.getByRole('button', { name: '显示密码' })
     expect(toggle).toHaveAttribute('aria-pressed', 'false')
-    fireEvent.click(toggle)
+    fireEvent.click(toggle, { detail: 1 })
     expect(password).toHaveAttribute('type', 'text')
     expect(password).toHaveValue('correct horse battery staple')
     expect(password).toHaveFocus()
     expect(screen.getByRole('button', { name: '隐藏密码' })).toHaveAttribute('aria-pressed', 'true')
 
-    fireEvent.click(screen.getByRole('button', { name: '隐藏密码' }))
+    fireEvent.click(screen.getByRole('button', { name: '隐藏密码' }), { detail: 1 })
     expect(password).toHaveAttribute('type', 'password')
     expect(password).toHaveValue('correct horse battery staple')
     expect(password).toHaveFocus()
+  })
+
+  it('keeps keyboard focus on the password toggle for Enter and Space activation', async () => {
+    const user = userEvent.setup()
+    server.use(...closedInstanceHandlers())
+    renderWithQueryClient(<AuthGate><p>已登录</p></AuthGate>)
+
+    const password = await screen.findByLabelText<HTMLInputElement>('密码')
+    await user.type(password, 'correct horse battery staple')
+    password.setSelectionRange(8, 8)
+    const showPassword = screen.getByRole('button', { name: '显示密码' })
+    showPassword.focus()
+
+    await user.keyboard('{Enter}')
+
+    const hidePassword = screen.getByRole('button', { name: '隐藏密码' })
+    expect(hidePassword).toHaveFocus()
+    expect(hidePassword).toHaveAttribute('aria-pressed', 'true')
+    expect(password).toHaveAttribute('type', 'text')
+    expect(password).toHaveValue('correct horse battery staple')
+    expect(password).toHaveProperty('selectionStart', 8)
+
+    await user.keyboard(' ')
+
+    expect(showPassword).toHaveFocus()
+    expect(showPassword).toHaveAttribute('aria-pressed', 'false')
+    expect(password).toHaveAttribute('type', 'password')
+    expect(password).toHaveValue('correct horse battery staple')
   })
 
   it('keeps the pending login natively disabled and prevents duplicate submissions', async () => {
