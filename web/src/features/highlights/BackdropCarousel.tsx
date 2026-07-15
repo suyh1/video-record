@@ -7,6 +7,7 @@ export type BackdropCarouselProps = {
   items: TMDBHighlight[]
   intervalMs: number
   showControls?: boolean
+  onActiveImageChange?: (image: HTMLImageElement | null, item: TMDBHighlight | null) => void
   onActiveItemChange?: (item: TMDBHighlight | null) => void
 }
 
@@ -29,6 +30,7 @@ export function BackdropCarousel(props: BackdropCarouselProps) {
 function BackdropCarouselSession({
   intervalMs,
   items,
+  onActiveImageChange,
   onActiveItemChange,
   showControls = false,
 }: BackdropCarouselProps) {
@@ -39,6 +41,7 @@ function BackdropCarouselSession({
   const [manuallyPaused, setManuallyPaused] = useState(false)
   const [navigationIntent, setNavigationIntent] = useState<NavigationIntent | null>(null)
   const initialCandidatePending = useRef(true)
+  const decodedImages = useRef<Array<HTMLImageElement | null>>(items.map(() => null))
   const documentVisible = useDocumentVisibility()
   const reducedMotion = useReducedMotion()
   const loadingURL = loadingIndex === null ? null : items[loadingIndex]?.backdropURL ?? null
@@ -112,6 +115,7 @@ function BackdropCarouselSession({
       if (!current || settled) return
       settled = true
       if (isInitialCandidate) initialCandidatePending.current = false
+      decodedImages.current[loadingIndex] = status === 'ready' ? image : null
       setStatuses((currentStatuses) => currentStatuses.map((currentStatus, index) => (
         index === loadingIndex ? status : currentStatus
       )))
@@ -148,10 +152,12 @@ function BackdropCarouselSession({
   useEffect(() => {
     if (activeIndex !== null) {
       onActiveItemChange?.(items[activeIndex] ?? null)
+      onActiveImageChange?.(decodedImages.current[activeIndex] ?? null, items[activeIndex] ?? null)
     } else if (isEmpty) {
       onActiveItemChange?.(null)
+      onActiveImageChange?.(null, null)
     }
-  }, [activeIndex, isEmpty, items, onActiveItemChange])
+  }, [activeIndex, isEmpty, items, onActiveImageChange, onActiveItemChange])
 
   const advance = useCallback((direction: 1 | -1) => {
     if (activeIndex === null) return

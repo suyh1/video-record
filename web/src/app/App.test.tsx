@@ -9,6 +9,7 @@ import { App } from './App'
 describe('App', () => {
   beforeEach(() => {
     window.history.replaceState({}, '', '/')
+    document.documentElement.removeAttribute('data-theme')
     Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 })
     server.use(
       http.get('*/api/v1/setup/status', () => HttpResponse.json({ initialized: true, storageReady: true, tmdbConfigured: false })),
@@ -21,6 +22,23 @@ describe('App', () => {
       http.get('*/api/v1/sync/candidates', () => HttpResponse.json([])),
       http.get('*/api/v1/collections', () => HttpResponse.json([])),
     )
+  })
+
+  it('marks the immersive header for dark text when the home hero is white, including dark theme', async () => {
+    document.documentElement.setAttribute('data-theme', 'dark')
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    const user = userEvent.setup()
+    render(<App />)
+
+    const hero = await screen.findByRole('region', { name: '首页主视觉' })
+    await waitFor(() => expect(hero).toHaveAttribute('data-backdrop-state', 'empty'))
+    expect(screen.getByRole('banner', { name: '应用导航' })).toHaveClass('home-white-header')
+    expect(screen.getByRole('heading', { level: 1, name: '首页' })).toBeVisible()
+
+    await user.click(within(screen.getByRole('navigation', { name: '主导航' })).getByRole('link', { name: '影库' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/library'))
+    expect(screen.getByRole('banner', { name: '应用导航' })).not.toHaveClass('home-white-header', 'home-image-header')
+    scrollTo.mockRestore()
   })
 
   it('places the brand, primary navigation, search, and record action in the application banner', async () => {

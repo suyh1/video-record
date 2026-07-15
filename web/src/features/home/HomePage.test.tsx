@@ -1,14 +1,102 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { renderWithQueryClient } from '../../test/render'
 import { server } from '../../test/server'
 import { HomePage } from './HomePage'
 
+vi.mock('../../lib/mediaAccent', () => ({ sampleMediaAccent: vi.fn(() => null) }))
+
+afterEach(() => vi.unstubAllGlobals())
+
 describe('HomePage', () => {
+  it('prioritizes watching items then deduplicates recent items up to six private hero details', async () => {
+    installInstantImageMock()
+    const watching = [libraryMovie('watching-1', 101, '正在观看一', 'watching'), libraryMovie('watching-2', 102, '正在观看二', 'watching')]
+    const recent = [
+      watching[0]!,
+      libraryMovie('recent-1', 201, '最近一', 'completed'),
+      libraryMovie('recent-2', 202, '最近二', 'completed'),
+      libraryMovie('recent-3', 203, '最近三', 'completed'),
+      libraryMovie('recent-4', 204, '最近四', 'completed'),
+      libraryMovie('recent-5', 205, '最近五', 'completed'),
+    ]
+    const detailRequests: number[] = []
+    server.use(
+      http.get('*/api/v1/library', ({ request }) => HttpResponse.json({
+        items: new URL(request.url).searchParams.get('status') === 'watching' ? watching : recent,
+        nextCursor: null,
+      })),
+      http.get('*/api/v1/tmdb/movie/:tmdbId', ({ params }) => {
+        const tmdbId = Number(params.tmdbId)
+        detailRequests.push(tmdbId)
+        const source = [...watching, ...recent].find((item) => item.tmdbId === tmdbId)!
+        return HttpResponse.json(movieDetails(source))
+      }),
+    )
+
+    renderWithQueryClient(<MemoryRouter><HomePage /></MemoryRouter>)
+
+    await waitFor(() => expect(detailRequests).toEqual([101, 102, 201, 202, 203, 204]))
+    expect(await screen.findByRole('heading', { level: 1, name: '正在观看一' })).toBeVisible()
+    expect(screen.getByText('1 / 6')).toBeVisible()
+  })
+
+  it('uses only signed popular backdrops when private details have no usable backdrop', async () => {
+    installInstantImageMock()
+    const privateItem = libraryMovie('private-1', 301, '没有背景的私人记录', 'completed')
+    let highlightRequests = 0
+    server.use(
+      http.get('*/api/v1/library', () => HttpResponse.json({ items: [privateItem], nextCursor: null })),
+      http.get('*/api/v1/tmdb/movie/301', () => HttpResponse.json({
+        ...movieDetails(privateItem),
+        backdropPath: '',
+      })),
+      http.get('*/api/v1/public/tmdb/highlights', () => {
+        highlightRequests += 1
+        return HttpResponse.json({ items: [
+          popularHighlight(901, '热门补足'),
+          { ...popularHighlight(902, '未签名热门'), backdropURL: '/api/v1/public/tmdb/images/w1280/unsigned.jpg' },
+        ] })
+      }),
+    )
+
+    renderWithQueryClient(<MemoryRouter><HomePage /></MemoryRouter>)
+
+    expect(await screen.findByRole('heading', { level: 1, name: '热门补足' })).toBeVisible()
+    expect(screen.getByText('1 / 1')).toBeVisible()
+    expect(screen.queryByText('未签名热门')).not.toBeInTheDocument()
+    expect(highlightRequests).toBe(1)
+  })
+
+  it('isolates continuing and popular errors while recent private records stay usable', async () => {
+    installInstantImageMock()
+    const recentItem = libraryMovie('recent-safe', 401, '仍可打开的记录', 'completed')
+    server.use(
+      http.get('*/api/v1/library', ({ request }) => (
+        new URL(request.url).searchParams.get('status') === 'watching'
+          ? HttpResponse.json({ code: 'internal_error' }, { status: 500 })
+          : HttpResponse.json({ items: [recentItem], nextCursor: null })
+      )),
+      http.get('*/api/v1/tmdb/movie/401', () => HttpResponse.json(movieDetails(recentItem))),
+      http.get('*/api/v1/public/tmdb/highlights', () => HttpResponse.json({ code: 'tmdb_unavailable' }, { status: 502 })),
+    )
+
+    renderWithQueryClient(<MemoryRouter><HomePage /></MemoryRouter>)
+
+    expect(await screen.findByRole('heading', { level: 1, name: '仍可打开的记录' })).toBeVisible()
+    const continuingSection = screen.getByRole('region', { name: '继续观看' })
+    expect(within(continuingSection).getByRole('alert')).toHaveTextContent('无法读取继续观看')
+    expect(within(continuingSection).getByRole('button', { name: '重试继续观看' })).toBeEnabled()
+    const recentSection = screen.getByRole('region', { name: '最近记录' })
+    expect(within(recentSection).getByRole('link', { name: /仍可打开的记录/ })).toHaveAttribute('href', '/media/recent-safe')
+    expect(within(recentSection).queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText('主视觉暂时无法加载')).not.toBeInTheDocument()
+  })
+
   it('loads the next episode only from the active current season round', async () => {
     const progressScopes: Array<string | null> = []
     server.use(
@@ -158,6 +246,14 @@ describe('HomePage', () => {
     expect(screen.getByRole('heading', { name: '最近记录' })).toBeVisible()
     expect(screen.getByText('In the Mood for Love')).toBeVisible()
     expect(screen.getByText('看过')).toBeVisible()
+    const recentSection = screen.getByRole('region', { name: '最近记录' })
+    expect(within(recentSection).getByRole('link', { name: '查看 漫长的季节 记录' })).toHaveClass('home-recent-featured')
+    const compactRecords = within(recentSection).getByRole('list', { name: '更多最近记录' })
+    expect(within(compactRecords).getByRole('link', { name: /花样年华/ })).toHaveAttribute('href', '/media/movie-1')
+    const progressbar = await screen.findByRole('progressbar', { name: '漫长的季节 第 1 季进度' })
+    expect(progressbar).toHaveAttribute('value', '1')
+    expect(progressbar).toHaveAttribute('max', '2')
+    expect(screen.getByText('下一集 · 第二集')).toBeVisible()
 
     await user.click(await screen.findByRole('button', { name: '推进 漫长的季节 下一集 S01E02' }))
     await waitFor(() => expect(progressBodies[0]).toMatchObject({
@@ -205,19 +301,75 @@ describe('HomePage', () => {
 
   it('offers search from an empty home and retries failed records', async () => {
     let attempts = 0
-    server.use(http.get('*/api/v1/library', () => {
-      attempts += 1
-      if (attempts <= 2) return HttpResponse.json({ code: 'internal_error' }, { status: 500 })
-      return HttpResponse.json({ items: [], nextCursor: null })
-    }))
+    server.use(
+      http.get('*/api/v1/library', () => {
+        attempts += 1
+        if (attempts <= 2) return HttpResponse.json({ code: 'internal_error' }, { status: 500 })
+        return HttpResponse.json({ items: [], nextCursor: null })
+      }),
+      http.get('*/api/v1/public/tmdb/highlights', () => HttpResponse.json({ items: [] })),
+    )
     const onSearch = vi.fn()
     const user = userEvent.setup()
 
     renderWithQueryClient(<MemoryRouter><HomePage onSearch={onSearch} /></MemoryRouter>)
 
-    await user.click(await screen.findByRole('button', { name: '重新加载首页' }))
-    await user.click(await screen.findByRole('button', { name: '搜索影视' }))
+    await user.click(await screen.findByRole('button', { name: '重试继续观看' }))
+    await user.click(await screen.findByRole('button', { name: '重试最近记录' }))
+    const recentSection = screen.getByRole('region', { name: '最近记录' })
+    await user.click(await within(recentSection).findByRole('button', { name: '搜索影视' }))
 
     expect(onSearch).toHaveBeenCalledOnce()
   })
 })
+
+function libraryMovie(id: string, tmdbId: number, title: string, status: 'watching' | 'completed') {
+  return {
+    id,
+    tmdbId,
+    source: 'local' as const,
+    mediaType: 'movie' as const,
+    title,
+    originalTitle: `${title} Original`,
+    year: '2026',
+    posterPath: null,
+    status,
+  }
+}
+
+function movieDetails(item: ReturnType<typeof libraryMovie>) {
+  return {
+    id: item.tmdbId,
+    title: item.title,
+    originalTitle: item.originalTitle,
+    releaseDate: '2026-01-01',
+    posterPath: '',
+    backdropPath: `/api/v1/public/tmdb/images/w1280/${item.tmdbId}.jpg?expires=4102444800&signature=${'a'.repeat(64)}`,
+    overview: `${item.title} 概览`,
+    runtime: 100,
+    genres: ['剧情'],
+  }
+}
+
+function popularHighlight(id: number, title: string) {
+  return {
+    id,
+    mediaType: 'movie' as const,
+    title,
+    originalTitle: `${title} Original`,
+    year: '2026',
+    overview: `${title} 概览`,
+    backdropURL: `/api/v1/public/tmdb/images/w1280/popular-${id}.jpg?expires=4102444800&signature=${'b'.repeat(64)}`,
+  }
+}
+
+function installInstantImageMock() {
+  class TestImage {
+    fetchPriority = 'auto'
+    onerror: ((event: Event) => void) | null = null
+    onload: ((event: Event) => void) | null = null
+    src = ''
+    decode = vi.fn(() => Promise.resolve())
+  }
+  vi.stubGlobal('Image', TestImage)
+}

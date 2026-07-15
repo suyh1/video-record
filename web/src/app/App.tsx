@@ -19,6 +19,7 @@ import { NotFoundPage } from './NotFoundPage'
 import { CalendarPage } from '../features/calendar/CalendarPage'
 import { AuthGate } from '../features/auth/AuthGate'
 import { HomePage } from '../features/home/HomePage'
+import type { HomeHeroBackdropState } from '../features/home/HomeHero'
 import { MemberSettings } from '../features/household/MemberSettings'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { MediaDetailsPage } from '../features/media/MediaDetailsPage'
@@ -69,6 +70,7 @@ export function App() {
 function ApplicationShell() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [headerScrolled, setHeaderScrolled] = useState(false)
+  const [homeHeroBackdropState, setHomeHeroBackdropState] = useState<HomeHeroBackdropState>('loading')
   const searchTrigger = useRef<HTMLElement | null>(null)
   const restoreFocusTimer = useRef<number | null>(null)
   const restoringSearchFocus = useRef(false)
@@ -76,6 +78,8 @@ function ApplicationShell() {
   const navigate = useNavigate()
   const navigationType = useNavigationType()
   const immersiveHeader = location.pathname === '/' || /^\/media\/[^/]+\/?$/.test(location.pathname)
+  const whiteHomeHeader = location.pathname === '/' && homeHeroBackdropState !== 'ready'
+  const imageHomeHeader = location.pathname === '/' && homeHeroBackdropState === 'ready'
 
   useLayoutEffect(() => {
     if (navigationType !== 'POP') window.scrollTo({ behavior: 'auto', left: 0, top: 0 })
@@ -145,7 +149,7 @@ function ApplicationShell() {
 
       <header
         aria-label="应用导航"
-        className={`app-header ${immersiveHeader ? 'immersive-header' : 'solid-header'}${headerScrolled ? ' is-scrolled' : ''}`}
+        className={`app-header ${immersiveHeader ? 'immersive-header' : 'solid-header'}${headerScrolled ? ' is-scrolled' : ''}${whiteHomeHeader ? ' home-white-header' : ''}${imageHomeHeader ? ' home-image-header' : ''}`}
       >
         <div className="app-header-inner">
           <Brand />
@@ -170,7 +174,15 @@ function ApplicationShell() {
 
       <main id="main-content" className={`main-content${immersiveHeader ? ' immersive-content' : ''}`} tabIndex={-1}>
         <Routes>
-          <Route path="/" element={<HomePage onSearch={() => focusSearch()} />} />
+          <Route
+            path="/"
+            element={(
+              <HomePage
+                onHeroBackdropStateChange={setHomeHeroBackdropState}
+                onSearch={() => focusSearch()}
+              />
+            )}
+          />
           <Route path="/library" element={<LibraryPage onSearch={() => focusSearch()} />} />
           <Route path="/media/:mediaId" element={<MediaDetailsPage />} />
           <Route path="/calendar" element={<CalendarPage />} />

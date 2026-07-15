@@ -148,6 +148,24 @@ describe('BackdropCarousel', () => {
     expect(activeImage(container)).toHaveAttribute('aria-hidden', 'true')
   })
 
+  it('reports only the decoded image that becomes active for media color sampling', async () => {
+    const items = [highlight(1, '第一张'), highlight(2, '第二张')]
+    const onActiveImageChange = vi.fn()
+    render(
+      <BackdropCarousel
+        items={items}
+        intervalMs={7_000}
+        onActiveImageChange={onActiveImageChange}
+      />,
+    )
+
+    expect(onActiveImageChange).not.toHaveBeenCalled()
+    await resolveImage(0)
+
+    expect(onActiveImageChange).toHaveBeenLastCalledWith(decodedImages[0], items[0])
+    expect(onActiveImageChange).not.toHaveBeenCalledWith(decodedImages[1], items[1])
+  })
+
   it('prioritizes only the first initial image before assigning its source and decoding it', async () => {
     const items = [highlight(1, '第一张'), highlight(2, '第二张'), highlight(3, '手动目标')]
     render(<BackdropCarousel items={items} intervalMs={7_000} showControls />)

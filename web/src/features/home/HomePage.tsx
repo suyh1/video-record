@@ -1,20 +1,24 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, Check, ChevronRight, CircleStop, Clapperboard, LoaderCircle, Play, RefreshCw, RotateCcw, Search, type LucideIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
   getEpisodeProgress,
   getCurrentRound,
   getLibrary,
+  getTMDBHighlights,
+  getTMDBMovie,
   getTMDBSeason,
   getTMDBTV,
   updateEpisodeProgress,
   type UpdateEpisodeProgressPayload,
 } from '../../api/client'
 import type { EpisodeProgressItem, EpisodeReference, MediaSearchResult, RecordStatus } from '../../api/types'
+import { mediaImageURL } from '../../lib/mediaImage'
 import { findNextEpisode, mergeSeason, regularSeasons, selectActiveSeason } from '../episodes/episodeCatalog'
 import { MediaPoster } from '../media/MediaPoster'
+import { HomeHero, type HomeHeroBackdropState, type HomeHeroItem } from './HomeHero'
 
 const statusDetails = {
   none: { label: '未记录', icon: Clapperboard },
@@ -24,7 +28,10 @@ const statusDetails = {
   dropped: { label: '弃看', icon: CircleStop },
 } satisfies Record<RecordStatus, { label: string; icon: typeof Clapperboard }>
 
-export function HomePage({ onSearch }: { onSearch?: () => void }) {
+export function HomePage({ onHeroBackdropStateChange, onSearch }: {
+  onHeroBackdropStateChange?: (state: HomeHeroBackdropState) => void
+  onSearch?: () => void
+}) {
   const continuing = useQuery({
     queryKey: ['library', 'watching'],
     queryFn: ({ signal }) => getLibrary('watching', signal),
@@ -33,27 +40,81 @@ export function HomePage({ onSearch }: { onSearch?: () => void }) {
     queryKey: ['library', 'all'],
     queryFn: ({ signal }) => getLibrary('all', signal),
   })
+  const privateCandidates = useMemo(
+    () => collectPrivateHeroCandidates(continuing.data?.items ?? [], recent.data?.items ?? []),
+    [continuing.data?.items, recent.data?.items],
+  )
+  const privateDetails = useQueries({
+    queries: privateCandidates.map((item) => ({
+      queryKey: [`tmdb-${item.mediaType}`, item.tmdbId],
+      queryFn: ({ signal }: { signal: AbortSignal }) => item.mediaType === 'movie'
+        ? getTMDBMovie(item.tmdbId ?? 0, signal)
+        : getTMDBTV(item.tmdbId ?? 0, signal),
+    })),
+  })
+  const privateDetailsPending = privateDetails.some((detail) => detail.isPending)
+  const privateHeroItems = useMemo(() => privateCandidates.flatMap((item, index) => {
+    const detail = privateDetails[index]?.data
+    const backdropURL = mediaImageURL(detail?.backdropPath)
+    if (!detail || !backdropURL || !item.tmdbId) return []
+    return [{
+      id: item.tmdbId,
+      mediaType: item.mediaType,
+      title: item.title,
+      originalTitle: item.originalTitle,
+      year: item.year,
+      overview: detail.overview,
+      backdropURL,
+      localItem: item,
+    } satisfies HomeHeroItem]
+  }), [privateCandidates, privateDetails])
+  const librariesPending = continuing.isPending || recent.isPending
+  const needsHighlights = !librariesPending && !privateDetailsPending && privateHeroItems.length < 6
+  const highlights = useQuery({
+    queryKey: ['tmdb-highlights'],
+    queryFn: ({ signal }) => getTMDBHighlights(signal),
+    enabled: needsHighlights,
+  })
+  const heroItems = useMemo(() => {
+    const seen = new Set(privateHeroItems.map((item) => `${item.mediaType}:${item.id}`))
+    const popular = (highlights.data ?? []).flatMap((item) => {
+      const backdropURL = mediaImageURL(item.backdropURL)
+      const key = `${item.mediaType}:${item.id}`
+      if (!backdropURL || seen.has(key)) return []
+      seen.add(key)
+      return [{ ...item, backdropURL }]
+    })
+    return [...privateHeroItems, ...popular].slice(0, 6)
+  }, [highlights.data, privateHeroItems])
+  const heroLoading = librariesPending
+    || privateDetailsPending
+    || (needsHighlights && highlights.isPending)
+  const heroError = !heroLoading
+    && heroItems.length === 0
+    && (continuing.isError || recent.isError || privateDetails.some((detail) => detail.isError) || highlights.isError)
 
-  const retry = () => {
+  const retryHero = () => {
     void continuing.refetch()
     void recent.refetch()
+    privateDetails.forEach((detail) => {
+      if (detail.isError) void detail.refetch()
+    })
+    if (highlights.isError) void highlights.refetch()
   }
   const continuingItems = continuing.data?.items.filter((item) => item.mediaType === 'tv') ?? []
 
   return (
     <div className="page home-page">
-      <header className="page-heading">
-        <p className="page-kicker">私人影库</p>
-        <h1>首页</h1>
-      </header>
+      <HomeHero
+        isError={heroError}
+        isLoading={heroLoading}
+        items={heroItems}
+        {...(onHeroBackdropStateChange ? { onBackdropStateChange: onHeroBackdropStateChange } : {})}
+        onRetry={retryHero}
+        {...(onSearch ? { onSearch } : {})}
+      />
 
-      {continuing.isError || recent.isError ? (
-        <div className="home-error" role="alert">
-          <span>无法读取首页记录，请检查连接后重试。</span>
-          <button type="button" onClick={retry}><RefreshCw aria-hidden="true" size={16} />重新加载首页</button>
-        </div>
-      ) : null}
-
+      <div className="home-content">
       <section className="content-section" aria-labelledby="continue-heading">
         <div className="section-heading">
           <div>
@@ -62,12 +123,15 @@ export function HomePage({ onSearch }: { onSearch?: () => void }) {
           </div>
         </div>
         {continuing.isPending ? <HomePosterSkeleton /> : null}
-        {continuingItems.length ? (
+        {continuing.isError ? (
+          <HomeSectionError label="无法读取继续观看" retryLabel="重试继续观看" onRetry={() => { void continuing.refetch() }} />
+        ) : null}
+        {!continuing.isError && continuingItems.length ? (
           <div className="home-poster-strip">
             {continuingItems.slice(0, 8).map((item) => <HomeContinueItem key={item.id} item={item} />)}
           </div>
         ) : null}
-        {!continuing.isPending && continuingItems.length === 0 ? (
+        {!continuing.isPending && !continuing.isError && continuingItems.length === 0 ? (
           <HomeEmpty
             icon={Clapperboard}
             message="还没有正在观看的剧集"
@@ -85,12 +149,20 @@ export function HomePage({ onSearch }: { onSearch?: () => void }) {
           </div>
         </div>
         {recent.isPending ? <HomeRecentSkeleton /> : null}
-        {recent.data?.items.length ? (
-          <ul className="home-recent-list">
-            {recent.data.items.slice(0, 8).map((item) => <RecentRecord key={item.id} item={item} />)}
-          </ul>
+        {recent.isError ? (
+          <HomeSectionError label="无法读取最近记录" retryLabel="重试最近记录" onRetry={() => { void recent.refetch() }} />
         ) : null}
-        {recent.data?.items.length === 0 ? (
+        {!recent.isError && recent.data?.items.length ? (
+          <div className="home-recent-layout">
+            <RecentFeatured item={recent.data.items[0]!} />
+            {recent.data.items.length > 1 ? (
+              <ul className="home-recent-list" aria-label="更多最近记录">
+                {recent.data.items.slice(1, 8).map((item) => <RecentRecord key={item.id} item={item} />)}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+        {!recent.isError && recent.data?.items.length === 0 ? (
           <HomeEmpty
             icon={Search}
             message="第一条观影记录会显示在这里"
@@ -99,8 +171,39 @@ export function HomePage({ onSearch }: { onSearch?: () => void }) {
           />
         ) : null}
       </section>
+      </div>
     </div>
   )
+}
+
+function HomeSectionError({ label, onRetry, retryLabel }: {
+  label: string
+  onRetry: () => void
+  retryLabel: string
+}) {
+  return (
+    <div className="home-error" role="alert">
+      <span>{label}</span>
+      <button type="button" onClick={onRetry}>
+        <RefreshCw aria-hidden="true" size={16} />
+        {retryLabel}
+      </button>
+    </div>
+  )
+}
+
+function collectPrivateHeroCandidates(watching: MediaSearchResult[], recent: MediaSearchResult[]) {
+  const candidates: MediaSearchResult[] = []
+  const seen = new Set<string>()
+  for (const item of [...watching, ...recent]) {
+    if (!item.tmdbId || item.tmdbId <= 0) continue
+    const key = `${item.mediaType}:${item.tmdbId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    candidates.push(item)
+    if (candidates.length === 6) break
+  }
+  return candidates
 }
 
 function HomeContinueItem({ item }: { item: MediaSearchResult }) {
@@ -201,6 +304,19 @@ function HomeContinueItem({ item }: { item: MediaSearchResult }) {
   return (
     <article className="home-continue-item">
       <Link className="poster-link" to={`/media/${item.id}`}><MediaPoster item={item} /></Link>
+      {progress.data && activeSeason !== null && mergedSeason ? (
+        <div className="home-continue-progress">
+          <p>
+            <span>第 {activeSeason} 季 · {progress.data.watchedEpisodes}/{totalEpisodes} 集</span>
+            {nextEpisode ? <span>下一集 · {nextEpisode.name || episodeLabel(nextEpisode)}</span> : null}
+          </p>
+          <progress
+            aria-label={`${item.title} 第 ${activeSeason} 季进度`}
+            max={Math.max(totalEpisodes, 1)}
+            value={Math.min(progress.data.watchedEpisodes, totalEpisodes)}
+          />
+        </div>
+      ) : null}
       <div className="home-continue-action">
         {progressPending || catalogPending ? <div className="skeleton home-continue-action-skeleton" aria-label={`正在加载 ${item.title} 的剧集进度`} /> : null}
         {progressError ? <span role="alert">进度暂不可用</span> : null}
@@ -226,6 +342,19 @@ function HomeContinueItem({ item }: { item: MediaSearchResult }) {
         {savedEpisode ? <span className="sr-only" role="status">已推进至 {episodeLabel(savedEpisode)}</span> : null}
       </div>
     </article>
+  )
+}
+
+function RecentFeatured({ item }: { item: MediaSearchResult }) {
+  return (
+    <Link
+      aria-label={`查看 ${item.title} 记录`}
+      className="home-recent-featured"
+      to={`/media/${item.id}`}
+    >
+      <MediaPoster item={item} />
+      <ChevronRight aria-hidden="true" size={20} />
+    </Link>
   )
 }
 
