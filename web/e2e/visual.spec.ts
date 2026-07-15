@@ -257,12 +257,29 @@ test('keeps the details header readable throughout normal-motion backdrop readin
   await backdropRequested
   const hero = page.locator('.media-hero')
   await expect(hero).toHaveAttribute('data-backdrop-state', 'loading')
-  await installDetailsHeaderTransitionSampler(page)
+  await installDetailsHeaderTransitionSampler(page, '.media-hero', 'loading-to-ready')
   releaseBackdrop()
-  const samples = await readDetailsHeaderTransitionSamples(page)
+  const loadingToReady = await readDetailsHeaderTransitionSamples(page)
 
   await expect(hero).toHaveAttribute('data-backdrop-state', 'ready')
-  expect(samples.length).toBeGreaterThanOrEqual(21)
+  const header = page.getByRole('banner', { name: '应用导航' })
+  await installDetailsHeaderTransitionSampler(page, '.app-header', 'ready-to-scrolled')
+  await page.evaluate(() => window.scrollTo(0, 96))
+  const readyToScrolled = await readDetailsHeaderTransitionSamples(page)
+  await expect(header).toHaveClass(/is-scrolled/)
+
+  await installDetailsHeaderTransitionSampler(page, '.app-header', 'scrolled-to-top')
+  await page.evaluate(() => window.scrollTo(0, 0))
+  const scrolledToTop = await readDetailsHeaderTransitionSamples(page)
+  await expect(header).not.toHaveClass(/is-scrolled/)
+
+  await installDetailsHeaderTransitionSampler(page, '.media-hero', 'ready-to-failed')
+  await page.locator('.media-hero-backdrop').dispatchEvent('error')
+  const readyToFailed = await readDetailsHeaderTransitionSamples(page)
+  await expect(hero).toHaveAttribute('data-backdrop-state', 'failed')
+
+  const samples = [...loadingToReady, ...readyToScrolled, ...scrolledToTop, ...readyToFailed]
+  expect(samples.length).toBeGreaterThanOrEqual(84)
   for (const sample of samples) {
     for (const entry of sample.entries) {
       expect(
@@ -270,15 +287,9 @@ test('keeps the details header readable throughout normal-motion backdrop readin
         `${sample.phase} ${entry.name}: ${entry.foreground} on ${entry.background} / ${sample.headerBackground}`,
       ).toBeGreaterThanOrEqual(4.5)
     }
-  }
-
-  const transitionDurations = await page.evaluate(() => [
-    getComputedStyle(document.querySelector<HTMLElement>('.app-header')!).transitionDuration,
-    getComputedStyle(document.querySelector<HTMLElement>('.app-primary-navigation .nav-link')!).transitionDuration,
-    getComputedStyle(document.querySelector<HTMLElement>('.global-search')!).transitionDuration,
-  ])
-  for (const duration of transitionDurations.flatMap((value) => value.split(', '))) {
-    expect(Number.parseFloat(duration)).toBeLessThanOrEqual(0.001)
+    for (const duration of sample.transitionDurations.flatMap((value) => value.split(', '))) {
+      expect(Number.parseFloat(duration), `${sample.phase} transition: ${duration}`).toBeLessThanOrEqual(0.001)
+    }
   }
 })
 
@@ -292,20 +303,25 @@ type HeaderTransitionSample = {
   phase: string
   headerBackground: string
   entries: Array<{ name: string; background: string; foreground: string }>
+  transitionDurations: string[]
 }
 
-function installDetailsHeaderTransitionSampler(page: import('@playwright/test').Page) {
-  return page.evaluate(() => {
+function installDetailsHeaderTransitionSampler(
+  page: import('@playwright/test').Page,
+  mutationSelector: string,
+  phase: string,
+) {
+  return page.evaluate(({ mutationSelector, phase }) => {
     const target = globalThis as typeof globalThis & {
       __detailsHeaderTransitionSamples?: Promise<HeaderTransitionSample[]>
     }
-    const hero = document.querySelector<HTMLElement>('.media-hero')!
     const header = document.querySelector<HTMLElement>('.app-header')!
+    const mutationTarget = document.querySelector<HTMLElement>(mutationSelector)!
     target.__detailsHeaderTransitionSamples = new Promise<HeaderTransitionSample[]>((resolve) => {
       const samples: HeaderTransitionSample[] = []
       let readyFrames = 0
 
-      const capture = (phase: string) => {
+      const capture = (samplePhase: string) => {
         const navEntries = [...document.querySelectorAll<HTMLElement>('.app-primary-navigation .nav-link')]
           .map((element) => ({
             name: `nav:${element.textContent?.trim() ?? ''}`,
@@ -315,7 +331,7 @@ function installDetailsHeaderTransitionSampler(page: import('@playwright/test').
         const search = document.querySelector<HTMLElement>('.global-search')!
         const searchInput = search.querySelector<HTMLInputElement>('input')!
         samples.push({
-          phase,
+          phase: `${phase}:${samplePhase}`,
           headerBackground: getComputedStyle(header).backgroundColor,
           entries: [
             {
@@ -330,6 +346,11 @@ function installDetailsHeaderTransitionSampler(page: import('@playwright/test').
               foreground: getComputedStyle(searchInput, '::placeholder').color,
             },
           ],
+          transitionDurations: [
+            getComputedStyle(header).transitionDuration,
+            getComputedStyle(document.querySelector<HTMLElement>('.app-primary-navigation .nav-link')!).transitionDuration,
+            getComputedStyle(search).transitionDuration,
+          ],
         })
       }
       const captureFrame = () => {
@@ -339,14 +360,13 @@ function installDetailsHeaderTransitionSampler(page: import('@playwright/test').
         else requestAnimationFrame(captureFrame)
       }
       const observer = new MutationObserver(() => {
-        if (!hero.classList.contains('has-backdrop')) return
         observer.disconnect()
-        capture('ready-mutation')
+        capture('mutation')
         requestAnimationFrame(captureFrame)
       })
-      observer.observe(hero, { attributeFilter: ['class'], attributes: true })
+      observer.observe(mutationTarget, { attributeFilter: ['class'], attributes: true })
     })
-  })
+  }, { mutationSelector, phase })
 }
 
 function readDetailsHeaderTransitionSamples(page: import('@playwright/test').Page) {

@@ -2712,7 +2712,7 @@ a {
   --surface-raised: oklch(0.93 0.006 240);
 }
 
-body:has(.media-details-page .media-hero.has-backdrop) .app-header.immersive-header:not(.is-scrolled) {
+body:has(.media-details-page) .app-header.immersive-header {
   --border: oklch(1 0 0 / 0.28);
   --ink: oklch(0.98 0 0);
   --muted: oklch(0.86 0.006 240);
@@ -2724,8 +2724,8 @@ body:has(.media-details-page .media-hero.has-backdrop) .app-header.immersive-hea
   transition: none;
 }
 
-body:has(.media-details-page .media-hero.has-backdrop) .app-header.immersive-header:not(.is-scrolled) .nav-link,
-body:has(.media-details-page .media-hero.has-backdrop) .app-header.immersive-header:not(.is-scrolled) .global-search {
+body:has(.media-details-page) .app-header.immersive-header .nav-link,
+body:has(.media-details-page) .app-header.immersive-header .global-search {
   transition: none;
 }
 
