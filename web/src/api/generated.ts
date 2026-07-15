@@ -2918,6 +2918,16 @@ export interface operations {
                     "image/webp": string;
                 };
             };
+            /** @description Public TMDB image proxy concurrency is saturated. */
+            429: {
+                headers: {
+                    "Retry-After": number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };

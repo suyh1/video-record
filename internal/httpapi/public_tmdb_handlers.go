@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	publicTMDBHighlightLimit = 10
-	publicTMDBImageSize      = "w1280"
-	publicTMDBImageTTL       = 24 * time.Hour
+	publicTMDBHighlightLimit   = 10
+	publicTMDBImageSize        = "w1280"
+	publicTMDBImageTTL         = 24 * time.Hour
+	publicTMDBImageConcurrency = 4
 )
 
 var (
@@ -27,8 +28,9 @@ var (
 )
 
 type publicTMDBHandlers struct {
-	client *tmdb.Client
-	now    func() time.Time
+	client     *tmdb.Client
+	now        func() time.Time
+	imageSlots chan struct{}
 }
 
 type publicTMDBHighlightsResponse struct {
@@ -157,6 +159,10 @@ func (handlers publicTMDBHandlers) image(w http.ResponseWriter, r *http.Request)
 		writeProblem(w, r, http.StatusForbidden, "Forbidden", "invalid_image_signature")
 		return
 	}
+	if !handlers.acquireImageSlot(w, r) {
+		return
+	}
+	defer func() { <-handlers.imageSlots }()
 	asset, err := handlers.client.Image(r.Context(), size, imagePath)
 	if err != nil {
 		writeTMDBError(w, r, err)
@@ -167,6 +173,24 @@ func (handlers publicTMDBHandlers) image(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(asset.Contents)
+}
+
+func (handlers publicTMDBHandlers) acquireImageSlot(w http.ResponseWriter, r *http.Request) bool {
+	select {
+	case <-r.Context().Done():
+		return false
+	default:
+	}
+	select {
+	case <-r.Context().Done():
+		return false
+	case handlers.imageSlots <- struct{}{}:
+		return true
+	default:
+		w.Header().Set("Retry-After", "1")
+		writeProblem(w, r, http.StatusTooManyRequests, "Too Many Requests", "tmdb_image_busy")
+		return false
+	}
 }
 
 func buildPublicTMDBImageURL(size, imagePath string, expires time.Time, signature string) string {

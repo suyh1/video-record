@@ -843,6 +843,13 @@ paths:
               schema: { type: string, format: binary }
             image/webp:
               schema: { type: string, format: binary }
+        '429':
+          description: Public TMDB image proxy concurrency is saturated.
+          headers:
+            Retry-After: { required: true, schema: { type: integer, minimum: 1 } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
         default: { $ref: '#/components/responses/Problem' }
   /api/v1/tmdb/status:
     get:
