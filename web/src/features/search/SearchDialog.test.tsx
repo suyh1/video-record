@@ -244,6 +244,52 @@ describe('SearchDialog', () => {
     expect(sessionStorage.getItem(recentSearchesKey)).toBeNull()
   })
 
+  it('ignores a pending custom creation response after the search query changes', async () => {
+    let markStarted: (() => void) | undefined
+    let releaseResponse: (() => void) | undefined
+    const started = new Promise<void>((resolve) => { markStarted = resolve })
+    const responseGate = new Promise<void>((resolve) => { releaseResponse = resolve })
+    server.use(
+      http.get('*/api/v1/media/search', ({ request }) => {
+        const query = new URL(request.url).searchParams.get('q') ?? ''
+        return HttpResponse.json({ items: query === '新搜索' ? [{
+          id: 'new-result', source: 'local', mediaType: 'movie', title: '新搜索结果', originalTitle: '',
+          year: '2026', posterPath: null, status: 'none',
+        }] : [] })
+      }),
+      http.get('*/api/v1/tmdb/search', () => HttpResponse.json({ results: [] })),
+      http.post('*/api/v1/media/custom', async () => {
+        markStarted?.()
+        await responseGate
+        return HttpResponse.json({
+          id: 'stale-custom', mediaType: 'movie', title: '旧自定义', overview: '', externalTitle: '',
+          externalOverview: '', originalTitle: '', releaseDate: '2026', posterPath: '', backdropPath: '',
+          runtimeMinutes: 0, genres: [],
+        }, { status: 201 })
+      }),
+    )
+    const onSelect = vi.fn()
+    const user = userEvent.setup()
+    renderWithQueryClient(<SearchDialog open onClose={() => undefined} onSelect={onSelect} />)
+
+    const input = screen.getByRole('searchbox', { name: '搜索影视' })
+    await user.type(input, '旧自定义')
+    await user.click(await screen.findByRole('button', { name: '创建自定义条目' }))
+    await user.click(screen.getByRole('button', { name: '保存自定义条目' }))
+    await started
+    await user.clear(input)
+    await user.type(input, '新搜索')
+    const newResult = await screen.findByRole('button', { name: /新搜索结果/ })
+    releaseResponse?.()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(sessionStorage.getItem(recentSearchesKey)).toBeNull()
+    expect(screen.getByRole('dialog', { name: '搜索影视' })).toBeVisible()
+    expect(input).toHaveValue('新搜索')
+    expect(newResult).toBeVisible()
+  })
+
   it('does not let an old custom response affect a reopened dialog', async () => {
     let markStarted: (() => void) | undefined
     let releaseResponse: (() => void) | undefined

@@ -35,6 +35,7 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
   const selectionEpoch = useRef(0)
+  const customSubmissionEpoch = useRef(0)
   const wasOpen = useRef(open)
   const localHeadingID = useId()
   const remoteHeadingID = useId()
@@ -48,6 +49,7 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
   useEffect(() => {
     if (wasOpen.current && !open) {
       selectionEpoch.current += 1
+      customSubmissionEpoch.current += 1
       setSelectingID(null)
       setSelectionError(false)
       setCustomOpen(false)
@@ -57,6 +59,7 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
 
   useEffect(() => () => {
     selectionEpoch.current += 1
+    customSubmissionEpoch.current += 1
   }, [])
 
   const normalizedQuery = query.trim()
@@ -100,7 +103,7 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
       overview: '',
     }),
     onSuccess: async (media, submission) => {
-      if (submission.epoch !== selectionEpoch.current) return
+      if (submission.epoch !== customSubmissionEpoch.current) return
       await onSelect({
         id: media.id,
         source: 'local',
@@ -111,13 +114,13 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
         posterPath: media.posterPath,
         status: 'none',
       })
-      if (submission.epoch === selectionEpoch.current) rememberQuery(submission.query)
+      if (submission.epoch === customSubmissionEpoch.current) rememberQuery(submission.query)
     },
   })
   const currentCustomPending = customMutation.isPending
-    && customMutation.variables?.epoch === selectionEpoch.current
+    && customMutation.variables?.epoch === customSubmissionEpoch.current
   const currentCustomError = customMutation.isError
-    && customMutation.variables?.epoch === selectionEpoch.current
+    && customMutation.variables?.epoch === customSubmissionEpoch.current
 
   const selectResult = async (item: MediaSearchResult, settledQuery: string) => {
     if (selectingID !== null) return
@@ -136,6 +139,7 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
 
   const closeSearch = () => {
     selectionEpoch.current += 1
+    customSubmissionEpoch.current += 1
     setSelectingID(null)
     setSelectionError(false)
     setCustomOpen(false)
@@ -180,6 +184,7 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
               placeholder="输入电影或剧集名称"
               value={query}
               onChange={(event) => {
+                customSubmissionEpoch.current += 1
                 setQuery(event.target.value)
                 setSelectionError(false)
                 setCustomOpen(false)
@@ -266,7 +271,7 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
                   <form className="custom-media-form" onSubmit={(event) => {
                     event.preventDefault()
                     customMutation.mutate({
-                      epoch: selectionEpoch.current,
+                      epoch: customSubmissionEpoch.current,
                       mediaType: customType,
                       query: debouncedQuery,
                       year: customYear.trim(),
