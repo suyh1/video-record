@@ -314,13 +314,25 @@ func sourceAwareMediaImageURL(
 	parsed, err := url.Parse(imagePath)
 	if err == nil && (strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")) &&
 		parsed.Host != "" {
-		hostname := strings.TrimRight(strings.ToLower(parsed.Hostname()), ".")
+		hostname := normalizeImageHostname(parsed.Hostname())
 		if hostname == "image.tmdb.org" {
 			return ""
 		}
 		return imagePath
 	}
 	return ""
+}
+
+func normalizeImageHostname(hostname string) string {
+	hostname = strings.Map(func(character rune) rune {
+		switch character {
+		case '\u3002', '\uff0e', '\uff61':
+			return '.'
+		default:
+			return character
+		}
+	}, hostname)
+	return strings.TrimRight(strings.ToLower(hostname), ".")
 }
 
 func handlerTime(now func() time.Time) time.Time {

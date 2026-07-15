@@ -121,31 +121,44 @@ func TestMediaHandlersCreateReadAndLinkTMDBItems(t *testing.T) {
 }
 
 func TestMediaHandlerRejectsTMDBCustomImageHostAliases(t *testing.T) {
-	router, cookie, _, mediaService := newMediaTestRouter(t)
-	item, err := mediaService.CreateCustom(context.Background(), media.CreateCustomInput{
-		MediaType: media.MediaTypeMovie, Title: "TMDB 域名别名",
-	})
-	require.NoError(t, err)
-	item, err = mediaService.LinkExternal(context.Background(), item.ID, media.ExternalSnapshot{
-		Source: "custom-provider", SourceID: "tmdb-host-alias", MediaType: media.MediaTypeMovie,
-		Title:        "TMDB 域名别名",
-		PosterPath:   "https://ImAgE.TmDb.OrG./t/p/w342/poster.jpg",
-		BackdropPath: "http://image.tmdb.org../t/p/w1280/backdrop.jpg",
-	})
-	require.NoError(t, err)
+	for _, test := range []struct {
+		name     string
+		sourceID string
+		hostname string
+	}{
+		{name: "mixed case root dot", sourceID: "mixed-case", hostname: "ImAgE.TmDb.OrG."},
+		{name: "multiple root dots", sourceID: "root-dots", hostname: "image.tmdb.org.."},
+		{name: "ideographic full stop", sourceID: "u3002", hostname: "image。tmdb。org"},
+		{name: "fullwidth full stop", sourceID: "uff0e", hostname: "image．tmdb．org"},
+		{name: "halfwidth ideographic full stop", sourceID: "uff61", hostname: "image｡tmdb｡org"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			router, cookie, _, mediaService := newMediaTestRouter(t)
+			item, err := mediaService.CreateCustom(context.Background(), media.CreateCustomInput{
+				MediaType: media.MediaTypeMovie, Title: "TMDB 域名别名",
+			})
+			require.NoError(t, err)
+			item, err = mediaService.LinkExternal(context.Background(), item.ID, media.ExternalSnapshot{
+				Source: "custom-provider", SourceID: test.sourceID, MediaType: media.MediaTypeMovie,
+				Title:        "TMDB 域名别名",
+				PosterPath:   "https://" + test.hostname + "/t/p/w342/poster.jpg",
+				BackdropPath: "http://" + test.hostname + "/t/p/w1280/backdrop.jpg",
+			})
+			require.NoError(t, err)
 
-	response := performJSONRequest(router, http.MethodGet,
-		"http://example.test/api/v1/media/"+item.ID, nil,
-		map[string]string{"Cookie": cookie.String()})
+			response := performJSONRequest(router, http.MethodGet,
+				"http://example.test/api/v1/media/"+item.ID, nil,
+				map[string]string{"Cookie": cookie.String()})
 
-	require.Equal(t, http.StatusOK, response.Code)
-	var body mediaItemResponse
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
-	require.Nil(t, body.TMDBID)
-	require.Empty(t, body.PosterPath)
-	require.Empty(t, body.BackdropPath)
-	require.NotContains(t, response.Body.String(), "TmDb.OrG")
-	require.NotContains(t, response.Body.String(), "tmdb.org")
+			require.Equal(t, http.StatusOK, response.Code)
+			var body mediaItemResponse
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+			require.Nil(t, body.TMDBID)
+			require.Empty(t, body.PosterPath)
+			require.Empty(t, body.BackdropPath)
+			require.NotContains(t, response.Body.String(), test.hostname)
+		})
+	}
 }
 
 func newMediaTestRouter(t *testing.T) (http.Handler, *http.Cookie, string, *media.Service) {
