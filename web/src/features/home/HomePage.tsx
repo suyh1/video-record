@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, Check, ChevronRight, CircleStop, Clapperboard, LoaderCircle, Play, RefreshCw, RotateCcw, Search, type LucideIcon } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
@@ -207,6 +207,22 @@ function collectPrivateHeroCandidates(watching: MediaSearchResult[], recent: Med
 function HomeContinueItem({ item }: { item: MediaSearchResult }) {
   const queryClient = useQueryClient()
   const [savedAdvance, setSavedAdvance] = useState<SavedAdvance | null>(null)
+  const mounted = useRef(true)
+  const undoWindow = useRef<HomeUndoWindow>({
+    active: false,
+    expired: false,
+    undoInFlight: false,
+    watchingSynchronized: true,
+  })
+  const synchronizeWatching = useCallback(() => {
+    if (undoWindow.current.watchingSynchronized) return
+    undoWindow.current.watchingSynchronized = true
+    void queryClient.invalidateQueries({
+      exact: true,
+      queryKey: ['library', 'watching'],
+      refetchType: 'all',
+    })
+  }, [queryClient])
   const linked = Boolean(item.tmdbId)
   const tv = useQuery({
     queryKey: ['tmdb-tv', item.tmdbId],
@@ -239,35 +255,44 @@ function HomeContinueItem({ item }: { item: MediaSearchResult }) {
       queryClient.setQueryData(['episode-progress', item.id, variables.seasonNumber], nextProgress)
       if (variables.payload.action === 'next') {
         const episode = variables.payload.episodeRefs?.[0]
-        if (episode) setSavedAdvance({ episode })
-      }
-      if (variables.payload.action === 'undo') {
-        setSavedAdvance(null)
+        if (episode) {
+          undoWindow.current = {
+            active: true,
+            expired: false,
+            undoInFlight: false,
+            watchingSynchronized: false,
+          }
+          setSavedAdvance({ episode })
+        }
       }
       void queryClient.invalidateQueries({ exact: true, queryKey: ['library', 'all'] })
+    },
+    onSettled: (_data, _error, variables) => {
+      if (variables.payload.action !== 'undo') return
+      undoWindow.current.undoInFlight = false
+      synchronizeWatching()
+      undoWindow.current.active = false
+      if (mounted.current) setSavedAdvance(null)
     },
   })
   useEffect(() => {
     if (!savedAdvance) return
-    let refreshed = false
-    const refreshWatching = () => {
-      if (refreshed) return
-      refreshed = true
-      void queryClient.invalidateQueries({
-        exact: true,
-        queryKey: ['library', 'watching'],
-        refetchType: 'all',
-      })
-    }
     const timeout = window.setTimeout(() => {
-      refreshWatching()
+      undoWindow.current.expired = true
+      if (undoWindow.current.undoInFlight) return
+      synchronizeWatching()
+      undoWindow.current.active = false
       setSavedAdvance(null)
     }, 10_000)
+    return () => window.clearTimeout(timeout)
+  }, [savedAdvance, synchronizeWatching])
+  useEffect(() => {
+    mounted.current = true
     return () => {
-      window.clearTimeout(timeout)
-      refreshWatching()
+      mounted.current = false
+      if (undoWindow.current.active && !undoWindow.current.undoInFlight) synchronizeWatching()
     }
-  }, [queryClient, savedAdvance])
+  }, [synchronizeWatching])
 
   const mergedSeason = tv.data && season.data && progress.data
     ? mergeSeason(season.data, tv.data.seasons, progress.data)
@@ -305,6 +330,7 @@ function HomeContinueItem({ item }: { item: MediaSearchResult }) {
   }
   const undo = () => {
     if (!progress.data || !savedAdvance || activeSeason === null) return
+    undoWindow.current.undoInFlight = true
     mutation.mutate({
       seasonNumber: activeSeason,
       payload: {
@@ -428,6 +454,13 @@ function HomeRecentSkeleton() {
 }
 
 type SavedAdvance = { episode: EpisodeReference }
+
+type HomeUndoWindow = {
+  active: boolean
+  expired: boolean
+  undoInFlight: boolean
+  watchingSynchronized: boolean
+}
 
 type HomeProgressMutation = {
   seasonNumber: number

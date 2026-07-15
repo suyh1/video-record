@@ -1,7 +1,8 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { MemoryRouter } from 'react-router-dom'
+import { StrictMode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { renderWithQueryClient } from '../../test/render'
@@ -416,6 +417,62 @@ describe('HomePage', () => {
     await waitFor(() => expect(scenario.watchingLibraryRequests()).toBe(2))
   })
 
+  it('defers expiry refresh until a slow final-episode undo succeeds', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token')
+    const scenario = installLastEpisodeScenario({ undoDelayMs: 1_500 })
+
+    renderWithQueryClient(<StrictMode><MemoryRouter><HomePage /></MemoryRouter></StrictMode>)
+
+    fireEvent.click(await screen.findByRole('button', { name: '推进 收官剧集 下一集 S01E02' }))
+    await waitFor(() => expect(scenario.allLibraryRequests()).toBe(2))
+    expect(scenario.watchingLibraryRequests()).toBe(1)
+    await act(async () => vi.advanceTimersByTimeAsync(9_500))
+
+    fireEvent.click(screen.getByRole('button', { name: '撤销 收官剧集 S01E02' }))
+    await waitFor(() => expect(scenario.undoRequests()).toBe(1))
+    await act(async () => vi.advanceTimersByTimeAsync(500))
+
+    expect(scenario.watchingLibraryRequests()).toBe(1)
+    expect(screen.getByRole('button', { name: '撤销 收官剧集 S01E02' })).toBeDisabled()
+    expect(screen.getByText('1 部剧集')).toBeVisible()
+
+    await act(async () => vi.advanceTimersByTimeAsync(1_000))
+
+    await waitFor(() => expect(scenario.backendVersion()).toBe(3))
+    await waitFor(() => expect(scenario.watchingLibraryRequests()).toBe(2))
+    expect(scenario.allLibraryRequests()).toBe(3)
+    expect(screen.getByText('1 部剧集')).toBeVisible()
+    expect(await screen.findByRole('button', { name: '推进 收官剧集 下一集 S01E02' })).toBeVisible()
+  })
+
+  it('refreshes completed watching state after a slow final-episode undo fails', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token')
+    const scenario = installLastEpisodeScenario({ undoDelayMs: 1_500, undoFails: true })
+
+    renderWithQueryClient(<MemoryRouter><HomePage /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByRole('button', { name: '推进 收官剧集 下一集 S01E02' }))
+    await waitFor(() => expect(scenario.allLibraryRequests()).toBe(2))
+    await act(async () => vi.advanceTimersByTimeAsync(9_500))
+
+    fireEvent.click(screen.getByRole('button', { name: '撤销 收官剧集 S01E02' }))
+    await waitFor(() => expect(scenario.undoRequests()).toBe(1))
+    await act(async () => vi.advanceTimersByTimeAsync(500))
+
+    expect(scenario.watchingLibraryRequests()).toBe(1)
+    expect(screen.getByRole('button', { name: '撤销 收官剧集 S01E02' })).toBeDisabled()
+
+    await act(async () => vi.advanceTimersByTimeAsync(1_000))
+
+    await waitFor(() => expect(scenario.watchingLibraryRequests()).toBe(2))
+    expect(scenario.backendVersion()).toBe(2)
+    expect(scenario.allLibraryRequests()).toBe(2)
+    expect(await screen.findByText('0 部剧集')).toBeVisible()
+    expect(screen.queryByRole('button', { name: '撤销 收官剧集 S01E02' })).not.toBeInTheDocument()
+  })
+
   it('keeps the title usable without claiming completion when TMDB is unavailable', async () => {
     server.use(
       http.get('*/api/v1/library', ({ request }) => {
@@ -511,7 +568,10 @@ function popularHighlight(id: number, title: string) {
   }
 }
 
-function installLastEpisodeScenario() {
+function installLastEpisodeScenario({ undoDelayMs = 0, undoFails = false }: {
+  undoDelayMs?: number
+  undoFails?: boolean
+} = {}) {
   const item = {
     id: 'series-final', tmdbId: 1398, source: 'local' as const, mediaType: 'tv' as const,
     title: '收官剧集', originalTitle: 'Final Series', year: '2026', posterPath: null, status: 'watching' as const,
@@ -526,6 +586,7 @@ function installLastEpisodeScenario() {
   }
   let progressVersion = 1
   let allRequests = 0
+  let undoRequestCount = 0
   let watchingRequests = 0
   server.use(
     http.get('*/api/v1/library', ({ request }) => {
@@ -565,7 +626,19 @@ function installLastEpisodeScenario() {
       nextEpisode: null,
       episodes: progressVersion === 2 ? [firstEpisode, secondEpisode] : [firstEpisode],
     })),
-    http.post('*/api/v1/records/series-final/progress', () => {
+    http.post('*/api/v1/records/series-final/progress', async ({ request }) => {
+      const body = await request.json() as { action: string }
+      if (body.action === 'undo') {
+        undoRequestCount += 1
+        if (undoDelayMs > 0) await delay(undoDelayMs)
+        if (undoFails) return HttpResponse.json({ code: 'internal_error' }, { status: 500 })
+        progressVersion = 3
+        return HttpResponse.json({
+          roundId: 'round-final', mediaId: item.id, seasonNumber: 1, status: 'watching', version: 3,
+          watchedEpisodes: 1, totalEpisodes: 2, lastWatched: firstEpisode, nextEpisode: null,
+          episodes: [firstEpisode],
+        })
+      }
       progressVersion = 2
       return HttpResponse.json({
         roundId: 'round-final', mediaId: item.id, seasonNumber: 1, status: 'completed', version: 2,
@@ -578,6 +651,8 @@ function installLastEpisodeScenario() {
 
   return {
     allLibraryRequests: () => allRequests,
+    backendVersion: () => progressVersion,
+    undoRequests: () => undoRequestCount,
     watchingLibraryRequests: () => watchingRequests,
   }
 }
