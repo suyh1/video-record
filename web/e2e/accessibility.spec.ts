@@ -165,6 +165,11 @@ test('keeps the library and grouped search usable by keyboard at 200% zoom', asy
     },
     status: 200,
   }))
+  await page.route('**/api/v1/media/tmdb/movie/9001', (route) => route.fulfill({
+    contentType: 'application/json',
+    json: { code: 'synthetic_failure', requestId: 'search-focus-e2e' },
+    status: 502,
+  }))
   await login(page)
   await page.setViewportSize({ width: 640, height: 800 })
   await page.goto('/library')
@@ -207,6 +212,15 @@ test('keeps the library and grouped search usable by keyboard at 200% zoom', asy
   await expect(input).toHaveValue('静默')
   await input.focus()
   await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await expect(remoteResult).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(dialog.getByRole('alert')).toContainText('无法打开这个结果')
+  await expect(dialog).toBeVisible()
+  await expect(remoteResult).toBeFocused()
+  await expect(remoteResult).toHaveAttribute('aria-disabled', 'false')
+  await page.keyboard.press('ArrowUp')
+  await expect(localResult).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(/\/media\/e2e-movie$/)
 })

@@ -3820,7 +3820,7 @@ a {
   outline-offset: -2px;
 }
 
-.search-result:disabled {
+.search-result[aria-disabled="true"] {
   cursor: wait;
   opacity: 0.62;
 }

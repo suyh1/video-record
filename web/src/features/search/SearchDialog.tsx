@@ -16,6 +16,13 @@ type SearchDialogProps = {
 const recentSearchesKey = 'video-record.recent-searches'
 const recentSearchLimit = 5
 
+type CustomSubmission = {
+  epoch: number
+  mediaType: MediaType
+  query: string
+  year: string
+}
+
 export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -48,8 +55,14 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
     wasOpen.current = open
   }, [open])
 
-  const hasQuery = query.trim().length > 0
-  const enabled = open && hasQuery && debouncedQuery.length > 0
+  useEffect(() => () => {
+    selectionEpoch.current += 1
+  }, [])
+
+  const normalizedQuery = query.trim()
+  const hasQuery = normalizedQuery.length > 0
+  const querySettled = hasQuery && normalizedQuery === debouncedQuery
+  const enabled = open && querySettled
   const local = useQuery({
     queryKey: ['media-search', 'local', debouncedQuery],
     queryFn: ({ signal }) => searchLocalMedia(debouncedQuery, signal),
@@ -80,13 +93,14 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
   }
 
   const customMutation = useMutation({
-    mutationFn: () => createCustomMedia({
-      title: debouncedQuery,
-      mediaType: customType,
-      year: customYear.trim(),
+    mutationFn: (submission: CustomSubmission) => createCustomMedia({
+      title: submission.query,
+      mediaType: submission.mediaType,
+      year: submission.year,
       overview: '',
     }),
-    onSuccess: async (media) => {
+    onSuccess: async (media, submission) => {
+      if (submission.epoch !== selectionEpoch.current) return
       await onSelect({
         id: media.id,
         source: 'local',
@@ -97,18 +111,22 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
         posterPath: media.posterPath,
         status: 'none',
       })
-      rememberQuery(debouncedQuery)
+      if (submission.epoch === selectionEpoch.current) rememberQuery(submission.query)
     },
   })
+  const currentCustomPending = customMutation.isPending
+    && customMutation.variables?.epoch === selectionEpoch.current
+  const currentCustomError = customMutation.isError
+    && customMutation.variables?.epoch === selectionEpoch.current
 
-  const selectResult = async (item: MediaSearchResult) => {
+  const selectResult = async (item: MediaSearchResult, settledQuery: string) => {
     if (selectingID !== null) return
     const epoch = selectionEpoch.current
     setSelectingID(resultKey(item))
     setSelectionError(false)
     try {
       await onSelect(item)
-      if (epoch === selectionEpoch.current) rememberQuery(query)
+      if (epoch === selectionEpoch.current) rememberQuery(settledQuery)
     } catch {
       if (epoch === selectionEpoch.current) setSelectionError(true)
     } finally {
@@ -210,7 +228,7 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
                 </div>
               </section>
             ) : null}
-            {hasQuery && !debouncedQuery ? <SearchSkeleton /> : null}
+            {hasQuery && !querySettled ? <SearchSkeleton /> : null}
             {enabled ? (
               <>
                 <SearchSection
@@ -221,6 +239,7 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
                   error={local.isError}
                   emptyLabel="本地影库没有匹配结果"
                   selectingID={selectingID}
+                  settledQuery={debouncedQuery}
                   onSelect={selectResult}
                   onMoveFocus={moveResultFocus}
                 />
@@ -232,6 +251,7 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
                   error={remote.isError}
                   emptyLabel="TMDB 没有匹配结果"
                   selectingID={selectingID}
+                  settledQuery={debouncedQuery}
                   onSelect={selectResult}
                   onMoveFocus={moveResultFocus}
                 />
@@ -243,7 +263,15 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
                 {!customOpen ? (
                   <button type="button" onClick={() => setCustomOpen(true)}><Plus aria-hidden="true" size={16} />创建自定义条目</button>
                 ) : (
-                  <form className="custom-media-form" onSubmit={(event) => { event.preventDefault(); customMutation.mutate() }}>
+                  <form className="custom-media-form" onSubmit={(event) => {
+                    event.preventDefault()
+                    customMutation.mutate({
+                      epoch: selectionEpoch.current,
+                      mediaType: customType,
+                      query: debouncedQuery,
+                      year: customYear.trim(),
+                    })
+                  }}>
                     <fieldset>
                       <legend>媒体类型</legend>
                       <div className="custom-media-types" role="radiogroup" aria-label="媒体类型">
@@ -252,8 +280,8 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
                       </div>
                     </fieldset>
                     <label><span>年份（可选）</span><input aria-label="年份（可选）" inputMode="numeric" pattern="[0-9]{4}" value={customYear} onChange={(event) => setCustomYear(event.target.value)} /></label>
-                    <button type="submit" disabled={customMutation.isPending || debouncedQuery === ''}><Check aria-hidden="true" size={16} />保存自定义条目</button>
-                    {customMutation.isError ? <p className="form-error" role="alert">创建失败，标题、类型和年份仍保留。</p> : null}
+                    <button type="submit" disabled={currentCustomPending || debouncedQuery === ''}><Check aria-hidden="true" size={16} />保存自定义条目</button>
+                    {currentCustomError ? <p className="form-error" role="alert">创建失败，标题、类型和年份仍保留。</p> : null}
                   </form>
                 )}
               </div>
@@ -274,7 +302,8 @@ type SearchSectionProps = {
   error: boolean
   emptyLabel: string
   selectingID: string | null
-  onSelect: (item: MediaSearchResult) => Promise<void>
+  settledQuery: string
+  onSelect: (item: MediaSearchResult, settledQuery: string) => Promise<void>
   onMoveFocus: (event: KeyboardEvent<HTMLButtonElement>, direction: -1 | 1) => void
 }
 
@@ -286,6 +315,7 @@ function SearchSection({
   error,
   emptyLabel,
   selectingID,
+  settledQuery,
   onSelect,
   onMoveFocus,
 }: SearchSectionProps) {
@@ -312,9 +342,9 @@ function SearchSection({
                   className="search-result"
                   data-search-result="true"
                   type="button"
-                  disabled={selectingID !== null}
+                  aria-disabled={selectingID !== null}
                   aria-busy={selectingID === key}
-                  onClick={() => void onSelect(item)}
+                  onClick={() => void onSelect(item, settledQuery)}
                   onKeyDown={(event) => {
                     if (event.key === 'ArrowDown') onMoveFocus(event, 1)
                     if (event.key === 'ArrowUp') onMoveFocus(event, -1)
@@ -353,7 +383,7 @@ function resultKey(item: MediaSearchResult) {
 
 function resultButtons(container: HTMLDivElement | null) {
   if (!container) return []
-  return Array.from(container.querySelectorAll<HTMLButtonElement>('[data-search-result="true"]:not(:disabled)'))
+  return Array.from(container.querySelectorAll<HTMLButtonElement>('[data-search-result="true"]:not([aria-disabled="true"])'))
 }
 
 function readRecentSearches(): string[] {

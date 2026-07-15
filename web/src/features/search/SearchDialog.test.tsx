@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { delay, http, HttpResponse } from 'msw'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -87,6 +87,36 @@ describe('SearchDialog', () => {
     expect(screen.getAllByText('Dune')).toHaveLength(1)
     await waitFor(() => expect(localCalls).toBe(1))
     expect(remoteCalls).toBe(1)
+  })
+
+  it('hides settled results immediately while a changed query is still debouncing', async () => {
+    server.use(
+      http.get('*/api/v1/media/search', ({ request }) => {
+        const query = new URL(request.url).searchParams.get('q') ?? ''
+        return HttpResponse.json({ items: [{
+          id: `local-${query}`, source: 'local', mediaType: 'movie', title: `${query}结果`, originalTitle: '',
+          year: '', posterPath: null, status: 'none',
+        }] })
+      }),
+      http.get('*/api/v1/tmdb/search', () => HttpResponse.json({ results: [] })),
+    )
+    const onSelect = vi.fn()
+    const user = userEvent.setup()
+    renderWithQueryClient(<SearchDialog open onClose={() => undefined} onSelect={onSelect} />)
+
+    const input = screen.getByRole('searchbox', { name: '搜索影视' })
+    await user.type(input, '旧词')
+    expect(await screen.findByRole('button', { name: /旧词结果/ })).toBeVisible()
+
+    await user.clear(input)
+    await user.type(input, '新词')
+
+    expect(screen.queryByRole('button', { name: /旧词结果/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '本地影库' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'TMDB' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('正在搜索')).toBeVisible()
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(await screen.findByRole('button', { name: /新词结果/ })).toBeVisible()
   })
 
   it('moves focus across result sections with arrow keys, selects with Enter, and closes with Escape', async () => {
@@ -178,6 +208,114 @@ describe('SearchDialog', () => {
     }))
   })
 
+  it('ignores a custom creation response that arrives after the dialog closes', async () => {
+    let markStarted: (() => void) | undefined
+    let releaseResponse: (() => void) | undefined
+    const started = new Promise<void>((resolve) => { markStarted = resolve })
+    const responseGate = new Promise<void>((resolve) => { releaseResponse = resolve })
+    server.use(
+      http.get('*/api/v1/media/search', () => HttpResponse.json({ items: [] })),
+      http.get('*/api/v1/tmdb/search', () => HttpResponse.json({ results: [] })),
+      http.post('*/api/v1/media/custom', async () => {
+        markStarted?.()
+        await responseGate
+        return HttpResponse.json({
+          id: 'late-custom', mediaType: 'movie', title: '迟到条目', overview: '', externalTitle: '',
+          externalOverview: '', originalTitle: '', releaseDate: '2026', posterPath: '', backdropPath: '',
+          runtimeMinutes: 0, genres: [],
+        }, { status: 201 })
+      }),
+    )
+    const onSelect = vi.fn()
+    const user = userEvent.setup()
+    const { rerender } = renderWithQueryClient(
+      <SearchDialog open onClose={() => undefined} onSelect={onSelect} />,
+    )
+
+    await user.type(screen.getByRole('searchbox', { name: '搜索影视' }), '迟到条目')
+    await user.click(await screen.findByRole('button', { name: '创建自定义条目' }))
+    await user.click(screen.getByRole('button', { name: '保存自定义条目' }))
+    await started
+    rerender(<SearchDialog open={false} onClose={() => undefined} onSelect={onSelect} />)
+    releaseResponse?.()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(sessionStorage.getItem(recentSearchesKey)).toBeNull()
+  })
+
+  it('does not let an old custom response affect a reopened dialog', async () => {
+    let markStarted: (() => void) | undefined
+    let releaseResponse: (() => void) | undefined
+    const started = new Promise<void>((resolve) => { markStarted = resolve })
+    const responseGate = new Promise<void>((resolve) => { releaseResponse = resolve })
+    server.use(
+      http.get('*/api/v1/media/search', () => HttpResponse.json({ items: [] })),
+      http.get('*/api/v1/tmdb/search', () => HttpResponse.json({ results: [] })),
+      http.post('*/api/v1/media/custom', async () => {
+        markStarted?.()
+        await responseGate
+        return HttpResponse.json({
+          id: 'old-custom', mediaType: 'movie', title: '旧响应', overview: '', externalTitle: '',
+          externalOverview: '', originalTitle: '', releaseDate: '2026', posterPath: '', backdropPath: '',
+          runtimeMinutes: 0, genres: [],
+        }, { status: 201 })
+      }),
+    )
+    const onSelect = vi.fn()
+    const user = userEvent.setup()
+    const { rerender } = renderWithQueryClient(
+      <SearchDialog open onClose={() => undefined} onSelect={onSelect} />,
+    )
+
+    await user.type(screen.getByRole('searchbox', { name: '搜索影视' }), '旧响应')
+    await user.click(await screen.findByRole('button', { name: '创建自定义条目' }))
+    await user.click(screen.getByRole('button', { name: '保存自定义条目' }))
+    await started
+    rerender(<SearchDialog open={false} onClose={() => undefined} onSelect={onSelect} />)
+    rerender(<SearchDialog open onClose={() => undefined} onSelect={onSelect} />)
+    expect(screen.getByRole('searchbox', { name: '搜索影视' })).toHaveValue('旧响应')
+    releaseResponse?.()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(sessionStorage.getItem(recentSearchesKey)).toBeNull()
+    expect(screen.getByRole('dialog', { name: '搜索影视' })).toBeVisible()
+  })
+
+  it('does not expose a late custom error in a reopened dialog', async () => {
+    let markStarted: (() => void) | undefined
+    let releaseResponse: (() => void) | undefined
+    const started = new Promise<void>((resolve) => { markStarted = resolve })
+    const responseGate = new Promise<void>((resolve) => { releaseResponse = resolve })
+    server.use(
+      http.get('*/api/v1/media/search', () => HttpResponse.json({ items: [] })),
+      http.get('*/api/v1/tmdb/search', () => HttpResponse.json({ results: [] })),
+      http.post('*/api/v1/media/custom', async () => {
+        markStarted?.()
+        await responseGate
+        return HttpResponse.json({ code: 'late_failure' }, { status: 500 })
+      }),
+    )
+    const user = userEvent.setup()
+    const { rerender } = renderWithQueryClient(
+      <SearchDialog open onClose={() => undefined} onSelect={() => undefined} />,
+    )
+
+    await user.type(screen.getByRole('searchbox', { name: '搜索影视' }), '失败旧请求')
+    await user.click(await screen.findByRole('button', { name: '创建自定义条目' }))
+    await user.click(screen.getByRole('button', { name: '保存自定义条目' }))
+    await started
+    rerender(<SearchDialog open={false} onClose={() => undefined} onSelect={() => undefined} />)
+    rerender(<SearchDialog open onClose={() => undefined} onSelect={() => undefined} />)
+    releaseResponse?.()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    await user.click(screen.getByRole('button', { name: '创建自定义条目' }))
+
+    expect(screen.queryByText('创建失败，标题、类型和年份仍保留。')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '保存自定义条目' })).toBeEnabled()
+  })
+
   it('stores only successful queries in bounded deduplicated session history without backend or local storage writes', async () => {
     sessionStorage.setItem(recentSearchesKey, JSON.stringify(['旧一', '旧二', '旧三', '旧四', '旧五']))
     const originalSetItem = Storage.prototype.setItem
@@ -208,6 +346,31 @@ describe('SearchDialog', () => {
     expect(JSON.parse(sessionStorage.getItem(recentSearchesKey) ?? '[]')).toEqual(['旧二', '旧一', '旧三', '旧四', '旧五'])
     expect(localStorageWrites).toEqual([])
     expect(backendWrites).toBe(0)
+  })
+
+  it('records the settled query even when input changes while selection is pending', async () => {
+    server.use(
+      http.get('*/api/v1/media/search', () => HttpResponse.json({ items: [{
+        id: 'snapshot-1', source: 'local', mediaType: 'movie', title: '快照条目', originalTitle: '',
+        year: '', posterPath: null, status: 'none',
+      }] })),
+      http.get('*/api/v1/tmdb/search', () => HttpResponse.json({ results: [] })),
+    )
+    let resolveSelection: (() => void) | undefined
+    const selection = new Promise<void>((resolve) => { resolveSelection = resolve })
+    const user = userEvent.setup()
+    renderWithQueryClient(
+      <SearchDialog open onClose={() => undefined} onSelect={() => selection} />,
+    )
+
+    const input = screen.getByRole('searchbox', { name: '搜索影视' })
+    await user.type(input, '已提交查询')
+    await user.click(await screen.findByRole('button', { name: /快照条目/ }))
+    await user.clear(input)
+    await user.type(input, '后来输入')
+    await act(async () => resolveSelection?.())
+
+    await waitFor(() => expect(JSON.parse(sessionStorage.getItem(recentSearchesKey) ?? '[]')).toEqual(['已提交查询']))
   })
 
   it('shows recent searches for an empty query, refills one to search, and clears history', async () => {
@@ -255,14 +418,16 @@ describe('SearchDialog', () => {
     await user.type(screen.getByRole('searchbox', { name: '搜索影视' }), '等待')
     const result = await screen.findByRole('button', { name: /等待选择/ })
     await user.click(result)
-    expect(result).toBeDisabled()
+    expect(result).not.toBeDisabled()
+    expect(result).toHaveAttribute('aria-disabled', 'true')
+    expect(document.activeElement).toBe(result)
     await user.click(result)
     expect(onSelect).toHaveBeenCalledOnce()
 
     rerender(<SearchDialog open={false} onClose={() => undefined} onSelect={onSelect} />)
     rerender(<SearchDialog open onClose={() => undefined} onSelect={onSelect} />)
     const reopenedResult = await screen.findByRole('button', { name: /等待选择/ })
-    await waitFor(() => expect(reopenedResult).toBeEnabled())
+    await waitFor(() => expect(reopenedResult).toHaveAttribute('aria-disabled', 'false'))
     rejectSelection?.(new Error('stale failure'))
     await Promise.resolve()
     expect(screen.queryByText('无法打开这个结果，搜索内容已保留。')).not.toBeInTheDocument()
@@ -283,10 +448,13 @@ describe('SearchDialog', () => {
 
     const input = screen.getByRole('searchbox', { name: '搜索影视' })
     await user.type(input, '保留查询')
-    await user.click(await screen.findByRole('button', { name: /失败条目/ }))
+    const failedResult = await screen.findByRole('button', { name: /失败条目/ })
+    await user.click(failedResult)
 
     expect(await screen.findByRole('alert')).toHaveTextContent('无法打开这个结果，搜索内容已保留。')
     expect(input).toHaveValue('保留查询')
+    expect(failedResult).toHaveAttribute('aria-disabled', 'false')
+    expect(document.activeElement).toBe(failedResult)
   })
 
   it('keeps selection usable when session storage quota rejects recent history', async () => {
