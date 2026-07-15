@@ -1,6 +1,13 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { expectImageLoaded, expectNoHorizontalOverflow } from './support'
+import {
+  expectImageLoaded,
+  expectNoHorizontalOverflow,
+  expectNoInternalHorizontalOverflow,
+  expectScreenshotPixels,
+  expectVisibleContentNotClipped,
+  settleVisual,
+} from './support'
 
 const imagePaths = [
   '/api/v1/public/tmdb/images/w1280/auth-one.bmp?expires=4102444800&signature=synthetic-one',
@@ -26,38 +33,46 @@ test('captures responsive TMDB-backed authentication scenes', async ({ page }) =
 
   for (const viewport of viewports) {
     await page.setViewportSize(viewport)
-    await page.goto('/')
-    await waitForAuthReady(page)
+    for (const theme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: theme })
+      await page.goto('/')
+      await page.evaluate((selectedTheme) => document.documentElement.setAttribute('data-theme', selectedTheme), theme)
+      await waitForAuthReady(page)
 
-    const backdrop = page.locator('.auth-backdrop .backdrop-carousel__image.is-active')
-    await expectImageLoaded(backdrop)
-    await expect(page.locator('.auth-page')).toHaveClass(/has-active-backdrop/)
-    await expect(page.getByRole('button', { name: '上一张背景' })).toBeEnabled()
-    await expect(page.getByRole('button', { name: '暂停轮播' })).toBeEnabled()
-    await expect(page.getByRole('button', { name: '下一张背景' })).toBeEnabled()
-    await expectNoHorizontalOverflow(page)
-    await expectPanelWithinViewport(page)
-    await expectControlsSeparatedFromPanel(page)
+      const backdrop = page.locator('.auth-backdrop .backdrop-carousel__image.is-active')
+      await expectImageLoaded(backdrop)
+      await expect(page.locator('.auth-page')).toHaveClass(/has-active-backdrop/)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await expect(page.getByRole('button', { name: '上一张背景' })).toBeEnabled()
+      await expect(page.getByRole('button', { name: '暂停轮播' })).toBeEnabled()
+      await expect(page.getByRole('button', { name: '下一张背景' })).toBeEnabled()
+      await settleVisual(page)
+      await expectNoHorizontalOverflow(page)
+      await expectNoInternalHorizontalOverflow(page, ['.auth-panel', '.auth-form'])
+      await expectVisibleContentNotClipped(page)
+      await expectPanelWithinViewport(page)
+      await expectControlsSeparatedFromPanel(page)
 
-    const username = page.getByLabel('用户名')
-    await username.focus()
-    await expect(username).toBeFocused()
-
-    await expect(page).toHaveScreenshot(`auth-login-${viewport.width}x${viewport.height}-image.png`, {
-      animations: 'disabled',
-      fullPage: true,
-      maxDiffPixelRatio: 0.01,
-    })
-
-    if (viewport.width !== 768) {
-      const initialSource = await backdrop.getAttribute('src')
-      await page.getByRole('button', { name: '暂停轮播' }).click({ timeout: 2_000 })
-      await expect(page.getByRole('button', { name: '继续轮播' })).toHaveAttribute('aria-pressed', 'true')
-      await page.getByRole('button', { name: '下一张背景' }).click({ timeout: 2_000 })
-      await expect(backdrop).toHaveAttribute('src', imagePaths[1]!)
-      expect(await backdrop.getAttribute('src')).not.toBe(initialSource)
-      await username.click()
+      const username = page.getByLabel('用户名')
+      await username.focus()
       await expect(username).toBeFocused()
+
+      await expect(page).toHaveScreenshot(`auth-login-${viewport.width}x${viewport.height}-${theme}-image.png`, {
+        animations: 'disabled',
+        fullPage: true,
+        maxDiffPixels: 0,
+      })
+
+      if (theme === 'light' && viewport.width !== 768) {
+        const initialSource = await backdrop.getAttribute('src')
+        await page.getByRole('button', { name: '暂停轮播' }).click({ timeout: 2_000 })
+        await expect(page.getByRole('button', { name: '继续轮播' })).toHaveAttribute('aria-pressed', 'true')
+        await page.getByRole('button', { name: '下一张背景' }).click({ timeout: 2_000 })
+        await expect(backdrop).toHaveAttribute('src', imagePaths[1]!)
+        expect(await backdrop.getAttribute('src')).not.toBe(initialSource)
+        await username.click()
+        await expect(username).toBeFocused()
+      }
     }
   }
 
@@ -82,17 +97,26 @@ test('keeps failed authentication backdrops white in light and dark themes', asy
       await expect(page.locator('.backdrop-carousel')).toHaveClass(/is-empty/)
       await expect(page.locator('.auth-page')).toHaveClass(/is-empty-backdrop/)
       await expect(page.locator('.auth-backdrop img')).toHaveCount(0)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await settleVisual(page)
       await expectNoHorizontalOverflow(page)
+      await expectNoInternalHorizontalOverflow(page, ['.auth-panel', '.auth-form'])
+      await expectVisibleContentNotClipped(page)
       await expectPanelWithinViewport(page)
       await expect(page.locator('.backdrop-carousel__controls')).toBeHidden()
 
       const background = await page.locator('.auth-page').evaluate((element) => getComputedStyle(element).backgroundColor)
       expect(background).toMatch(/^(?:rgb\(255, 255, 255\)|oklch\(1 0 0\))$/)
+      await expectScreenshotPixels(page, [
+        { label: 'top-left authentication background', x: 1, y: 1 },
+        { label: 'top-right authentication background', x: viewport.width - 2, y: 1 },
+        { label: 'bottom-left authentication background', x: 1, y: viewport.height - 2 },
+      ])
 
       await expect(page).toHaveScreenshot(`auth-login-${viewport.width}x${viewport.height}-${theme}-white.png`, {
         animations: 'disabled',
         fullPage: true,
-        maxDiffPixelRatio: 0.01,
+        maxDiffPixels: 0,
       })
     }
   }

@@ -2,11 +2,18 @@ import { expect, test } from '@playwright/test'
 import { deflateSync } from 'node:zlib'
 
 import {
+  baseURL,
   expectImageLoaded,
+  expectMobileNavigationClearance,
   expectNoBlockingA11yViolations,
   expectNoFixedElementOverlap,
   expectNoHorizontalOverflow,
+  expectNoInternalHorizontalOverflow,
+  expectPosterAspectRatios,
+  expectScreenshotPixels,
+  expectVisibleContentNotClipped,
   login,
+  settleVisual,
 } from './support'
 
 test.beforeEach(async ({ page }) => {
@@ -27,6 +34,7 @@ test('matches the personalized light and dark responsive home views through the 
   await page.setViewportSize({ width: 1440, height: 900 })
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true)
   await login(page)
+  await installPopularHomeSupplement(page)
   await page.goto('/')
   await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'))
   await expect(page.getByRole('region', { name: '首页主视觉' })).toHaveAttribute('data-backdrop-state', 'ready')
@@ -41,6 +49,7 @@ test('matches the personalized light and dark responsive home views through the 
   for (const viewport of viewports) {
     await page.setViewportSize(viewport)
     for (const theme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' })
       await page.goto('/')
       await page.evaluate((selectedTheme) => document.documentElement.setAttribute('data-theme', selectedTheme), theme)
       const hero = page.getByRole('region', { name: '首页主视觉' })
@@ -49,14 +58,18 @@ test('matches the personalized light and dark responsive home views through the 
       await expectImageLoaded(backdrop)
       await expect(backdrop).toHaveAttribute('src', /^\/api\/v1\/public\/tmdb\/images\/w1280\//)
       await expect(page.getByRole('heading', { level: 1, name: '潮汐档案' })).toBeVisible()
+      await expect(hero.locator('[aria-label="第 1 张，共 6 张"]')).toBeVisible()
+      await expect(page.getByRole('region', { name: '继续观看' })).toContainText('潮汐档案')
+      await expect(page.getByRole('region', { name: '最近记录' })).toContainText('静默轨道')
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
       await expect(page.locator('.app-header')).not.toHaveClass(/home-white-header/)
       await expect(page.locator('.app-header')).toHaveClass(/home-image-header/)
-      await expectNoHorizontalOverflow(page)
+      await expectSceneLayout(page, ['.home-hero', '.home-hero__content', '.home-content'])
       await expectContinueWatchingHint(page, viewport.height)
       await expect(page).toHaveScreenshot(`home-${viewport.width}x${viewport.height}-${theme}.png`, {
         animations: 'disabled',
         fullPage: true,
-        maxDiffPixelRatio: 0.01,
+        maxDiffPixels: 0,
       })
     }
   }
@@ -64,35 +77,45 @@ test('matches the personalized light and dark responsive home views through the 
   expect(directTMDBImages).toEqual([])
 })
 
-test('keeps an all-failed mobile home hero pure white and usable in both themes', async ({ page }) => {
+test('keeps an all-failed responsive home hero pure white and usable in both themes', async ({ page }) => {
+  test.slow()
   await page.route('**/api/v1/public/tmdb/images/w1280/**', (route) => route.fulfill({
     body: Buffer.from('not a decodable image'),
     contentType: 'image/png',
     status: 200,
   }))
   await login(page)
-  await page.setViewportSize({ width: 375, height: 812 })
 
-  for (const theme of ['light', 'dark'] as const) {
-    await page.goto('/')
-    await page.evaluate((selectedTheme) => document.documentElement.setAttribute('data-theme', selectedTheme), theme)
-    const hero = page.getByRole('region', { name: '首页主视觉' })
-    await expect(hero).toHaveAttribute('data-backdrop-state', 'empty')
-    await expect(hero.locator('img')).toHaveCount(0)
-    await expect(page.locator('.app-header')).toHaveClass(/home-white-header/)
-    await expectPureWhiteReadableHero(page)
-    await expectNoHorizontalOverflow(page)
-    await expectNoFixedElementOverlap(page)
-    await expectContinueWatchingHint(page, 812)
-    await expect(page.getByRole('button', { name: /推进 潮汐档案 下一集/ })).toBeEnabled()
-    await expect(page.getByRole('link', { name: '查看 静默轨道 记录' })).toHaveAttribute('href', '/media/e2e-movie')
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport)
+    for (const theme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' })
+      await page.goto('/')
+      await page.evaluate((selectedTheme) => document.documentElement.setAttribute('data-theme', selectedTheme), theme)
+      const hero = page.getByRole('region', { name: '首页主视觉' })
+      await expect(hero).toHaveAttribute('data-backdrop-state', 'empty')
+      await expect(hero.locator('img')).toHaveCount(0)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await expect(page.locator('.app-header')).toHaveClass(/home-white-header/)
+      await expectPureWhiteReadableHero(page)
+      await expectSceneLayout(page, ['.home-hero', '.home-hero__empty', '.home-content'])
+      await expectContinueWatchingHint(page, viewport.height)
+      await expect(page.getByRole('button', { name: /推进 潮汐档案 下一集/ })).toBeEnabled()
+      await expect(page.getByRole('link', { name: '查看 静默轨道 记录' })).toHaveAttribute('href', '/media/e2e-movie')
+      const heroBox = await hero.boundingBox()
+      if (!heroBox) throw new Error('Home hero bounds are unavailable')
+      const sampleY = heroBox.y + heroBox.height / 2
+      await expectScreenshotPixels(page, [
+        { label: 'left failed home hero', x: 1, y: sampleY },
+        { label: 'right failed home hero', x: viewport.width - 2, y: sampleY },
+      ])
+      await expect(page).toHaveScreenshot(`home-white-${viewport.width}x${viewport.height}-${theme}.png`, {
+        animations: 'disabled',
+        fullPage: true,
+        maxDiffPixels: 0,
+      })
+    }
   }
-
-  await expect(page).toHaveScreenshot('home-375x812-white.png', {
-    animations: 'disabled',
-    fullPage: true,
-    maxDiffPixelRatio: 0.01,
-  })
 })
 
 test('matches the approved light and dark responsive library views', async ({ page }) => {
@@ -101,15 +124,47 @@ test('matches the approved light and dark responsive library views', async ({ pa
   for (const viewport of viewports) {
     await page.setViewportSize(viewport)
     for (const theme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' })
       await page.goto('/library')
       await page.evaluate((selectedTheme) => document.documentElement.setAttribute('data-theme', selectedTheme), theme)
       await expect(page.getByRole('heading', { level: 1, name: '影库' })).toBeVisible()
       await expect(page.getByText('2 部影视')).toBeVisible()
-      await expectNoHorizontalOverflow(page)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await expectSceneLayout(page, ['.library-page', '.poster-grid'])
       await expect(page).toHaveScreenshot(`library-${viewport.width}x${viewport.height}-${theme}.png`, {
         animations: 'disabled',
         fullPage: true,
-        maxDiffPixelRatio: 0.01,
+        maxDiffPixels: 0,
+      })
+    }
+  }
+})
+
+test('matches the approved light and dark responsive empty library views', async ({ page }) => {
+  await login(page)
+  await page.route('**/api/v1/library*', (route) => route.fulfill({
+    json: { items: [], nextCursor: null },
+    status: 200,
+  }))
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport)
+    for (const theme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' })
+      await page.goto('/library')
+      await page.evaluate((selectedTheme) => document.documentElement.setAttribute('data-theme', selectedTheme), theme)
+      await expect(page.getByRole('heading', { level: 1, name: '影库' })).toBeVisible()
+      await expect(page.getByText('0 部影视')).toBeVisible()
+      const empty = page.locator('.library-message.empty-state')
+      await expect(empty).toContainText('这个分类还没有记录')
+      await expect(empty.getByRole('button', { name: '搜索影视' })).toBeVisible()
+      await expect(page.locator('.poster-grid')).toHaveCount(0)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await expectSceneLayout(page, ['.library-page', '.library-message'], false)
+      await expect(page).toHaveScreenshot(`library-empty-${viewport.width}x${viewport.height}-${theme}.png`, {
+        animations: 'disabled',
+        fullPage: true,
+        maxDiffPixels: 0,
       })
     }
   }
@@ -134,6 +189,7 @@ test('matches the approved light and dark responsive details views', async ({ pa
   for (const viewport of viewports) {
     await page.setViewportSize(viewport)
     for (const theme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' })
       await page.goto('/media/e2e-series')
       await page.evaluate((selectedTheme) => document.documentElement.setAttribute('data-theme', selectedTheme), theme)
       await expect(page.getByRole('heading', { level: 1, name: '潮汐档案' })).toBeVisible()
@@ -146,14 +202,14 @@ test('matches the approved light and dark responsive details views', async ({ pa
       await expectImageLoaded(backdrop)
       await expect(backdrop).toHaveAttribute('alt', '')
       await expect(backdrop).toHaveAttribute('src', /^\/api\/v1\/public\/tmdb\/images\/w1280\//)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
       await expectDetailsHeaderLayout(page)
       const seasonSelector = page.getByRole('combobox', { name: '选择季' })
       await seasonSelector.focus()
       await expect(seasonSelector).toBeFocused()
       await page.keyboard.press('Tab')
       await expect(page.getByRole('button', { name: /推进下一集/ })).toBeFocused()
-      await expectNoHorizontalOverflow(page)
-      await expectNoFixedElementOverlap(page)
+      await expectSceneLayout(page, ['.media-hero-content', '.season-record-workspace'])
       await page.evaluate(() => {
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
         window.scrollTo(0, 0)
@@ -162,7 +218,7 @@ test('matches the approved light and dark responsive details views', async ({ pa
       await expect(page).toHaveScreenshot(`details-${viewport.width}x${viewport.height}-${theme}.png`, {
         animations: 'disabled',
         fullPage: true,
-        maxDiffPixelRatio: 0.01,
+        maxDiffPixels: 0,
       })
     }
   }
@@ -170,6 +226,59 @@ test('matches the approved light and dark responsive details views', async ({ pa
   await expectNoBlockingA11yViolations(page)
   expect(directTMDBImages).toEqual([])
   expect(runtimeErrors).toEqual([])
+})
+
+test('matches the approved light and dark responsive details views without a backdrop', async ({ page }) => {
+  await page.route('**/api/v1/public/tmdb/highlights', (route) => route.fulfill({
+    json: { items: [] },
+    status: 200,
+  }))
+  await login(page)
+  await page.route('**/api/v1/media/e2e-series', async (route) => {
+    const response = await route.fetch()
+    const body = await response.json() as Record<string, unknown>
+    await route.fulfill({
+      response,
+      json: {
+        ...body,
+        backdropPath: '',
+        title: '潮汐档案：在漫长海岸线上追索一段被遗忘的家庭影像记录',
+      },
+    })
+  })
+  await page.route('**/api/v1/tmdb/tv/1001', async (route) => {
+    const response = await route.fetch()
+    const body = await response.json() as Record<string, unknown>
+    await route.fulfill({ response, json: { ...body, backdropPath: '' } })
+  })
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport)
+    for (const theme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' })
+      await page.goto('/media/e2e-series')
+      await page.evaluate((selectedTheme) => document.documentElement.setAttribute('data-theme', selectedTheme), theme)
+      await expect(page.getByRole('heading', {
+        level: 1,
+        name: '潮汐档案：在漫长海岸线上追索一段被遗忘的家庭影像记录',
+      })).toBeVisible()
+      await expect(page.getByText('林见川')).toBeVisible()
+      await page.getByRole('combobox', { name: '选择季' }).selectOption('2')
+      await expect(page.getByText('重返北堤')).toBeVisible()
+      const hero = page.locator('.media-hero')
+      await expect(hero).toHaveAttribute('data-backdrop-state', 'empty')
+      await expect(hero.locator('.media-hero-backdrop')).toHaveCount(0)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await expectDetailsHeaderLayout(page)
+      await expectSceneLayout(page, ['.media-hero-content', '.season-record-workspace'])
+      await page.evaluate(() => window.scrollTo(0, 0))
+      await expect(page).toHaveScreenshot(`details-no-backdrop-${viewport.width}x${viewport.height}-${theme}.png`, {
+        animations: 'disabled',
+        fullPage: true,
+        maxDiffPixels: 0,
+      })
+    }
+  }
 })
 
 test('keeps failed details imagery and a long title neutral, named, and usable', async ({ page }) => {
@@ -298,6 +407,54 @@ const viewports = [
   { width: 768, height: 1024 },
   { width: 1440, height: 900 },
 ]
+
+async function installPopularHomeSupplement(page: import('@playwright/test').Page) {
+  const [movieResponse, tvResponse] = await Promise.all([
+    page.request.get(`${baseURL}/api/v1/tmdb/movie/2002`),
+    page.request.get(`${baseURL}/api/v1/tmdb/tv/1001`),
+  ])
+  expect(movieResponse.ok()).toBeTruthy()
+  expect(tvResponse.ok()).toBeTruthy()
+  const movie = await movieResponse.json() as { backdropPath: string }
+  const tv = await tvResponse.json() as { backdropPath: string }
+  await page.route('**/api/v1/public/tmdb/highlights', (route) => route.fulfill({
+    json: {
+      items: [
+        popularItem(9101, 'movie', '远方列车', movie.backdropPath),
+        popularItem(9102, 'tv', '海岸信号', tv.backdropPath),
+        popularItem(9103, 'movie', '寂静录音室', movie.backdropPath),
+        popularItem(9104, 'tv', '北堤之外', tv.backdropPath),
+      ],
+    },
+    status: 200,
+  }))
+}
+
+function popularItem(id: number, mediaType: 'movie' | 'tv', title: string, backdropURL: string) {
+  return {
+    id,
+    mediaType,
+    title,
+    originalTitle: `${title} Synthetic`,
+    year: '2026',
+    overview: `${title}合成概览`,
+    backdropURL,
+  }
+}
+
+async function expectSceneLayout(
+  page: import('@playwright/test').Page,
+  internalSelectors: string[],
+  expectPosters = true,
+) {
+  await settleVisual(page)
+  await expectNoHorizontalOverflow(page)
+  await expectNoInternalHorizontalOverflow(page, internalSelectors)
+  await expectNoFixedElementOverlap(page)
+  await expectVisibleContentNotClipped(page)
+  await expectMobileNavigationClearance(page)
+  if (expectPosters) await expectPosterAspectRatios(page)
+}
 
 type HeaderTransitionSample = {
   phase: string

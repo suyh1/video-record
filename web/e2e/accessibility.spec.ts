@@ -89,6 +89,14 @@ test('contains populated calendar cells within the mobile seven-column grid', as
         eventListHidden: getComputedStyle(eventList).display === 'none',
       }
     }, width))
+
+    await dayButton.focus()
+    await page.keyboard.press('Enter')
+    const agendaView = page.getByRole('region', { name: '日程视图' })
+    await expect(agendaView).toBeVisible()
+    await expect(agendaView).toBeFocused()
+    await expect(agendaView).toHaveCSS('outline-style', 'solid')
+    await expect(page.getByRole('table', { name: '2026年7月观影日历' })).toBeHidden()
   }
 
   expect(measurements.map((measurement) => ({
