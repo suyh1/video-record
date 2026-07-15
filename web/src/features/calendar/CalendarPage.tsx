@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, CalendarDays, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { getCalendar } from '../../api/client'
 import type { CalendarFilter } from '../../api/types'
+import { BrandMark } from '../../app/BrandMark'
 import { AgendaList } from './AgendaList'
 import { MonthGrid } from './MonthGrid'
 
@@ -24,6 +26,7 @@ export function CalendarPage({
 }: CalendarPageProps) {
   const [month, setMonth] = useState(() => monthInTimezone(now, timezone))
   const [filter, setFilter] = useState<CalendarFilter>('all')
+  const [view, setView] = useState<'agenda' | 'month'>('agenda')
   const calendar = useQuery({
     queryKey: ['calendar', month, timezone, filter],
     queryFn: ({ signal }) => getCalendar(month, timezone, filter, signal),
@@ -58,6 +61,27 @@ export function CalendarPage({
         ))}
       </div>
 
+      {calendar.data?.events.length ? (
+        <div className="calendar-view-switch" role="group" aria-label="日历视图">
+          <button
+            type="button"
+            aria-controls="calendar-agenda-view"
+            aria-pressed={view === 'agenda'}
+            onClick={() => setView('agenda')}
+          >
+            日程
+          </button>
+          <button
+            type="button"
+            aria-controls="calendar-month-view"
+            aria-pressed={view === 'month'}
+            onClick={() => setView('month')}
+          >
+            月历
+          </button>
+        </div>
+      ) : null}
+
       {calendar.isPending ? <CalendarSkeleton /> : null}
       {calendar.isError ? (
         <div className="calendar-error" role="alert">
@@ -71,14 +95,15 @@ export function CalendarPage({
       ) : null}
       {calendar.data ? (
         calendar.data.events.length > 0 ? (
-          <>
-            <MonthGrid year={calendar.data.year} month={calendar.data.month} events={calendar.data.events} />
-            <AgendaList events={calendar.data.events} timezone={calendar.data.timezone} />
-          </>
+          <div className="calendar-views">
+            <MonthGrid active={view === 'month'} year={calendar.data.year} month={calendar.data.month} events={calendar.data.events} />
+            <AgendaList active={view === 'agenda'} events={calendar.data.events} timezone={calendar.data.timezone} />
+          </div>
         ) : (
-          <div className="empty-state calendar-empty">
-            <CalendarDays aria-hidden="true" size={24} />
-            <p>这个月还没有符合筛选条件的记录</p>
+          <div className="empty-state page-empty-state calendar-empty" role="region" aria-label="日历暂无记录">
+            <BrandMark size={28} />
+            <p>这个月还没有符合条件的观看记录。</p>
+            <Link className="text-link" to="/library">去影库记录</Link>
           </div>
         )
       ) : null}

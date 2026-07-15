@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { BarChart3, RefreshCw } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 import { getStats } from '../../api/client'
+import { BrandMark } from '../../app/BrandMark'
 import { AccessibleChart } from './AccessibleChart'
 
 type StatsPageProps = {
@@ -34,6 +36,21 @@ export function StatsPage({
   }
 
   const summary = stats.data
+  if (summary.totalWatches === 0) {
+    return (
+      <div className="page stats-page">
+        <header className="page-heading stats-page-heading">
+          <p className="page-kicker">私人回顾</p>
+          <h1>统计</h1>
+        </header>
+        <div className="empty-state page-empty-state stats-empty" role="region" aria-label="统计暂无记录">
+          <BrandMark size={28} />
+          <p>记录第一次观看后，这里会显示你的观影视图。</p>
+          <Link className="text-link" to="/library">去影库记录</Link>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="page stats-page">
       <header className="page-heading stats-page-heading">

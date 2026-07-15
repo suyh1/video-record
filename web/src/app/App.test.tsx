@@ -209,6 +209,33 @@ describe('App', () => {
     window.history.pushState({}, '', '/')
   })
 
+  it('links the five settings sections to stable page anchors', async () => {
+    server.use(
+      http.get('*/api/v1/sync/status', () => HttpResponse.json({ accounts: [], pendingTotal: 0 })),
+      http.get('*/api/v1/integrations/accounts', () => HttpResponse.json([])),
+      http.get('*/api/v1/household/members', () => HttpResponse.json([])),
+      http.get('*/api/v1/backups', () => HttpResponse.json([])),
+    )
+    window.history.pushState({}, '', '/settings')
+
+    render(<App />)
+
+    const navigation = await screen.findByRole('navigation', { name: '设置章节' })
+    const sections = [
+      ['账户', '#settings-account'],
+      ['TMDB 与媒体服务器', '#settings-connections'],
+      ['家庭成员', '#settings-household'],
+      ['数据导入导出', '#settings-data'],
+      ['备份与恢复', '#settings-backup'],
+    ] as const
+    expect(within(navigation).getAllByRole('link')).toHaveLength(5)
+    for (const [name, href] of sections) {
+      expect(within(navigation).getByRole('link', { name })).toHaveAttribute('href', href)
+      expect(document.querySelector(href)).toHaveAttribute('id', href.slice(1))
+    }
+    window.history.pushState({}, '', '/')
+  })
+
   it('shows the current account and logs out from settings', async () => {
     let loggedOut = false
     server.use(

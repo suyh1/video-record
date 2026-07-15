@@ -1,5 +1,6 @@
 import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
+import { MemoryRouter } from 'react-router-dom'
 import { expect, it } from 'vitest'
 
 import type { StatsSummary } from '../../api/types'
@@ -22,7 +23,7 @@ const summary: StatsSummary = {
 
 it('renders private viewing totals and a textual table for every chart', async () => {
   server.use(http.get('*/api/v1/stats', () => HttpResponse.json(summary)))
-  renderWithQueryClient(<StatsPage />)
+  renderWithQueryClient(<MemoryRouter><StatsPage /></MemoryRouter>)
 
   expect(await screen.findByRole('heading', { name: '统计' })).toBeVisible()
   expect(screen.getByText('12 次观看')).toBeVisible()
@@ -37,4 +38,45 @@ it('renders private viewing totals and a textual table for every chart', async (
   }
   expect(screen.getByRole('img', { name: '类型分布图' })).toHaveTextContent('剧情')
   expect(screen.getByRole('img', { name: '观看方式图' })).toHaveTextContent('家庭电视')
+})
+
+it('shows one library action instead of charts when there are no watches', async () => {
+  server.use(http.get('*/api/v1/stats', () => HttpResponse.json({
+    ...summary,
+    totalWatches: 0,
+    uniqueMedia: 0,
+    totalMinutes: 0,
+    repeatWatches: 0,
+    monthly: [],
+    yearly: [],
+    genres: [],
+    ratings: [],
+    tags: [],
+    viewingMethods: [],
+  })))
+  renderWithQueryClient(<MemoryRouter><StatsPage /></MemoryRouter>)
+
+  const empty = await screen.findByRole('region', { name: '统计暂无记录' })
+  expect(empty.querySelector('[data-brand-mark="film-archive"]')).toBeInTheDocument()
+  expect(within(empty).getAllByRole('link')).toHaveLength(1)
+  expect(within(empty).getByRole('link', { name: '去影库记录' })).toHaveAttribute('href', '/library')
+  expect(within(empty).queryByRole('button')).not.toBeInTheDocument()
+  expect(screen.queryByRole('img', { name: '月度观看图' })).not.toBeInTheDocument()
+})
+
+it('retries a failed stats region through its accessible action', async () => {
+  let attempts = 0
+  server.use(http.get('*/api/v1/stats', () => {
+    attempts += 1
+    return attempts === 1
+      ? HttpResponse.json({ code: 'stats_unavailable' }, { status: 503 })
+      : HttpResponse.json(summary)
+  }))
+  renderWithQueryClient(<MemoryRouter><StatsPage /></MemoryRouter>)
+
+  const retry = await screen.findByRole('button', { name: '重试统计' })
+  retry.click()
+
+  expect(await screen.findByText('12 次观看')).toBeVisible()
+  expect(attempts).toBe(2)
 })

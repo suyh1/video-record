@@ -54,6 +54,26 @@ it('groups repeated watches in the month grid and orders the mobile agenda newes
   expect(within(firstDay).getByText('与 owner、家人共同观看')).toBeVisible()
 })
 
+it('defaults the mobile view control to agenda and keeps both responsive views mounted', async () => {
+  server.use(http.get('*/api/v1/calendar', () => HttpResponse.json(response)))
+  const user = userEvent.setup()
+  renderWithQueryClient(<MemoryRouter><CalendarPage now={new Date('2026-07-13T12:00:00Z')} timezone="Asia/Shanghai" /></MemoryRouter>)
+
+  const viewControl = await screen.findByRole('group', { name: '日历视图' })
+  const agendaButton = within(viewControl).getByRole('button', { name: '日程', pressed: true })
+  const monthButton = within(viewControl).getByRole('button', { name: '月历', pressed: false })
+  expect(agendaButton).toHaveAttribute('aria-controls', 'calendar-agenda-view')
+  expect(monthButton).toHaveAttribute('aria-controls', 'calendar-month-view')
+  expect(await screen.findByRole('list', { name: '按日议程' })).toBeInTheDocument()
+  expect(await screen.findByRole('table', { name: '2026年7月观影日历' })).toBeInTheDocument()
+
+  await user.click(monthButton)
+
+  expect(monthButton).toHaveAttribute('aria-pressed', 'true')
+  expect(agendaButton).toHaveAttribute('aria-pressed', 'false')
+  expect(screen.getByRole('table', { name: '2026年7月观影日历' })).toBeInTheDocument()
+})
+
 it('requests completed and in-progress filters without losing the selected month', async () => {
   const urls: string[] = []
   server.use(http.get('*/api/v1/calendar', ({ request }) => {
@@ -88,4 +108,15 @@ it('retries a failed month without changing the current selection', async () => 
   expect(await screen.findByRole('table', { name: '2026年7月观影日历' })).toBeVisible()
   expect(screen.getByRole('heading', { name: '2026年7月' })).toBeVisible()
   expect(attempts).toBe(2)
+})
+
+it('offers exactly one named action when the selected month is empty', async () => {
+  server.use(http.get('*/api/v1/calendar', () => HttpResponse.json({ ...response, events: [] })))
+  renderWithQueryClient(<MemoryRouter><CalendarPage now={new Date('2026-07-13T12:00:00Z')} timezone="Asia/Shanghai" /></MemoryRouter>)
+
+  const empty = await screen.findByRole('region', { name: '日历暂无记录' })
+  expect(empty.querySelector('[data-brand-mark="film-archive"]')).toBeInTheDocument()
+  expect(within(empty).getAllByRole('link')).toHaveLength(1)
+  expect(within(empty).getByRole('link', { name: '去影库记录' })).toHaveAttribute('href', '/library')
+  expect(within(empty).queryByRole('button')).not.toBeInTheDocument()
 })

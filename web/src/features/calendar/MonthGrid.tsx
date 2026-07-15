@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import type { CalendarEvent } from '../../api/types'
 
 type MonthGridProps = {
+  active: boolean
   year: number
   month: number
   events: CalendarEvent[]
@@ -10,7 +11,7 @@ type MonthGridProps = {
 
 const weekDays = ['一', '二', '三', '四', '五', '六', '日']
 
-export function MonthGrid({ year, month, events }: MonthGridProps) {
+export function MonthGrid({ active, year, month, events }: MonthGridProps) {
   const eventsByDay = new Map<number, CalendarEvent[]>()
   for (const event of events) {
     const day = Number(event.localDate.slice(8, 10))
@@ -18,7 +19,11 @@ export function MonthGrid({ year, month, events }: MonthGridProps) {
   }
   const cells = monthCells(year, month)
   return (
-    <table className="calendar-month-grid" aria-label={`${year}年${month}月观影日历`}>
+    <table
+      id="calendar-month-view"
+      className={`calendar-month-grid${active ? ' is-active' : ''}`}
+      aria-label={`${year}年${month}月观影日历`}
+    >
       <thead>
         <tr>{weekDays.map((day) => <th key={day} scope="col">周{day}</th>)}</tr>
       </thead>

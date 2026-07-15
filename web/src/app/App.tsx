@@ -269,18 +269,35 @@ function MobileNavigationLink({ item }: { item: NavigationItem }) {
 function SettingsPage() {
   const setup = useQuery({ queryKey: ['setup-status'], queryFn: ({ signal }) => getSetupStatus(signal) })
   return (
-    <div className="page">
+    <div className="page settings-page">
       <header className="page-heading">
         <p className="page-kicker">video-record</p>
         <h1>设置</h1>
       </header>
-      <AccountSettings />
-      <TmdbStatus configured={setup.data?.tmdbConfigured ?? false} />
-      <IntegrationAccounts />
-      <SyncStatus />
-      <MemberSettings />
-      <DataTransfer />
-      <BackupRestore />
+      <nav className="settings-section-navigation" aria-label="设置章节">
+        <a href="#settings-account">账户</a>
+        <a href="#settings-connections">TMDB 与媒体服务器</a>
+        <a href="#settings-household">家庭成员</a>
+        <a href="#settings-data">数据导入导出</a>
+        <a href="#settings-backup">备份与恢复</a>
+      </nav>
+      <div className="settings-section-group" id="settings-account">
+        <AccountSettings />
+      </div>
+      <div className="settings-section-group" id="settings-connections">
+        <TmdbStatus configured={setup.data?.tmdbConfigured ?? false} />
+        <IntegrationAccounts />
+        <SyncStatus />
+      </div>
+      <div className="settings-section-group" id="settings-household">
+        <MemberSettings />
+      </div>
+      <div className="settings-section-group" id="settings-data">
+        <DataTransfer />
+      </div>
+      <div className="settings-section-group" id="settings-backup">
+        <BackupRestore />
+      </div>
     </div>
   )
 }
