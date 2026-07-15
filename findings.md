@@ -623,3 +623,11 @@
 - `customMutation.reset()` 只重置 observer 可见状态，不取消已经发出的 mutation，也不会阻止 hook 级 `onSuccess`；搜索词变化隐藏自定义表单时还必须显式失效对应 submission token/epoch，否则旧成功会沿用导航和最近搜索副作用。
 - 首页 image header 的 axe 低对比并非最终 token 错误，而是浅色到深色的 140ms 颜色/背景过渡穿过 1.96–2.09:1 的中间帧；只对未滚动 image-header 的导航与搜索禁用该过渡即可保持最终视觉和其他 header 状态不变。
 - Task 10 最终将普通结果选择与自定义创建拆为独立 epoch：普通结果保留 settled-query 语义，自定义提交在 query change/close/unmount 时失效；late success/error/pending 不再导航、写 recent 或污染重开表单。
+- Task 11 基线审计确认详情的 Hero、海报和演员已统一经过 `mediaImageURL`，该 helper 会拒绝 raw TMDB path 与 `image.tmdb.org`，并允许本站相对签名 URL/已有自定义绝对 URL；主要缺口是 Hero/头像运行时 error 后仍显示破图、详情动态色回落与更完整的叠层/响应式视觉，当前季集工作区并未渲染远端季集图片，因此不能凭规格文字新增不需要的图片 UI。
+- Task 11 现有详情 CSS 已具备全宽 hero、2:3 演员轨道和桌面/移动断点，但 `MediaHero` 尚未读取同源 backdrop 像素或设置 `--media-accent`；全局 token 已以 `var(--brand)` 为默认，详情实现应复用 `mediaAccent.ts` 的受控取色并在 canvas/decode/CORS/低彩度失败时显式保持品牌回落，不能让动态色承担正文对比。
+- 娱乐化设计文档明确纯 backdrop 是装饰图，不能以“标题 + 背景”再次进入可访问树；Task 11 应让 Hero backdrop 使用空 alt/装饰语义，并让海报、演员头像或演员占位承担准确的内容名称。
+- Task 11 首次重录的 details 快照中 header 落到 Hero 与演员之间，根因不是 CSS 定位而是视觉测试在截图前 focus 季选择器导致自动滚动；full-page screenshot 会把 fixed header 画在当前 scrollY。键盘断言后必须 blur/scrollTop=0 再截图，并用几何位置判断离屏 skip link。
+- Task 11 修正测试滚动后六张详情图已人工检查：导航在首屏顶部覆盖 Hero，手机单列且露出演员区，平板/桌面海报标题叠层、2:3 演员轨道、记录双栏/单栏和多刷顺序稳定，无明显溢出或遮挡。
+- Task 11 质量审查证明图片 identity 不能只用于比较 state：若 identity 包含 title 而 img `src` 未变，浏览器不会重发 load，ready 状态会永久失配；需按 identity remount 或分离 load/source identity。详情 header 从浅色 loading 切深色 ready 也必须避免颜色缓动穿过低对比中间帧，reduced-motion visual 无法替代正常动效逐帧检查。
+- CSS transition 的 after-change 样式决定是否创建动画；仅在 `has-backdrop:not(.is-scrolled)` 中设 `transition:none` 只能保证进入 ready，离开 ready 或增加 `is-scrolled` 时选择器失效、基础过渡重新生效。详情 header 的高对比策略与正常动效采样必须覆盖 loading/ready/failed/scroll 双向全生命周期。
+- 详情页最终以 `body:has(.media-details-page)` 作为 header 高对比与无颜色过渡的稳定生命周期边界，不依赖图片或滚动状态；四次独立 MutationObserver 各采 mutation 当帧和随后 20 个 rAF 帧，可同时证明双向状态切换、滚动切换和搜索 placeholder 对比度，而 Home 仍保留自身 header 逻辑。

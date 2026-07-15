@@ -580,3 +580,8 @@
 - Task 10 异步修复提交 `be2324a` 已关闭原 3 个质量问题；第二轮质量复审又复现 custom pending 时改 query 仍触发旧成功导航并写 recent，剩余 1 个 Important 已交回实现者继续 TDD。
 - Task 10 最终修复 `471485c` 以独立 custom submission epoch 关闭 query-change 迟到响应；最终质量复审 Critical/Important/Minor 均无，Ready to proceed。
 - Task 10 主控新鲜验证通过：37 文件 Vitest 204/204、typecheck、lint、production build、API 漂移、`git diff --check`、完整 accessibility 21/21、视觉非更新 9/9、Impeccable detector `[]`；六张影库快照已逐张检查，Task 10 完成。
+- Task 11 已从干净 `main` / `d756095` 开始：新实现者按 TDD 处理详情 hero、演员头像、季集图片失败与动态色回落，保持现有记录/剧集/多刷 DOM 和业务顺序。
+- Task 11 实现提交 `bcb5091` 已完成 Hero 四态、演员失败占位、详情叠层与六张基线，规格复审通过；首轮质量审查发现 ready 后同 URL 改标题卡 loading、正常动效 header 中间帧低对比和重复 credit key，已交回实现者修复。
+- Task 11 质量修复 `8ffb9c6` 已关闭图片 remount、重复 credit key 与进入 ready 的低对比；第二轮质量复审又复现退出 ready/进入 scroll 的反向过渡低至 1.57:1，剩余 1 个 Important 已交回继续修复。
+- Task 11 最终提交链为 `bcb5091`、`8ffb9c6`、`e5be6e6`：Hero 四态、动态取色回落、演员失败占位、详情叠层和 header 全生命周期高对比均完成；最终规格与质量复审无 Critical/Important/Minor。
+- Task 11 主控新鲜验证通过：38 文件 Vitest 215/215、visual/episodes/recording 17/17、typecheck、lint、production build、API 漂移、`git diff --check` 与 Impeccable detector `[]`；六张详情基线已逐张检查，生产代码不构造 TMDB 图片直连。
