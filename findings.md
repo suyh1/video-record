@@ -613,3 +613,6 @@
 - Task 8 最新独立验证报告为 Go 测试、141 项 Vitest、lint、build、API 合约、文档验收与 Playwright 27/27 通过；12 张影库/详情三尺寸明暗快照匹配，工作树在补跟踪记录前为干净 `main`。
 - Impeccable 项目上下文确认产品型界面约束：电影画面可以承担首页主视觉，但交互仍应服务一分钟内完成记录；固定字号、统一控件状态、150-250ms 状态动效和克制单一强调色优先于装饰性动画。
 - Task 8 最终审查确认 `TMDB_IMAGE_BASE_URL` 只替换 Go 服务受控上游，图片客户端仍限制尺寸、路径、类型、体积和重定向；浏览器继续只接触签名同源 URL，因此该 E2E 配置没有弱化生产代理边界。
+- 首页 TMDB hero 不能直接复用允许自定义外链的通用 `mediaImageURL`；专用原始字符串 allowlist 必须限定相对 `w1280` 签名代理 URL，并在解析前拒绝空 fragment 与 CR/LF/TAB 规范化绕过。
+- 末集快速推进的 10 秒撤销窗口跨越 React Query、后端状态投影和组件生命周期；正确同步顺序是 next 立即更新 progress 与 all，watching 等 undo/timeout/unmount 的终态再 exact 刷新，并显式协调慢速 undo 与 pending next 卸载。
+- 图片成功不等于 header 可读；即使 hero 有暗色内容遮罩，顶部可能是雪景或白片头。`home-image-header` 必须提供与图片内容无关的全宽稳定深色表面，并用成功解码的纯白 PNG 逐项验证导航 4.5:1 对比度。

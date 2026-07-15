@@ -570,3 +570,6 @@
 - Task 8 修补后实现者重新运行 `go test ./...`、34 文件 141 项 Vitest、lint、build、API 漂移、文档验收、`git diff --check` 和标准 Playwright 图 27/27，均退出 0；工作树确认干净。
 - Task 8 完整范围 `d1efe9d..35d099d` 的最终规格复审通过；定向 Vitest 30/30、Playwright 18/18、Go、typecheck、lint 与 12 张快照非更新模式均通过。
 - Task 8 最终质量复审无 Critical、Important 或 Minor；滚动/焦点清理、响应式导航、签名图片边界与真实后端代理链路均确认可进入下一任务。
+- Task 9 个性化首页最终提交链为 `966d858`、`4f084d7`、`308af86`、`92e59ef`、`84f3623`；私人 hero、热门补足、白底降级、TV CTA、继续轨道、最近记录与视觉矩阵完成。
+- Task 9 规格复审关闭签名同源 hero、返回首页 header 状态与失败源精准重试差距；质量复审进一步关闭末集撤销、亮图 header 对比、自动 live 播报、快照计时器及慢速/卸载竞态。
+- Task 9 最终全量 Vitest 179/179、visual 9/9、typecheck、lint、build、API 漂移、diff check 与 Impeccable detector 均通过；最终质量审查 Critical/Important/Minor 均无，工作树干净。
