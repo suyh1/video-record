@@ -17,12 +17,13 @@ import (
 )
 
 const (
-	defaultBaseURL   = "https://api.themoviedb.org/3"
-	defaultTimeout   = 8 * time.Second
-	searchCacheTTL   = 6 * time.Hour
-	popularCacheTTL  = 6 * time.Hour
-	liveMetadataTTL  = 6 * time.Hour
-	maxResponseBytes = 5 << 20
+	defaultBaseURL      = "https://api.themoviedb.org/3"
+	defaultImageBaseURL = "https://image.tmdb.org/t/p"
+	defaultTimeout      = 8 * time.Second
+	searchCacheTTL      = 6 * time.Hour
+	popularCacheTTL     = 6 * time.Hour
+	liveMetadataTTL     = 6 * time.Hour
+	maxResponseBytes    = 5 << 20
 )
 
 var (
@@ -47,27 +48,33 @@ func (err *ClientError) Unwrap() error {
 }
 
 type ClientOptions struct {
-	BaseURL    string
-	Token      string
-	HTTPClient *http.Client
-	Cache      *Cache
-	Logger     *slog.Logger
-	Timeout    time.Duration
+	BaseURL      string
+	ImageBaseURL string
+	Token        string
+	HTTPClient   *http.Client
+	Cache        *Cache
+	Logger       *slog.Logger
+	Timeout      time.Duration
 }
 
 type Client struct {
-	baseURL    string
-	token      string
-	httpClient *http.Client
-	cache      *Cache
-	logger     *slog.Logger
-	timeout    time.Duration
+	baseURL      string
+	imageBaseURL string
+	token        string
+	httpClient   *http.Client
+	cache        *Cache
+	logger       *slog.Logger
+	timeout      time.Duration
 }
 
 func NewClient(options ClientOptions) *Client {
 	baseURL := strings.TrimRight(options.BaseURL, "/")
 	if baseURL == "" {
 		baseURL = defaultBaseURL
+	}
+	imageBaseURL := strings.TrimRight(options.ImageBaseURL, "/")
+	if imageBaseURL == "" {
+		imageBaseURL = defaultImageBaseURL
 	}
 	httpClient := options.HTTPClient
 	if httpClient == nil {
@@ -82,12 +89,13 @@ func NewClient(options ClientOptions) *Client {
 		timeout = defaultTimeout
 	}
 	return &Client{
-		baseURL:    baseURL,
-		token:      strings.TrimSpace(options.Token),
-		httpClient: httpClient,
-		cache:      options.Cache,
-		logger:     logger,
-		timeout:    timeout,
+		baseURL:      baseURL,
+		imageBaseURL: imageBaseURL,
+		token:        strings.TrimSpace(options.Token),
+		httpClient:   httpClient,
+		cache:        options.Cache,
+		logger:       logger,
+		timeout:      timeout,
 	}
 }
 
