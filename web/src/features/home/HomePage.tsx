@@ -257,12 +257,16 @@ function HomeContinueItem({ item }: { item: MediaSearchResult }) {
         const episode = variables.payload.episodeRefs?.[0]
         if (episode) {
           undoWindow.current = {
-            active: true,
+            active: mounted.current,
             expired: false,
             undoInFlight: false,
             watchingSynchronized: false,
           }
-          setSavedAdvance({ episode })
+          if (mounted.current) {
+            setSavedAdvance({ episode })
+          } else {
+            synchronizeWatching()
+          }
         }
       }
       void queryClient.invalidateQueries({ exact: true, queryKey: ['library', 'all'] })

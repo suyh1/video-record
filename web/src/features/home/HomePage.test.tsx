@@ -1,4 +1,5 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { delay, http, HttpResponse } from 'msw'
 import { MemoryRouter } from 'react-router-dom'
@@ -12,6 +13,7 @@ import { HomePage } from './HomePage'
 vi.mock('../../lib/mediaAccent', () => ({ sampleMediaAccent: vi.fn(() => null) }))
 
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.useRealTimers()
   vi.unstubAllGlobals()
 })
@@ -417,6 +419,42 @@ describe('HomePage', () => {
     await waitFor(() => expect(scenario.watchingLibraryRequests()).toBe(2))
   })
 
+  it('syncs completed watching after a pending final-episode advance unmounts', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token')
+    const scenario = installLastEpisodeScenario({ nextDelayMs: 1_500 })
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { retry: false },
+        queries: { retry: false, staleTime: Infinity },
+      },
+    })
+    const renderHome = (visible: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>{visible ? <HomePage /> : null}</MemoryRouter>
+      </QueryClientProvider>
+    )
+    const consoleErrors: string[] = []
+    vi.spyOn(console, 'error').mockImplementation((...args) => consoleErrors.push(args.join(' ')))
+    const view = render(renderHome(true))
+
+    fireEvent.click(await screen.findByRole('button', { name: '推进 收官剧集 下一集 S01E02' }))
+    await waitFor(() => expect(scenario.nextRequests()).toBe(1))
+    expect(scenario.watchingLibraryRequests()).toBe(1)
+
+    view.rerender(renderHome(false))
+    await act(async () => vi.advanceTimersByTimeAsync(1_500))
+
+    await waitFor(() => expect(scenario.backendVersion()).toBe(2))
+    await waitFor(() => expect(scenario.watchingLibraryRequests()).toBe(2))
+    expect(consoleErrors.join('\n')).not.toMatch(/state update on an unmounted|unmounted component/i)
+
+    view.rerender(renderHome(true))
+
+    expect(await screen.findByText('0 部剧集')).toBeVisible()
+    expect(scenario.watchingLibraryRequests()).toBe(2)
+  })
+
   it('defers expiry refresh until a slow final-episode undo succeeds', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token')
@@ -568,7 +606,8 @@ function popularHighlight(id: number, title: string) {
   }
 }
 
-function installLastEpisodeScenario({ undoDelayMs = 0, undoFails = false }: {
+function installLastEpisodeScenario({ nextDelayMs = 0, undoDelayMs = 0, undoFails = false }: {
+  nextDelayMs?: number
   undoDelayMs?: number
   undoFails?: boolean
 } = {}) {
@@ -586,6 +625,7 @@ function installLastEpisodeScenario({ undoDelayMs = 0, undoFails = false }: {
   }
   let progressVersion = 1
   let allRequests = 0
+  let nextRequestCount = 0
   let undoRequestCount = 0
   let watchingRequests = 0
   server.use(
@@ -639,6 +679,8 @@ function installLastEpisodeScenario({ undoDelayMs = 0, undoFails = false }: {
           episodes: [firstEpisode],
         })
       }
+      nextRequestCount += 1
+      if (nextDelayMs > 0) await delay(nextDelayMs)
       progressVersion = 2
       return HttpResponse.json({
         roundId: 'round-final', mediaId: item.id, seasonNumber: 1, status: 'completed', version: 2,
@@ -652,6 +694,7 @@ function installLastEpisodeScenario({ undoDelayMs = 0, undoFails = false }: {
   return {
     allLibraryRequests: () => allRequests,
     backendVersion: () => progressVersion,
+    nextRequests: () => nextRequestCount,
     undoRequests: () => undoRequestCount,
     watchingLibraryRequests: () => watchingRequests,
   }
