@@ -7,11 +7,14 @@ type MonthGridProps = {
   year: number
   month: number
   events: CalendarEvent[]
+  todayDate: string
+  selectedDate: string | null
+  onSelectDate: (date: string) => void
 }
 
 const weekDays = ['一', '二', '三', '四', '五', '六', '日']
 
-export function MonthGrid({ active, year, month, events }: MonthGridProps) {
+export function MonthGrid({ active, year, month, events, todayDate, selectedDate, onSelectDate }: MonthGridProps) {
   const eventsByDay = new Map<number, CalendarEvent[]>()
   for (const event of events) {
     const day = Number(event.localDate.slice(8, 10))
@@ -32,15 +35,32 @@ export function MonthGrid({ active, year, month, events }: MonthGridProps) {
           <tr key={row}>
             {cells.slice(row * 7, row * 7 + 7).map((day, column) => {
               const dayEvents = day === null ? [] : eventsByDay.get(day) ?? []
+              const localDate = day === null ? null : calendarDate(year, month, day)
+              const today = localDate === todayDate
+              const selected = localDate === selectedDate
+              const hasEvents = dayEvents.length > 0
               return (
                 <td
                   key={`${row}-${column}`}
-                  className={day === null ? 'outside-month' : ''}
+                  className={day === null
+                    ? 'outside-month'
+                    : [hasEvents ? 'has-events' : '', today ? 'is-today' : '', selected ? 'is-selected' : ''].filter(Boolean).join(' ')}
                   aria-label={day === null ? undefined : `${month}月${day}日，${dayEvents.length} 条记录`}
                 >
-                  {day === null ? null : (
+                  {day === null || localDate === null ? null : (
                     <>
-                      <span className="calendar-day-number">{day}</span>
+                      <button
+                        type="button"
+                        className="calendar-day-button"
+                        aria-current={today ? 'date' : undefined}
+                        aria-label={`${month}月${day}日，${dayEvents.length} 条记录`}
+                        aria-pressed={selected}
+                        data-has-events={hasEvents}
+                        onClick={() => onSelectDate(localDate)}
+                      >
+                        <span className="calendar-day-number">{day}</span>
+                        {hasEvents ? <span className="calendar-day-count">{dayEvents.length} 条</span> : null}
+                      </button>
                       <ol>
                         {dayEvents.map((event) => (
                           <li key={event.id}>
@@ -63,6 +83,10 @@ export function MonthGrid({ active, year, month, events }: MonthGridProps) {
       </tbody>
     </table>
   )
+}
+
+function calendarDate(year: number, month: number, day: number) {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
 function monthCells(year: number, month: number) {

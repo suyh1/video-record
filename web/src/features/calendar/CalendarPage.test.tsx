@@ -74,6 +74,69 @@ it('defaults the mobile view control to agenda and keeps both responsive views m
   expect(screen.getByRole('table', { name: '2026年7月观影日历' })).toBeInTheDocument()
 })
 
+it('links a selected calendar date to its agenda and restores the full month', async () => {
+  server.use(http.get('*/api/v1/calendar', () => HttpResponse.json(response)))
+  const user = userEvent.setup()
+  renderWithQueryClient(<MemoryRouter><CalendarPage now={new Date('2026-07-13T12:00:00Z')} timezone="Asia/Shanghai" /></MemoryRouter>)
+
+  const viewControl = await screen.findByRole('group', { name: '日历视图' })
+  await user.click(within(viewControl).getByRole('button', { name: '月历' }))
+  const month = await screen.findByRole('table', { name: '2026年7月观影日历' })
+  const selectedDay = within(month).getByRole('button', { name: '7月13日，2 条记录' })
+  expect(selectedDay).toHaveAttribute('aria-current', 'date')
+  expect(selectedDay).toHaveAttribute('aria-pressed', 'false')
+  expect(selectedDay).toHaveAttribute('data-has-events', 'true')
+
+  await user.click(selectedDay)
+
+  expect(selectedDay).toHaveAttribute('aria-pressed', 'true')
+  expect(within(viewControl).getByRole('button', { name: '日程', pressed: true })).toBeVisible()
+  const agenda = screen.getByRole('list', { name: '按日议程' })
+  expect(within(agenda).getAllByRole('link')).toHaveLength(2)
+  expect(within(agenda).getByText('漫长的季节')).toBeVisible()
+  expect(within(agenda).getByText('花样年华')).toBeVisible()
+  expect(within(agenda).queryByText('一一')).not.toBeInTheDocument()
+
+  await user.click(screen.getByRole('button', { name: '查看全月' }))
+
+  expect(within(screen.getByRole('list', { name: '按日议程' })).getAllByRole('link')).toHaveLength(3)
+  expect(screen.queryByRole('button', { name: '查看全月' })).not.toBeInTheDocument()
+})
+
+it('explains an empty selected day instead of rendering an empty agenda', async () => {
+  server.use(http.get('*/api/v1/calendar', () => HttpResponse.json(response)))
+  const user = userEvent.setup()
+  renderWithQueryClient(<MemoryRouter><CalendarPage now={new Date('2026-07-13T12:00:00Z')} timezone="Asia/Shanghai" /></MemoryRouter>)
+
+  const month = await screen.findByRole('table', { name: '2026年7月观影日历' })
+  await user.click(within(month).getByRole('button', { name: '7月14日，0 条记录' }))
+
+  expect(screen.getByRole('status')).toHaveTextContent('7月14日暂无观看记录')
+  expect(screen.queryByRole('list', { name: '按日议程' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '查看全月' })).toBeVisible()
+})
+
+it('clears a selected date when moving to another month', async () => {
+  server.use(http.get('*/api/v1/calendar', ({ request }) => {
+    const requestedMonth = new URL(request.url).searchParams.get('month')
+    return HttpResponse.json(requestedMonth === '2026-08'
+      ? { ...response, month: 8, events: [] }
+      : response)
+  }))
+  const user = userEvent.setup()
+  renderWithQueryClient(<MemoryRouter><CalendarPage now={new Date('2026-07-13T12:00:00Z')} timezone="Asia/Shanghai" /></MemoryRouter>)
+
+  const month = await screen.findByRole('table', { name: '2026年7月观影日历' })
+  await user.click(within(month).getByRole('button', { name: '7月13日，2 条记录' }))
+  expect(screen.getByRole('button', { name: '查看全月' })).toBeVisible()
+
+  await user.click(screen.getByRole('button', { name: '下个月' }))
+
+  expect(await screen.findByRole('heading', { name: '2026年8月' })).toBeVisible()
+  expect(await screen.findByRole('region', { name: '日历暂无记录' })).toBeVisible()
+  expect(screen.queryByRole('button', { name: '查看全月' })).not.toBeInTheDocument()
+})
+
 it('requests completed and in-progress filters without losing the selected month', async () => {
   const urls: string[] = []
   server.use(http.get('*/api/v1/calendar', ({ request }) => {

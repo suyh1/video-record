@@ -236,6 +236,30 @@ describe('App', () => {
     window.history.pushState({}, '', '/')
   })
 
+  it('keeps member settings anchors meaningful without exposing administrator controls', async () => {
+    server.use(
+      http.get('*/api/v1/auth/me', () => HttpResponse.json({ id: 'member-1', username: 'family', role: 'member' })),
+      http.get('*/api/v1/sync/status', () => HttpResponse.json({ accounts: [], pendingTotal: 0 })),
+      http.get('*/api/v1/integrations/accounts', () => HttpResponse.json([])),
+    )
+    window.history.pushState({}, '', '/settings')
+
+    render(<App />)
+
+    const navigation = await screen.findByRole('navigation', { name: '设置章节' })
+    expect(within(navigation).getAllByRole('link')).toHaveLength(5)
+    const household = document.querySelector<HTMLElement>('#settings-household')
+    const backup = document.querySelector<HTMLElement>('#settings-backup')
+    if (!household || !backup) throw new Error('expected member settings anchor targets')
+    expect(within(household).getByRole('heading', { name: '家庭成员' })).toBeVisible()
+    expect(within(household).getByText('仅管理员可管理家庭成员。')).toBeVisible()
+    expect(within(backup).getByRole('heading', { name: '备份与恢复' })).toBeVisible()
+    expect(within(backup).getByText('仅管理员可创建和恢复系统备份。')).toBeVisible()
+    expect(screen.queryByRole('button', { name: '添加成员' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '创建系统备份' })).not.toBeInTheDocument()
+    window.history.pushState({}, '', '/')
+  })
+
   it('shows the current account and logs out from settings', async () => {
     let loggedOut = false
     server.use(

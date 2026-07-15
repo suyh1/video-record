@@ -2271,6 +2271,31 @@ body {
   display: none;
 }
 
+.calendar-selection-summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.calendar-selection-summary p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.calendar-selection-summary button {
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 650;
+}
+
 .calendar-views {
   display: grid;
   grid-template-columns: minmax(0, 1.75fr) minmax(280px, 0.65fr);
@@ -2303,12 +2328,49 @@ body {
   background: var(--surface);
 }
 
-.calendar-day-number {
-  display: block;
+.calendar-day-button {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
   margin-bottom: var(--space-1);
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
   color: var(--muted);
+}
+
+.calendar-day-button:hover {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.calendar-month-grid td.is-today .calendar-day-button {
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.calendar-month-grid td.is-selected .calendar-day-button {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.calendar-day-count {
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.calendar-day-number {
+  font-variant-numeric: tabular-nums;
+  font-weight: inherit;
 }
 
 .calendar-month-grid ol,
@@ -2354,6 +2416,17 @@ body {
 .calendar-agenda {
   display: grid;
   gap: var(--space-8);
+}
+
+.calendar-agenda-empty {
+  display: grid;
+  min-height: 176px;
+  place-items: center;
+  padding: var(--space-6);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  text-align: center;
 }
 
 .agenda-day-heading {
@@ -2531,6 +2604,11 @@ body {
     padding: var(--space-1);
   }
 
+  .calendar-day-button {
+    min-height: 44px;
+    padding: 0 var(--space-1);
+  }
+
   .calendar-month-grid a {
     padding: var(--space-1);
     font-size: var(--text-xs);
@@ -2585,6 +2663,22 @@ body {
 
 .settings-section-group {
   scroll-margin-top: calc(64px + var(--space-6));
+}
+
+.settings-permission-notice {
+  min-height: 112px;
+  padding: var(--space-6) 0;
+  border-top: 1px solid var(--border);
+}
+
+.settings-permission-notice h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.settings-permission-notice p {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
 }
 
 button,

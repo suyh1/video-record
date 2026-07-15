@@ -27,12 +27,18 @@ export function CalendarPage({
   const [month, setMonth] = useState(() => monthInTimezone(now, timezone))
   const [filter, setFilter] = useState<CalendarFilter>('all')
   const [view, setView] = useState<'agenda' | 'month'>('agenda')
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const calendar = useQuery({
     queryKey: ['calendar', month, timezone, filter],
     queryFn: ({ signal }) => getCalendar(month, timezone, filter, signal),
   })
   const [year, monthNumber] = month.split('-').map(Number)
-  const moveMonth = (offset: number) => setMonth(shiftMonth(month, offset))
+  const todayDate = dateInTimezone(now, timezone)
+  const displayMonth = (value: string) => {
+    setSelectedDate(null)
+    setMonth(value)
+  }
+  const moveMonth = (offset: number) => displayMonth(shiftMonth(month, offset))
 
   return (
     <div className="page calendar-page">
@@ -43,7 +49,7 @@ export function CalendarPage({
         </div>
         <div className="calendar-month-actions" aria-label="切换月份">
           <button type="button" aria-label="上个月" onClick={() => moveMonth(-1)}><ArrowLeft aria-hidden="true" size={18} /></button>
-          <button type="button" onClick={() => setMonth(monthInTimezone(now, timezone))}>今天</button>
+          <button type="button" onClick={() => displayMonth(monthInTimezone(now, timezone))}>今天</button>
           <button type="button" aria-label="下个月" onClick={() => moveMonth(1)}><ArrowRight aria-hidden="true" size={18} /></button>
         </div>
       </header>
@@ -82,6 +88,13 @@ export function CalendarPage({
         </div>
       ) : null}
 
+      {selectedDate ? (
+        <div className="calendar-selection-summary">
+          <p>{formatCalendarDate(selectedDate)}日程</p>
+          <button type="button" onClick={() => setSelectedDate(null)}>查看全月</button>
+        </div>
+      ) : null}
+
       {calendar.isPending ? <CalendarSkeleton /> : null}
       {calendar.isError ? (
         <div className="calendar-error" role="alert">
@@ -96,8 +109,31 @@ export function CalendarPage({
       {calendar.data ? (
         calendar.data.events.length > 0 ? (
           <div className="calendar-views">
-            <MonthGrid active={view === 'month'} year={calendar.data.year} month={calendar.data.month} events={calendar.data.events} />
-            <AgendaList active={view === 'agenda'} events={calendar.data.events} timezone={calendar.data.timezone} />
+            <MonthGrid
+              active={view === 'month'}
+              events={calendar.data.events}
+              month={calendar.data.month}
+              onSelectDate={(date) => {
+                setSelectedDate(date)
+                setView('agenda')
+              }}
+              selectedDate={selectedDate}
+              todayDate={todayDate}
+              year={calendar.data.year}
+            />
+            {selectedDate && !calendar.data.events.some((event) => event.localDate === selectedDate) ? (
+              <div className="calendar-agenda-empty" role="status">
+                {formatCalendarDate(selectedDate)}暂无观看记录
+              </div>
+            ) : (
+              <AgendaList
+                active={view === 'agenda'}
+                events={selectedDate
+                  ? calendar.data.events.filter((event) => event.localDate === selectedDate)
+                  : calendar.data.events}
+                timezone={calendar.data.timezone}
+              />
+            )}
           </div>
         ) : (
           <div className="empty-state page-empty-state calendar-empty" role="region" aria-label="日历暂无记录">
@@ -121,12 +157,17 @@ function CalendarSkeleton() {
 }
 
 function monthInTimezone(now: Date, timezone: string) {
+  return dateInTimezone(now, timezone).slice(0, 7)
+}
+
+function dateInTimezone(now: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat('en', {
-    year: 'numeric', month: '2-digit', timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit', timeZone: timezone,
   }).formatToParts(now)
   const year = parts.find((part) => part.type === 'year')?.value ?? String(now.getUTCFullYear())
   const month = parts.find((part) => part.type === 'month')?.value ?? String(now.getUTCMonth() + 1).padStart(2, '0')
-  return `${year}-${month}`
+  const day = parts.find((part) => part.type === 'day')?.value ?? String(now.getUTCDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function shiftMonth(value: string, offset: number) {
@@ -135,4 +176,9 @@ function shiftMonth(value: string, offset: number) {
   const month = Number(monthText ?? 1)
   const shifted = new Date(Date.UTC(year, month - 1 + offset, 1))
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+function formatCalendarDate(value: string) {
+  const [, month, day] = value.split('-').map(Number)
+  return `${month}月${day}日`
 }

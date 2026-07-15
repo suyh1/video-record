@@ -12,7 +12,7 @@ import {
 import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 
-import { createMediaFromTMDB, getSetupStatus } from '../api/client'
+import { createMediaFromTMDB, getCurrentUser, getSetupStatus } from '../api/client'
 import type { MediaSearchResult } from '../api/types'
 import { BrandMark } from './BrandMark'
 import { NotFoundPage } from './NotFoundPage'
@@ -268,6 +268,7 @@ function MobileNavigationLink({ item }: { item: NavigationItem }) {
 
 function SettingsPage() {
   const setup = useQuery({ queryKey: ['setup-status'], queryFn: ({ signal }) => getSetupStatus(signal) })
+  const currentUser = useQuery({ queryKey: ['current-user'], queryFn: ({ signal }) => getCurrentUser(signal) })
   return (
     <div className="page settings-page">
       <header className="page-heading">
@@ -290,14 +291,27 @@ function SettingsPage() {
         <SyncStatus />
       </div>
       <div className="settings-section-group" id="settings-household">
-        <MemberSettings />
+        {currentUser.data?.role === 'member' ? (
+          <SettingsPermissionNotice title="家庭成员">仅管理员可管理家庭成员。</SettingsPermissionNotice>
+        ) : <MemberSettings />}
       </div>
       <div className="settings-section-group" id="settings-data">
         <DataTransfer />
       </div>
       <div className="settings-section-group" id="settings-backup">
-        <BackupRestore />
+        {currentUser.data?.role === 'member' ? (
+          <SettingsPermissionNotice title="备份与恢复">仅管理员可创建和恢复系统备份。</SettingsPermissionNotice>
+        ) : <BackupRestore />}
       </div>
     </div>
+  )
+}
+
+function SettingsPermissionNotice({ title, children }: { title: string; children: string }) {
+  return (
+    <section className="settings-permission-notice">
+      <h2>{title}</h2>
+      <p>{children}</p>
+    </section>
   )
 }
