@@ -103,6 +103,7 @@ function BackdropCarouselSession({
 
     let current = true
     const image = new Image()
+    if (activeIndex === null && loadingIndex === 0) image.fetchPriority = 'high'
     let settled = false
     const settle = (status: Extract<ImageStatus, 'ready' | 'failed'>) => {
       if (!current || settled) return
@@ -131,7 +132,7 @@ function BackdropCarouselSession({
       image.onerror = null
       image.onload = null
     }
-  }, [items, loadingIndex])
+  }, [activeIndex, items, loadingIndex])
 
   const readyCount = statuses.filter((status) => status === 'ready').length
   const isEmpty = items.length === 0 || (

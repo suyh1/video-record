@@ -135,6 +135,38 @@ describe('AuthGate', () => {
     expect(screen.getByRole('button', { name: '下一张背景' })).toBeInTheDocument()
   })
 
+  it('rejects external and arbitrary same-origin highlight images before preloading them', async () => {
+    installDecodedImageMock()
+    const valid = highlight(9, '本站代理图片')
+    const unsafeItems = [
+      { ...highlight(1, '恶意外域'), backdropURL: 'https://evil.example/a.jpg' },
+      { ...highlight(2, 'TMDB 直连'), backdropURL: '//image.tmdb.org/t/p/w1280/direct.jpg' },
+      { ...highlight(3, '内联数据'), backdropURL: 'data:image/png;base64,AAAA' },
+      { ...highlight(4, '对象地址'), backdropURL: `blob:${window.location.origin}/unsafe` },
+      { ...highlight(5, '任意同源接口'), backdropURL: '/api/v1/auth/me' },
+      valid,
+    ]
+    server.use(
+      ...closedInstanceHandlers(),
+      http.get('*/api/v1/public/tmdb/highlights', () => HttpResponse.json({ items: unsafeItems })),
+    )
+
+    const { container } = renderWithQueryClient(<AuthGate><p>已登录</p></AuthGate>)
+
+    expect(await screen.findByRole('heading', { name: '登录 video-record' })).toBeVisible()
+    await waitFor(() => expect(decodedImages).toHaveLength(1))
+    expect(decodedImages[0]!.src).toBe(valid.backdropURL)
+    await resolveImage(0)
+
+    expect(container.querySelector('.backdrop-carousel__image.is-active')).toHaveAttribute('src', valid.backdropURL)
+    const renderedSources = [...container.querySelectorAll<HTMLImageElement>('img')]
+      .map((image) => image.getAttribute('src'))
+    for (const unsafe of unsafeItems.slice(0, -1)) {
+      expect(decodedImages.some((image) => image.src === unsafe.backdropURL)).toBe(false)
+      expect(renderedSources).not.toContain(unsafe.backdropURL)
+    }
+  })
+
   it.each([
     ['a highlights server error', () => HttpResponse.json({ code: 'tmdb_unavailable' }, { status: 502 })],
     ['an empty highlights response', () => HttpResponse.json({ items: [] })],
@@ -256,6 +288,50 @@ describe('AuthGate', () => {
     fireEvent.click(screen.getByRole('button', { name: '创建管理员' }))
     expect(await screen.findByText('私人影库已打开')).toBeVisible()
     expect(sessionStorage.getItem('video-record.csrf-token')).toBe('synthetic-csrf-token')
+  })
+
+  it('deduplicates pending first-run setup while retaining the administrator fields', async () => {
+    let initializeRequests = 0
+    let releaseInitialization!: () => void
+    const initializationPending = new Promise<void>((resolve) => {
+      releaseInitialization = resolve
+    })
+    server.use(
+      http.get('*/api/v1/setup/status', () => HttpResponse.json({ initialized: false, storageReady: true, tmdbConfigured: true })),
+      http.post('*/api/v1/setup/admin', async () => {
+        initializeRequests += 1
+        await initializationPending
+        return HttpResponse.json({ id: 'admin-1', username: 'owner', role: 'admin' }, { status: 201 })
+      }),
+      http.post('*/api/v1/auth/login', () => HttpResponse.json({
+        user: { id: 'admin-1', username: 'owner', role: 'admin' },
+        csrfToken: 'setup-pending-csrf',
+      })),
+    )
+    renderWithQueryClient(<AuthGate><p>初始化完成</p></AuthGate>)
+
+    const username = await screen.findByLabelText('管理员用户名')
+    const password = screen.getByLabelText('管理员密码')
+    const confirmation = screen.getByLabelText('确认密码')
+    fireEvent.change(username, { target: { value: 'owner' } })
+    fireEvent.change(password, { target: { value: 'correct horse battery staple' } })
+    fireEvent.change(confirmation, { target: { value: 'correct horse battery staple' } })
+    const form = screen.getByRole('button', { name: '创建管理员' }).closest('form')!
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+
+    const submit = await screen.findByRole('button', { name: '正在创建' })
+    expect(submit).toBeDisabled()
+    expect(submit).toHaveAttribute('aria-busy', 'true')
+    expect(submit).toHaveClass('auth-submit')
+    expect(initializeRequests).toBe(1)
+    expect(username).toHaveValue('owner')
+    expect(password).toHaveValue('correct horse battery staple')
+    expect(confirmation).toHaveValue('correct horse battery staple')
+
+    releaseInitialization()
+    expect(await screen.findByText('初始化完成')).toBeVisible()
+    expect(sessionStorage.getItem('video-record.csrf-token')).toBe('setup-pending-csrf')
   })
 
   it('shows a closed login and preserves the username after invalid credentials', async () => {

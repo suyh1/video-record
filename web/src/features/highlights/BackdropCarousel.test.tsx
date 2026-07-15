@@ -6,6 +6,9 @@ import { BackdropCarousel } from './BackdropCarousel'
 
 type DeferredImage = {
   decode: ReturnType<typeof vi.fn>
+  fetchPriority: string
+  fetchPriorityAtDecode: string
+  fetchPriorityAtSrc: string
   onerror: ((event: Event) => void) | null
   onload: ((event: Event) => void) | null
   rejectDecode: () => void
@@ -29,16 +32,22 @@ function highlight(id: number, title: string): TMDBHighlight {
 
 function installDecodedImageMock() {
   class TestImage {
+    fetchPriority = 'auto'
+    fetchPriorityAtDecode = ''
+    fetchPriorityAtSrc = ''
     onerror: ((event: Event) => void) | null = null
     onload: ((event: Event) => void) | null = null
-    src = ''
+    private source = ''
     private rejectPromise!: (reason: Error) => void
     private resolvePromise!: () => void
     private readonly decodePromise = new Promise<void>((resolve, reject) => {
       this.resolvePromise = resolve
       this.rejectPromise = reject
     })
-    decode = vi.fn(() => this.decodePromise)
+    decode = vi.fn(() => {
+      this.fetchPriorityAtDecode = this.fetchPriority
+      return this.decodePromise
+    })
 
     constructor() {
       decodedImages.push(this)
@@ -46,6 +55,15 @@ function installDecodedImageMock() {
 
     resolveDecode = () => this.resolvePromise()
     rejectDecode = () => this.rejectPromise(new Error('decode failed'))
+
+    get src() {
+      return this.source
+    }
+
+    set src(value: string) {
+      this.fetchPriorityAtSrc = this.fetchPriority
+      this.source = value
+    }
   }
 
   vi.stubGlobal('Image', TestImage)
@@ -128,6 +146,35 @@ describe('BackdropCarousel', () => {
     expect(activeImage(container)).toHaveAttribute('src', item.backdropURL)
     expect(activeImage(container)).toHaveAttribute('alt', '')
     expect(activeImage(container)).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('prioritizes only the first initial image before assigning its source and decoding it', async () => {
+    const items = [highlight(1, '第一张'), highlight(2, '第二张'), highlight(3, '手动目标')]
+    render(<BackdropCarousel items={items} intervalMs={7_000} showControls />)
+
+    expect(decodedImages[0]).toMatchObject({
+      fetchPriority: 'high',
+      fetchPriorityAtDecode: 'high',
+      fetchPriorityAtSrc: 'high',
+      src: items[0]!.backdropURL,
+    })
+
+    await resolveImage(0)
+    expect(decodedImages[1]).toMatchObject({
+      fetchPriority: 'auto',
+      fetchPriorityAtDecode: 'auto',
+      fetchPriorityAtSrc: 'auto',
+      src: items[1]!.backdropURL,
+    })
+
+    await resolveImage(1)
+    fireEvent.click(screen.getByRole('button', { name: '上一张背景' }))
+    expect(decodedImages[2]).toMatchObject({
+      fetchPriority: 'auto',
+      fetchPriorityAtDecode: 'auto',
+      fetchPriorityAtSrc: 'auto',
+      src: items[2]!.backdropURL,
+    })
   })
 
   it('skips a failed first image and activates the next decoded image', async () => {

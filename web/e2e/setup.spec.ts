@@ -21,10 +21,32 @@ test('initializes the closed installation and supports a fresh login', async ({ 
   await page.keyboard.press('Tab')
   await expect(page.getByRole('button', { name: '显示确认密码' })).toBeFocused()
 
+  let releaseInitialization!: () => void
+  let markInitializationStarted!: () => void
+  const initializationStarted = new Promise<void>((resolve) => {
+    markInitializationStarted = resolve
+  })
+  const initializationHeld = new Promise<void>((resolve) => {
+    releaseInitialization = resolve
+  })
+  await page.route('**/api/v1/setup/admin', async (route) => {
+    markInitializationStarted()
+    await initializationHeld
+    await route.continue()
+  }, { times: 1 })
+
   await page.getByLabel('管理员用户名').fill(admin.username)
   await page.getByLabel('管理员密码', { exact: true }).fill(admin.password)
   await page.getByLabel('确认密码', { exact: true }).fill(admin.password)
-  await page.getByRole('button', { name: '创建管理员' }).click()
+  const setupSubmit = page.getByRole('button', { name: '创建管理员' })
+  const initialSubmitHeight = await setupSubmit.evaluate((element) => element.getBoundingClientRect().height)
+  await setupSubmit.click()
+  await initializationStarted
+  const pendingSubmit = page.getByRole('button', { name: '正在创建' })
+  await expect(pendingSubmit).toBeDisabled()
+  await expect(pendingSubmit).toHaveAttribute('aria-busy', 'true')
+  await expect.poll(() => pendingSubmit.evaluate((element) => element.getBoundingClientRect().height)).toBe(initialSubmitHeight)
+  releaseInitialization()
 
   await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible()
   const csrfToken = await page.evaluate(() => window.sessionStorage.getItem('video-record.csrf-token'))
