@@ -39,14 +39,17 @@ test('keeps authentication and media imagery behind the signed same-origin proxy
   await expect(page.getByRole('heading', { name: '登录 video-record' })).toBeVisible()
   await expectImageLoaded(page.locator('.auth-backdrop .backdrop-carousel__image.is-active'))
 
-  await login(page)
+  const csrfToken = await login(page)
   const homeHero = page.getByRole('region', { name: '首页主视觉' })
   await expect(homeHero).toHaveAttribute('data-backdrop-state', 'ready')
   await expectImageLoaded(homeHero.locator('.backdrop-carousel__image.is-active'))
 
+  await refreshSeededMediaImages(page, csrfToken)
   await page.goto('/library')
   await expect(page.getByRole('heading', { level: 1, name: '影库' })).toBeVisible()
-  await expect(page.locator('.poster-frame')).toHaveCount(2)
+  const libraryPosters = page.locator('.poster-frame img')
+  await expect(libraryPosters).toHaveCount(2)
+  for (const poster of await libraryPosters.all()) await expectImageLoaded(poster)
 
   await page.goto('/media/e2e-series')
   await expect(page.getByRole('heading', { level: 1, name: '潮汐档案' })).toBeVisible()
@@ -65,6 +68,26 @@ test('keeps authentication and media imagery behind the signed same-origin proxy
     expect(proxyResponses.get(value), value).toBe(200)
   }
 })
+
+async function refreshSeededMediaImages(page: Page, csrfToken: string) {
+  const media = [
+    { externalID: 2002, id: 'e2e-movie', mediaType: 'movie' },
+    { externalID: 1001, id: 'e2e-series', mediaType: 'tv' },
+  ]
+  for (const item of media) {
+    const response = await page.context().request.post(
+      `${baseURL}/api/v1/media/${item.id}/tmdb/${item.mediaType}/${item.externalID}`,
+      {
+        headers: {
+          'Idempotency-Key': `refresh-${item.id}-images`,
+          Origin: baseURL,
+          'X-CSRF-Token': csrfToken,
+        },
+      },
+    )
+    expect(response.ok()).toBeTruthy()
+  }
+}
 
 async function readSignedBackdrop(page: Page) {
   const loginResponse = await page.context().request.post(`${baseURL}/api/v1/auth/login`, {

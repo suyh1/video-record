@@ -589,3 +589,5 @@
 - `83502e1` 增加 today/selected/watched 日期语义、选日过滤/查看全月/换月清除与普通成员权限说明；`5740e0e`、`21b0d59` 继续关闭空日 agenda 目标和选日/清除后的隐藏焦点路径，第四次规格复审最终通过。
 - Task 12 质量审查用有数据 Chromium 测得 320/375 的日期+计数跨列且全页 overflow 假绿；`f41da3c` 将手机月历压缩为纵向日期/两位数计数并隐藏格内影片标题，新增逐子元素边界回归后 320/375 均无内部溢出。
 - Task 12 主控新鲜验证通过：38 文件 Vitest 227/227、完整 accessibility/视觉依赖 24/24、typecheck、lint、production build、API 漂移、`git diff --check` 与 Impeccable detector `[]`；最终规格和质量复审均无 Critical/Important/Minor。
+- Task 13 首轮规格复审为 Not Ready：代理旅程在影库只断言两个 `.poster-frame`，未满足计划中“四页可见图片均完成加载”的要求；主控新增真实 `<img>` decode 断言后，测试稳定暴露 E2E 导入种子图片路径为空。
+- Task 13 根因修正不改生产代码：旅程使用登录所得 CSRF 和幂等键，经后端 TMDB 关联接口刷新两条种子媒体，再访问影库逐张等待签名同源海报解码；先以强制 503 取得预期 RED，撤销故障注入后真实缺图仍 RED，加入后端刷新后依赖链 `14/14` GREEN。
