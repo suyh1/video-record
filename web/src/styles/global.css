@@ -2606,17 +2606,21 @@ body {
 
   .calendar-month-grid td {
     height: 80px;
-    padding: var(--space-1);
+    padding: 2px;
   }
 
   .calendar-day-button {
+    flex-direction: column;
     min-height: 44px;
-    padding: 0 var(--space-1);
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 0;
+    padding: 2px 0;
+    line-height: 1.1;
   }
 
-  .calendar-month-grid a {
-    padding: var(--space-1);
-    font-size: var(--text-xs);
+  .calendar-month-grid td > ol {
+    display: none;
   }
 
   .calendar-skeleton-body {

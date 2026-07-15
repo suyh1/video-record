@@ -18,6 +18,112 @@ test('has no blocking WCAG 2.2 AA violations on major pages', async ({ page }) =
   }
 })
 
+test('contains populated calendar cells within the mobile seven-column grid', async ({ page }) => {
+  await page.route('**/api/v1/calendar*', (route) => route.fulfill({
+    contentType: 'application/json',
+    json: {
+      year: 2026,
+      month: 7,
+      timezone: 'Asia/Shanghai',
+      events: Array.from({ length: 12 }, (_, index) => (
+        {
+          id: `calendar-event-${index + 1}`,
+          mediaId: 'e2e-movie',
+          mediaType: 'movie',
+          title: `静默轨道 ${index + 1}`,
+          episodeId: null,
+          seasonNumber: null,
+          episodeNumber: null,
+          absoluteNumber: null,
+          watchedAt: `2026-07-13T${String(index).padStart(2, '0')}:00:00Z`,
+          localDate: '2026-07-13',
+          viewingMethod: '影院',
+          participants: ['e2e-admin'],
+          status: 'completed',
+        }
+      )),
+    },
+    status: 200,
+  }))
+  await login(page)
+
+  const measurements = []
+  for (const width of [320, 375]) {
+    await page.setViewportSize({ width, height: 812 })
+    await page.goto('/calendar')
+    await page.getByRole('button', { name: '月历' }).click()
+
+    const cell = page.getByRole('cell', { name: '7月13日，12 条记录' })
+    const dayButton = cell.getByRole('button', { name: '7月13日，12 条记录' })
+    await expect(dayButton.locator('.calendar-day-count')).toHaveText('12 条')
+    await expect(dayButton.locator('.calendar-day-count')).toBeVisible()
+
+    measurements.push(await cell.evaluate((element, viewportWidth) => {
+      const button = element.querySelector<HTMLElement>('.calendar-day-button')
+      const date = element.querySelector<HTMLElement>('.calendar-day-number')
+      const count = element.querySelector<HTMLElement>('.calendar-day-count')
+      const eventList = element.querySelector<HTMLElement>('ol')
+      if (!button || !date || !count || !eventList) throw new Error('Populated calendar cell is incomplete')
+      const cellRect = element.getBoundingClientRect()
+      const buttonRect = button.getBoundingClientRect()
+      const dateRect = date.getBoundingClientRect()
+      const countRect = count.getBoundingClientRect()
+      const tolerance = 0.5
+      const containedBy = (child: DOMRect, parent: DOMRect) => (
+        child.left >= parent.left - tolerance && child.right <= parent.right + tolerance
+      )
+      return {
+        viewportWidth,
+        cellWidth: cellRect.width,
+        cellClientWidth: element.clientWidth,
+        cellScrollWidth: element.scrollWidth,
+        buttonWidth: buttonRect.width,
+        buttonClientWidth: button.clientWidth,
+        buttonScrollWidth: button.scrollWidth,
+        dateWidth: dateRect.width,
+        countWidth: countRect.width,
+        documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        buttonWithinCell: containedBy(buttonRect, cellRect),
+        dateWithinButton: containedBy(dateRect, buttonRect),
+        countWithinButton: containedBy(countRect, buttonRect),
+        eventListHidden: getComputedStyle(eventList).display === 'none',
+      }
+    }, width))
+  }
+
+  expect(measurements.map((measurement) => ({
+    viewportWidth: measurement.viewportWidth,
+    buttonWithinCell: measurement.buttonWithinCell,
+    dateWithinButton: measurement.dateWithinButton,
+    countWithinButton: measurement.countWithinButton,
+    buttonScrollContained: measurement.buttonScrollWidth <= measurement.buttonClientWidth,
+    cellScrollContained: measurement.cellScrollWidth <= measurement.cellClientWidth,
+    eventListHidden: measurement.eventListHidden,
+  })), JSON.stringify(measurements, null, 2)).toEqual([
+    {
+      viewportWidth: 320,
+      buttonWithinCell: true,
+      dateWithinButton: true,
+      countWithinButton: true,
+      buttonScrollContained: true,
+      cellScrollContained: true,
+      eventListHidden: true,
+    },
+    {
+      viewportWidth: 375,
+      buttonWithinCell: true,
+      dateWithinButton: true,
+      countWithinButton: true,
+      buttonScrollContained: true,
+      cellScrollContained: true,
+      eventListHidden: true,
+    },
+  ])
+  for (const measurement of measurements) {
+    expect(measurement.documentOverflow, JSON.stringify(measurement, null, 2)).toBeLessThanOrEqual(1)
+  }
+})
+
 test('keeps ordinary and immersive navigation stable across responsive viewports', async ({ page }) => {
   await login(page)
 
