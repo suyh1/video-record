@@ -2693,8 +2693,10 @@ a {
   --border: oklch(1 0 0 / 0.32);
   --ink: oklch(0.98 0 0);
   --muted: oklch(0.86 0.006 240);
-  --surface: oklch(0.12 0.008 240 / 0.58);
-  --surface-raised: oklch(1 0 0 / 0.14);
+  --surface: oklch(0.16 0.01 240);
+  --surface-raised: oklch(0.22 0.012 240);
+
+  background: oklch(0.1 0.008 240);
 }
 
 .app-header.immersive-header.home-white-header:not(.is-scrolled) {

@@ -241,15 +241,33 @@ function HomeContinueItem({ item }: { item: MediaSearchResult }) {
         const episode = variables.payload.episodeRefs?.[0]
         if (episode) setSavedAdvance({ episode })
       }
-      if (variables.payload.action === 'undo') setSavedAdvance(null)
-      void queryClient.invalidateQueries({ queryKey: ['library'] })
+      if (variables.payload.action === 'undo') {
+        setSavedAdvance(null)
+      }
+      void queryClient.invalidateQueries({ exact: true, queryKey: ['library', 'all'] })
     },
   })
   useEffect(() => {
     if (!savedAdvance) return
-    const timeout = window.setTimeout(() => setSavedAdvance(null), 10_000)
-    return () => window.clearTimeout(timeout)
-  }, [savedAdvance])
+    let refreshed = false
+    const refreshWatching = () => {
+      if (refreshed) return
+      refreshed = true
+      void queryClient.invalidateQueries({
+        exact: true,
+        queryKey: ['library', 'watching'],
+        refetchType: 'all',
+      })
+    }
+    const timeout = window.setTimeout(() => {
+      refreshWatching()
+      setSavedAdvance(null)
+    }, 10_000)
+    return () => {
+      window.clearTimeout(timeout)
+      refreshWatching()
+    }
+  }, [queryClient, savedAdvance])
 
   const mergedSeason = tv.data && season.data && progress.data
     ? mergeSeason(season.data, tv.data.seasons, progress.data)

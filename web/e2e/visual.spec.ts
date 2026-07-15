@@ -1,13 +1,36 @@
 import { expect, test } from '@playwright/test'
+import { deflateSync } from 'node:zlib'
 
 import { expectImageLoaded, expectNoFixedElementOverlap, expectNoHorizontalOverflow, login } from './support'
+
+test.beforeEach(async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+})
 
 test('matches the personalized light and dark responsive home views through the signed image proxy', async ({ page }) => {
   const directTMDBImages: string[] = []
   page.on('request', (request) => {
     if (new URL(request.url()).hostname.endsWith('image.tmdb.org')) directTMDBImages.push(request.url())
   })
+  const brightBackdropRoute = '**/api/v1/public/tmdb/images/w1280/tide-backdrop.png**'
+  await page.route(brightBackdropRoute, (route) => route.fulfill({
+    body: createSolidPNG(16, 9, [255, 255, 255]),
+    contentType: 'image/png',
+    status: 200,
+  }))
+  await page.setViewportSize({ width: 1440, height: 900 })
+  expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true)
   await login(page)
+  await page.goto('/')
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'))
+  await expect(page.getByRole('region', { name: '首页主视觉' })).toHaveAttribute('data-backdrop-state', 'ready')
+  const brightBackdrop = page.locator('.home-hero .backdrop-carousel__image.is-active')
+  await expectImageLoaded(brightBackdrop)
+  const stableSource = await brightBackdrop.getAttribute('src')
+  await page.waitForTimeout(8_250)
+  await expect(brightBackdrop).toHaveAttribute('src', stableSource ?? '')
+  await expectReadableImageHeader(page)
+  await page.unroute(brightBackdropRoute)
 
   for (const viewport of viewports) {
     await page.setViewportSize(viewport)
@@ -137,6 +160,38 @@ async function expectPureWhiteReadableHero(page: import('@playwright/test').Page
   expect(contrastRatio(colors.background, colors.headerForeground)).toBeGreaterThanOrEqual(4.5)
 }
 
+async function expectReadableImageHeader(page: import('@playwright/test').Page) {
+  const colors = await page.evaluate(() => {
+    const header = document.querySelector<HTMLElement>('.app-header')!
+    const headerBackground = getComputedStyle(header).backgroundColor
+    const entries = [
+      ['brand', document.querySelector<HTMLElement>('.app-header .brand')!, null],
+      ...[...document.querySelectorAll<HTMLElement>('.app-primary-navigation .nav-link')]
+        .map((element) => [`nav:${element.textContent?.trim() ?? ''}`, element, null]),
+      ['search', document.querySelector<HTMLElement>('.global-search')!, '::placeholder'],
+      ['record', document.querySelector<HTMLElement>('.app-header .record-button')!, null],
+    ] as Array<[string, HTMLElement, string | null]>
+    return entries.map(([name, element, pseudo]) => {
+      const foregroundElement = pseudo ? element.querySelector<HTMLElement>('input')! : element
+      return {
+        background: getComputedStyle(element).backgroundColor,
+        foreground: getComputedStyle(foregroundElement, pseudo).color,
+        headerBackground,
+        name,
+      }
+    })
+  })
+
+  for (const entry of colors) {
+    const background = colorAlpha(entry.background) === 0 ? entry.headerBackground : entry.background
+    expect(colorAlpha(background), `${entry.name} background: ${background}`).toBe(1)
+    expect(
+      contrastRatio(background, entry.foreground),
+      `${entry.name}: ${entry.foreground} on ${background}`,
+    ).toBeGreaterThanOrEqual(4.5)
+  }
+}
+
 function contrastRatio(background: string, foreground: string) {
   const backgroundLuminance = luminance(background)
   const foregroundLuminance = luminance(foreground)
@@ -174,4 +229,59 @@ function luminance(color: string) {
 
 function clampLinear(value: number) {
   return Math.min(1, Math.max(0, value))
+}
+
+function colorAlpha(color: string) {
+  if (color === 'transparent') return 0
+  if (color.startsWith('rgb')) {
+    const channels = color.match(/[\d.]+/g) ?? []
+    return channels.length > 3 ? Number(channels[3]) : 1
+  }
+  const alpha = color.match(/\/\s*([\d.]+)(%)?\s*\)$/)
+  if (!alpha) return 1
+  return Number(alpha[1]) / (alpha[2] ? 100 : 1)
+}
+
+function createSolidPNG(width: number, height: number, color: [number, number, number]) {
+  const rowSize = 1 + width * 3
+  const pixels = Buffer.alloc(rowSize * height)
+  for (let row = 0; row < height; row += 1) {
+    pixels[row * rowSize] = 0
+    for (let column = 0; column < width; column += 1) {
+      const offset = row * rowSize + 1 + column * 3
+      pixels[offset] = color[0]
+      pixels[offset + 1] = color[1]
+      pixels[offset + 2] = color[2]
+    }
+  }
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(width, 0)
+  header.writeUInt32BE(height, 4)
+  header[8] = 8
+  header[9] = 2
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk('IHDR', header),
+    pngChunk('IDAT', deflateSync(pixels)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ])
+}
+
+function pngChunk(type: string, contents: Buffer) {
+  const typeBytes = Buffer.from(type)
+  const chunk = Buffer.alloc(12 + contents.length)
+  chunk.writeUInt32BE(contents.length, 0)
+  typeBytes.copy(chunk, 4)
+  contents.copy(chunk, 8)
+  chunk.writeUInt32BE(crc32(Buffer.concat([typeBytes, contents])), 8 + contents.length)
+  return chunk
+}
+
+function crc32(contents: Buffer) {
+  let crc = 0xffffffff
+  for (const byte of contents) {
+    crc ^= byte
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1))
+  }
+  return (crc ^ 0xffffffff) >>> 0
 }

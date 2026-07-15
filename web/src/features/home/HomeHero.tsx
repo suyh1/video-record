@@ -80,7 +80,7 @@ export function HomeHero({
       ) : null}
 
       {activeItem ? (
-        <div className="home-hero__content" aria-live="polite">
+        <div className="home-hero__content">
           <p className="home-hero__meta">{activeItem.year} · {activeItem.mediaType === 'movie' ? '电影' : '剧集'}</p>
           <h1>{activeItem.title}</h1>
           {activeItem.overview ? <p className="home-hero__overview">{activeItem.overview}</p> : null}

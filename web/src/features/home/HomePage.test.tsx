@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { MemoryRouter } from 'react-router-dom'
@@ -10,7 +10,10 @@ import { HomePage } from './HomePage'
 
 vi.mock('../../lib/mediaAccent', () => ({ sampleMediaAccent: vi.fn(() => null) }))
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
 
 describe('HomePage', () => {
   it('prioritizes watching items then deduplicates recent items up to six private hero details', async () => {
@@ -259,6 +262,8 @@ describe('HomePage', () => {
       absoluteNumber: 2, name: '', watched: true, watchedAt: '2026-07-13T12:00:00Z',
     }
     let progressVersion = 1
+    let allLibraryRequests = 0
+    let watchingLibraryRequests = 0
     const progressBodies: unknown[] = []
     server.use(
       http.get('*/api/v1/library', ({ request }) => {
@@ -274,7 +279,15 @@ describe('HomePage', () => {
             originalTitle: 'In the Mood for Love', year: '2000', posterPath: null, status: 'completed',
           },
         ]
-        return HttpResponse.json({ items: status === 'watching' ? continuing : recent, nextCursor: null })
+        if (status === 'watching') {
+          watchingLibraryRequests += 1
+          return HttpResponse.json({
+            items: progressVersion === 2 ? [] : continuing,
+            nextCursor: null,
+          })
+        }
+        allLibraryRequests += 1
+        return HttpResponse.json({ items: recent, nextCursor: null })
       }),
       http.get('*/api/v1/records/series-1/progress', () => HttpResponse.json({
         roundId: 'round-1', mediaId: 'series-1', seasonNumber: 1,
@@ -308,6 +321,7 @@ describe('HomePage', () => {
           viewingMethod: null, watchedAt: null, participantIds: [], version: 1, profileVersion: 1,
         })
       }),
+      http.get('*/api/v1/public/tmdb/highlights', () => HttpResponse.json({ items: [] })),
       http.post('*/api/v1/records/series-1/progress', async ({ request }) => {
         expect(request.headers.get('X-CSRF-Token')).toBe('csrf-test-token')
         expect(request.headers.get('Idempotency-Key')).toBeTruthy()
@@ -347,18 +361,59 @@ describe('HomePage', () => {
     expect(progressbar).toHaveAttribute('value', '1')
     expect(progressbar).toHaveAttribute('max', '2')
     expect(screen.getByText('下一集 · 第二集')).toBeVisible()
+    expect({ allLibraryRequests, watchingLibraryRequests }).toEqual({
+      allLibraryRequests: 1,
+      watchingLibraryRequests: 1,
+    })
 
     await user.click(await screen.findByRole('button', { name: '推进 漫长的季节 下一集 S01E02' }))
     await waitFor(() => expect(progressBodies[0]).toMatchObject({
       action: 'next', expectedVersion: 1, totalEpisodes: 2,
       episodeRefs: [{ sourceId: '102', seasonNumber: 1, episodeNumber: 2, absoluteNumber: 2 }],
     }))
+    await waitFor(() => expect(allLibraryRequests).toBe(2))
+    expect(watchingLibraryRequests).toBe(1)
     const undo = await screen.findByRole('button', { name: '撤销 漫长的季节 S01E02' })
     await user.click(undo)
     await waitFor(() => expect(progressBodies[1]).toMatchObject({
       action: 'undo', expectedVersion: 2, totalEpisodes: 2,
       episodeRefs: [{ sourceId: '102', seasonNumber: 1, episodeNumber: 2, absoluteNumber: 2 }],
     }))
+    await waitFor(() => expect(watchingLibraryRequests).toBe(2))
+  })
+
+  it('refreshes watching when the final-episode undo window expires', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token')
+    const scenario = installLastEpisodeScenario()
+
+    renderWithQueryClient(<MemoryRouter><HomePage /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByRole('button', { name: '推进 收官剧集 下一集 S01E02' }))
+    await waitFor(() => expect(scenario.allLibraryRequests()).toBe(2))
+    expect(scenario.watchingLibraryRequests()).toBe(1)
+    expect(screen.getByRole('button', { name: '撤销 收官剧集 S01E02' })).toBeVisible()
+
+    await act(async () => vi.advanceTimersByTimeAsync(10_000))
+
+    await waitFor(() => expect(scenario.watchingLibraryRequests()).toBe(2))
+    expect(screen.queryByRole('button', { name: '撤销 收官剧集 S01E02' })).not.toBeInTheDocument()
+  })
+
+  it('refreshes watching when a final-episode undo card unmounts', async () => {
+    sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token')
+    const scenario = installLastEpisodeScenario()
+    const view = renderWithQueryClient(<MemoryRouter><HomePage /></MemoryRouter>)
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('button', { name: '推进 收官剧集 下一集 S01E02' }))
+    await waitFor(() => expect(scenario.allLibraryRequests()).toBe(2))
+    expect(scenario.watchingLibraryRequests()).toBe(1)
+    expect(screen.getByRole('button', { name: '撤销 收官剧集 S01E02' })).toBeVisible()
+
+    view.unmount()
+
+    await waitFor(() => expect(scenario.watchingLibraryRequests()).toBe(2))
   })
 
   it('keeps the title usable without claiming completion when TMDB is unavailable', async () => {
@@ -453,6 +508,77 @@ function popularHighlight(id: number, title: string) {
     year: '2026',
     overview: `${title} 概览`,
     backdropURL: `/api/v1/public/tmdb/images/w1280/popular-${id}.jpg?expires=4102444800&signature=${'b'.repeat(64)}`,
+  }
+}
+
+function installLastEpisodeScenario() {
+  const item = {
+    id: 'series-final', tmdbId: 1398, source: 'local' as const, mediaType: 'tv' as const,
+    title: '收官剧集', originalTitle: 'Final Series', year: '2026', posterPath: null, status: 'watching' as const,
+  }
+  const firstEpisode = {
+    id: 'episode-final-1', sourceId: '501', seasonId: 'season-final', seasonNumber: 1, episodeNumber: 1,
+    absoluteNumber: 1, name: '第一集', watched: true, watchedAt: '2026-07-12T12:00:00Z',
+  }
+  const secondEpisode = {
+    id: 'episode-final-2', sourceId: '502', seasonId: 'season-final', seasonNumber: 1, episodeNumber: 2,
+    absoluteNumber: 2, name: '第二集', watched: true, watchedAt: '2026-07-13T12:00:00Z',
+  }
+  let progressVersion = 1
+  let allRequests = 0
+  let watchingRequests = 0
+  server.use(
+    http.get('*/api/v1/library', ({ request }) => {
+      if (new URL(request.url).searchParams.get('status') === 'watching') {
+        watchingRequests += 1
+        return HttpResponse.json({ items: progressVersion === 2 ? [] : [item], nextCursor: null })
+      }
+      allRequests += 1
+      return HttpResponse.json({ items: [item], nextCursor: null })
+    }),
+    http.get('*/api/v1/tmdb/tv/1398', () => HttpResponse.json({
+      id: 1398, name: item.title, originalName: item.originalTitle, firstAirDate: '2026-01-01',
+      posterPath: '', backdropPath: '', overview: '', numberOfSeasons: 1, numberOfEpisodes: 2,
+      episodeRuntime: [45], genres: ['剧情'],
+      seasons: [{
+        id: 21, name: '第 1 季', overview: '', posterPath: '', airDate: '2026-01-01',
+        seasonNumber: 1, episodeCount: 2,
+      }],
+    })),
+    http.get('*/api/v1/tmdb/tv/1398/season/1', () => HttpResponse.json({
+      id: 21, name: '第 1 季', overview: '', posterPath: '', airDate: '2026-01-01', seasonNumber: 1,
+      episodes: [
+        { id: 501, name: '第一集', overview: '', airDate: '2026-01-01', seasonNumber: 1, episodeNumber: 1, runtime: 45, stillPath: '' },
+        { id: 502, name: '第二集', overview: '', airDate: '2026-01-08', seasonNumber: 1, episodeNumber: 2, runtime: 45, stillPath: '' },
+      ],
+    })),
+    http.get('*/api/v1/records/series-final/rounds/current', () => HttpResponse.json({
+      roundId: 'round-final', mediaId: item.id, seasonNumber: 1, roundNumber: 1,
+      status: progressVersion === 2 ? 'completed' : 'watching', rating: null, note: null,
+      viewingMethod: null, watchedAt: null, participantIds: [], version: progressVersion, profileVersion: 1,
+    })),
+    http.get('*/api/v1/records/series-final/progress', () => HttpResponse.json({
+      roundId: 'round-final', mediaId: item.id, seasonNumber: 1,
+      status: progressVersion === 2 ? 'completed' : 'watching', version: progressVersion,
+      watchedEpisodes: progressVersion === 2 ? 2 : 1, totalEpisodes: 2,
+      lastWatched: progressVersion === 2 ? secondEpisode : firstEpisode,
+      nextEpisode: null,
+      episodes: progressVersion === 2 ? [firstEpisode, secondEpisode] : [firstEpisode],
+    })),
+    http.post('*/api/v1/records/series-final/progress', () => {
+      progressVersion = 2
+      return HttpResponse.json({
+        roundId: 'round-final', mediaId: item.id, seasonNumber: 1, status: 'completed', version: 2,
+        watchedEpisodes: 2, totalEpisodes: 2, lastWatched: secondEpisode, nextEpisode: null,
+        episodes: [firstEpisode, secondEpisode],
+      })
+    }),
+    http.get('*/api/v1/public/tmdb/highlights', () => HttpResponse.json({ items: [] })),
+  )
+
+  return {
+    allLibraryRequests: () => allRequests,
+    watchingLibraryRequests: () => watchingRequests,
   }
 }
 

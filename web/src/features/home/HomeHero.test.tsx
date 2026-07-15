@@ -92,6 +92,27 @@ describe('HomeHero', () => {
     expect(container.querySelector('.backdrop-carousel__image.is-active')).toHaveAttribute('src', item.backdropURL)
   })
 
+  it('keeps automatic carousel content out of live regions', async () => {
+    const images = installDecodedImageMock()
+
+    const { container } = renderWithQueryClient(
+      <MemoryRouter>
+        <HomeHero
+          isError={false}
+          isLoading={false}
+          items={[privateMovie()]}
+          onRetry={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+    await act(async () => {
+      images[0]!.resolveDecode()
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('.home-hero__content')).not.toHaveAttribute('aria-live')
+  })
+
   it('does not cover a decoded private hero while supplemental data is still pending', async () => {
     const images = installDecodedImageMock()
 
