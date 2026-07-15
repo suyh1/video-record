@@ -239,6 +239,33 @@ describe('BackdropCarousel', () => {
     expect(activeImage(container)).toHaveAttribute('src', items[1]!.backdropURL)
   })
 
+  it('keeps a slow later preload alive while autoplay changes the active item', async () => {
+    const items = [highlight(1, '第一张'), highlight(2, '第二张'), highlight(3, '慢速第三张')]
+    const { container } = render(<BackdropCarousel items={items} intervalMs={7_000} />)
+    await resolveImage(0)
+    await resolveImage(1)
+
+    act(() => vi.advanceTimersByTime(7_000))
+    expect(activeImage(container)).toHaveAttribute('src', items[1]!.backdropURL)
+    expect(decodedImages).toHaveLength(3)
+    const originalThirdPreload = decodedImages[2]!
+    expect(originalThirdPreload.src).toBe(items[2]!.backdropURL)
+    expect(originalThirdPreload.onerror).not.toBeNull()
+
+    act(() => vi.advanceTimersByTime(7_000))
+
+    expect(activeImage(container)).toHaveAttribute('src', items[0]!.backdropURL)
+    expect(decodedImages).toHaveLength(3)
+    expect(originalThirdPreload.onerror).not.toBeNull()
+
+    await resolveImage(2)
+    act(() => vi.advanceTimersByTime(7_000))
+    expect(activeImage(container)).toHaveAttribute('src', items[1]!.backdropURL)
+    act(() => vi.advanceTimersByTime(7_000))
+    expect(activeImage(container)).toHaveAttribute('src', items[2]!.backdropURL)
+    expect(decodedImages).toHaveLength(3)
+  })
+
   it('stops autoplay after manual navigation', async () => {
     const items = [highlight(1, '第一张'), highlight(2, '第二张')]
     const { container } = render(<BackdropCarousel items={items} intervalMs={7_000} showControls />)

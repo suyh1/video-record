@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { TMDBHighlight } from '../../api/types'
 
@@ -38,8 +38,10 @@ function BackdropCarouselSession({
   const [previousIndex, setPreviousIndex] = useState<number | null>(null)
   const [manuallyPaused, setManuallyPaused] = useState(false)
   const [navigationIntent, setNavigationIntent] = useState<NavigationIntent | null>(null)
+  const initialCandidatePending = useRef(true)
   const documentVisible = useDocumentVisibility()
   const reducedMotion = useReducedMotion()
+  const loadingURL = loadingIndex === null ? null : items[loadingIndex]?.backdropURL ?? null
 
   useEffect(() => {
     if (navigationIntent) {
@@ -99,15 +101,17 @@ function BackdropCarouselSession({
   }, [activeIndex, items.length, loadingIndex, navigationIntent, statuses])
 
   useEffect(() => {
-    if (loadingIndex === null) return
+    if (loadingIndex === null || loadingURL === null) return
 
     let current = true
     const image = new Image()
-    if (activeIndex === null && loadingIndex === 0) image.fetchPriority = 'high'
+    const isInitialCandidate = initialCandidatePending.current
+    if (isInitialCandidate) image.fetchPriority = 'high'
     let settled = false
     const settle = (status: Extract<ImageStatus, 'ready' | 'failed'>) => {
       if (!current || settled) return
       settled = true
+      if (isInitialCandidate) initialCandidatePending.current = false
       setStatuses((currentStatuses) => currentStatuses.map((currentStatus, index) => (
         index === loadingIndex ? status : currentStatus
       )))
@@ -118,7 +122,7 @@ function BackdropCarouselSession({
     image.onload = () => {
       if (typeof image.decode !== 'function') settle('ready')
     }
-    image.src = items[loadingIndex]!.backdropURL
+    image.src = loadingURL
 
     if (typeof image.decode === 'function') {
       image.decode().then(
@@ -132,7 +136,7 @@ function BackdropCarouselSession({
       image.onerror = null
       image.onload = null
     }
-  }, [activeIndex, items, loadingIndex])
+  }, [loadingIndex, loadingURL])
 
   const readyCount = statuses.filter((status) => status === 'ready').length
   const isEmpty = items.length === 0 || (
