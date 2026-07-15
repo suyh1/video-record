@@ -77,9 +77,13 @@ func (client *Client) Image(ctx context.Context, size, path string) (ImageAsset,
 	}
 	request.Header.Set("Accept", "image/jpeg, image/png, image/webp")
 
-	response, err := client.httpClient.Do(request)
+	imageHTTPClient := *client.httpClient
+	imageHTTPClient.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	response, err := imageHTTPClient.Do(request)
 	if err != nil {
-		return ImageAsset{}, client.imageRequestError(ctx, requestCtx, 0)
+		return ImageAsset{}, client.imageRequestError(ctx, requestCtx, err, 0)
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode == http.StatusTooManyRequests {
@@ -102,7 +106,7 @@ func (client *Client) Image(ctx context.Context, size, path string) (ImageAsset,
 	}
 	contents, err := io.ReadAll(io.LimitReader(response.Body, maxImageResponseBytes+1))
 	if err != nil {
-		return ImageAsset{}, client.imageRequestError(ctx, requestCtx, response.StatusCode)
+		return ImageAsset{}, client.imageRequestError(ctx, requestCtx, err, response.StatusCode)
 	}
 	if len(contents) > maxImageResponseBytes {
 		client.logFailure(ctx, "invalid_response", response.StatusCode)
@@ -118,8 +122,8 @@ func (client *Client) imageSignature(size, path string, expires time.Time) strin
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func (client *Client) imageRequestError(ctx, requestCtx context.Context, status int) error {
-	if errors.Is(requestCtx.Err(), context.DeadlineExceeded) {
+func (client *Client) imageRequestError(ctx, requestCtx context.Context, requestErr error, status int) error {
+	if errors.Is(requestErr, context.DeadlineExceeded) || errors.Is(requestCtx.Err(), context.DeadlineExceeded) {
 		client.logFailure(ctx, "timeout", status)
 		return &ClientError{Kind: ErrUpstreamTimeout}
 	}

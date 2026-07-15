@@ -190,6 +190,36 @@ func TestImageMapsUpstreamFailuresToStableErrors(t *testing.T) {
 	}
 }
 
+func TestImageRejectsRedirectsWithoutContactingTheirTarget(t *testing.T) {
+	redirectTargetContacted := make(chan struct{}, 1)
+	redirectTarget := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		redirectTargetContacted <- struct{}{}
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write([]byte("redirected image"))
+	}))
+	t.Cleanup(redirectTarget.Close)
+	imageServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, redirectTarget.URL+"/outside.jpg", http.StatusFound)
+	}))
+	t.Cleanup(imageServer.Close)
+	sharedHTTPClient := &http.Client{}
+	client := NewClient(ClientOptions{
+		ImageBaseURL: imageServer.URL,
+		Token:        "synthetic-token",
+		HTTPClient:   sharedHTTPClient,
+	})
+
+	_, err := client.Image(context.Background(), "w1280", "/arrival.jpg")
+
+	require.ErrorIs(t, err, ErrUpstreamUnavailable)
+	select {
+	case <-redirectTargetContacted:
+		t.Fatal("image client followed a redirect outside ImageBaseURL")
+	default:
+	}
+	require.Nil(t, sharedHTTPClient.CheckRedirect, "the caller-provided HTTP client must not be mutated")
+}
+
 func TestImageRejectsWrongContentTypeAndOversizedResponses(t *testing.T) {
 	t.Run("wrong content type", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -234,6 +264,22 @@ func TestImageRejectsWrongContentTypeAndOversizedResponses(t *testing.T) {
 }
 
 func TestImageMapsTimeoutAndCallerCancellation(t *testing.T) {
+	t.Run("transport deadline exceeded", func(t *testing.T) {
+		httpClient := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return nil, fmt.Errorf("transport failed: %w", context.DeadlineExceeded)
+		})}
+		client := NewClient(ClientOptions{
+			ImageBaseURL: "https://images.example.test/t/p",
+			Token:        "synthetic-token",
+			HTTPClient:   httpClient,
+			Timeout:      time.Hour,
+		})
+
+		_, err := client.Image(context.Background(), "w1280", "/slow.jpg")
+
+		require.ErrorIs(t, err, ErrUpstreamTimeout)
+	})
+
 	t.Run("client timeout", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			time.Sleep(100 * time.Millisecond)
@@ -286,6 +332,12 @@ func TestImageMapsTimeoutAndCallerCancellation(t *testing.T) {
 			t.Fatal("upstream request was not canceled")
 		}
 	})
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return fn(request)
 }
 
 func testImageSignature(token, size, path string, expires time.Time) string {
