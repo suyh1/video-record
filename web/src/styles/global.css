@@ -251,7 +251,7 @@ body {
 
 .episode-season-select select {
   width: min(260px, 55%);
-  min-height: 40px;
+  min-height: var(--control-md);
   padding: 0 var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
@@ -297,7 +297,7 @@ body {
 
 .episode-range-controls select {
   min-width: 136px;
-  min-height: 40px;
+  min-height: var(--control-md);
   padding: 0 var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
@@ -953,7 +953,7 @@ body {
 .member-create-form input,
 .dialog-field input {
   min-width: 0;
-  min-height: 40px;
+  min-height: var(--control-md);
   padding: 0 var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
@@ -1347,7 +1347,7 @@ body {
 .integration-account-form input,
 .integration-account-form select {
   min-width: 0;
-  min-height: 40px;
+  min-height: var(--control-md);
   padding: 0 var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
@@ -1870,7 +1870,7 @@ body {
 
 .sync-custom-form input {
   min-width: 0;
-  min-height: 40px;
+  min-height: var(--control-md);
   padding: 0 var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
@@ -2256,22 +2256,6 @@ textarea::placeholder {
   border-color: var(--focus);
   outline: 2px solid var(--focus);
   outline-offset: 1px;
-}
-
-input[aria-invalid="true"],
-select[aria-invalid="true"],
-textarea[aria-invalid="true"],
-input.is-invalid,
-select.is-invalid,
-textarea.is-invalid {
-  border-color: var(--error);
-}
-
-:where(input, select, textarea):disabled {
-  background: var(--surface);
-  color: var(--muted);
-  cursor: not-allowed;
-  opacity: 1;
 }
 
 button,
@@ -3288,7 +3272,7 @@ a {
 .collection-manager-heading input,
 .collection-picker select {
   min-width: 0;
-  min-height: 40px;
+  min-height: var(--control-md);
   padding: 0 var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
@@ -4179,6 +4163,31 @@ a {
   border-color: var(--focus);
   outline: 2px solid var(--focus);
   outline-offset: 1px;
+}
+
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"],
+input.is-invalid,
+select.is-invalid,
+textarea.is-invalid,
+input[aria-invalid="true"]:focus,
+select[aria-invalid="true"]:focus,
+textarea[aria-invalid="true"]:focus,
+input.is-invalid:focus,
+select.is-invalid:focus,
+textarea.is-invalid:focus {
+  border-color: var(--error);
+  outline-color: var(--error);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):disabled,
+select:disabled,
+textarea:disabled {
+  background: var(--surface);
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 1;
 }
 
 .form-field small {

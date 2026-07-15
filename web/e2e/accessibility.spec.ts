@@ -18,6 +18,78 @@ test('has no blocking WCAG 2.2 AA violations on major pages', async ({ page }) =
   }
 })
 
+test('keeps specialized form controls at the shared minimum height', async ({ page }) => {
+  await login(page)
+
+  await page.goto('/media/e2e-series')
+  await expectControlMinHeight(page.getByRole('combobox', { name: '选择季' }))
+
+  await page.goto('/library')
+  await expectControlMinHeight(page.getByLabel('片单名称'))
+
+  await page.goto('/settings')
+  await expectControlMinHeight(page.getByLabel('服务类型'))
+  await expectControlMinHeight(page.getByLabel('账户名称'))
+  await page.getByRole('button', { name: '添加成员' }).click()
+  await expectControlMinHeight(page.locator('.member-create-form').getByLabel('用户名'))
+})
+
+test('keeps a focused invalid record input on the semantic error border', async ({ page }) => {
+  await login(page)
+  await page.goto('/media/e2e-movie')
+
+  await page.getByRole('radio', { name: '看过' }).click()
+  const watchedAt = page.getByLabel('完成观看时间')
+  await watchedAt.fill('2099-01-01T00:00:01')
+  await page.getByRole('button', { name: '保存记录' }).click()
+
+  await expect(watchedAt).toHaveAttribute('aria-invalid', 'true')
+  await expect(watchedAt).toBeFocused()
+  await expectTokenStyle(watchedAt, 'borderTopColor', '--error')
+})
+
+test('keeps a disabled specialized input on the disabled surface', async ({ page }) => {
+  await login(page)
+  await page.goto('/media/e2e-series')
+  await page.getByRole('combobox', { name: '选择季' }).selectOption('2')
+  await expect(page.getByText('重返北堤')).toBeVisible()
+
+  const requestPattern = '**/api/v1/records/e2e-series/progress?seasonNumber=2'
+  let releaseRequest = () => {}
+  let markRequestFinished = () => {}
+  const heldRequest = new Promise<void>((resolve) => { releaseRequest = resolve })
+  const requestFinished = new Promise<void>((resolve) => { markRequestFinished = resolve })
+  await page.route(requestPattern, async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue()
+      return
+    }
+    await heldRequest
+    try {
+      await route.abort()
+    } finally {
+      markRequestFinished()
+    }
+  })
+
+  const timeButton = page.getByRole('button', { name: '设置 S02E01 观看时间' })
+  await timeButton.click()
+  const timeInput = page.getByRole('textbox', { name: 'S02E01 观看时间' })
+  await timeInput.fill('2026-07-13T21:22:23')
+  await timeInput.press('Enter')
+
+  try {
+    await expect(timeInput).toBeDisabled()
+    await expectTokenStyle(timeInput, 'backgroundColor', '--surface')
+    await expectTokenStyle(timeInput, 'color', '--muted')
+    await expect.poll(() => timeInput.evaluate((element) => getComputedStyle(element).cursor)).toBe('not-allowed')
+  } finally {
+    releaseRequest()
+    await requestFinished
+    await page.unroute(requestPattern)
+  }
+})
+
 test('keeps movie and season archive dialogs accessible and within the viewport', async ({ page }) => {
   await login(page)
 
@@ -130,4 +202,29 @@ async function expectDialogWithinViewport(dialog: Locator) {
   expect(bounds.top).toBeGreaterThanOrEqual(0)
   expect(bounds.right).toBeLessThanOrEqual(bounds.viewportWidth)
   expect(bounds.bottom).toBeLessThanOrEqual(bounds.viewportHeight)
+}
+
+async function expectControlMinHeight(control: Locator) {
+  await expect(control).toBeVisible()
+  const minHeight = await control.evaluate((element) => Number.parseFloat(getComputedStyle(element).minHeight))
+  expect(minHeight).toBeGreaterThanOrEqual(44)
+}
+
+async function expectTokenStyle(
+  control: Locator,
+  property: 'backgroundColor' | 'borderTopColor' | 'color',
+  token: `--${string}`,
+) {
+  const expected = await control.evaluate((_element, tokenName) => {
+    const probe = document.createElement('span')
+    probe.style.color = `var(${tokenName})`
+    document.body.append(probe)
+    const value = getComputedStyle(probe).color
+    probe.remove()
+    return value
+  }, token)
+  await expect.poll(() => control.evaluate(
+    (element, propertyName) => getComputedStyle(element)[propertyName],
+    property,
+  )).toBe(expected)
 }
