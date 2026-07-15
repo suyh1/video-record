@@ -1,4 +1,5 @@
 import type { TMDBCastMember } from '../../api/types'
+import { useState } from 'react'
 import { mediaImageURL } from '../../lib/mediaImage'
 
 type CastStripProps = {
@@ -26,16 +27,17 @@ export function CastStrip({ cast = [], pending, error, linked, onRetry }: CastSt
       {!pending && !error && linked && cast.length === 0 ? <p className="quiet-empty">TMDB 暂无演员资料</p> : null}
       {!pending && !error && !linked ? <p className="quiet-empty">关联 TMDB 后可显示演员</p> : null}
       {!pending && !error && cast.length > 0 ? (
-        <ul className="cast-strip">
+        <ul className="cast-strip" aria-label="主要演员列表" tabIndex={0}>
           {cast.map((member) => {
             const portraitURL = mediaImageURL(member.profilePath)
             return (
               <li key={`${member.id}-${member.character}`}>
-                <div className="cast-portrait">
-                  {portraitURL ? (
-                    <img src={portraitURL} alt={`${member.name}${member.character ? ` 饰 ${member.character}` : ''}`} loading="lazy" />
-                  ) : <span aria-hidden="true">{initial(member.name)}</span>}
-                </div>
+                <CastPortrait
+                  key={`${member.id}:${member.name}:${member.character}:${portraitURL ?? ''}`}
+                  name={member.name}
+                  character={member.character}
+                  portraitURL={portraitURL}
+                />
                 <strong>{member.name}</strong>
                 <span>{member.character || '角色未知'}</span>
               </li>
@@ -44,6 +46,25 @@ export function CastStrip({ cast = [], pending, error, linked, onRetry }: CastSt
         </ul>
       ) : null}
     </section>
+  )
+}
+
+function CastPortrait({ name, character, portraitURL }: {
+  name: string
+  character: string
+  portraitURL: string | null
+}) {
+  const [failed, setFailed] = useState(false)
+  const label = `${name}${character ? ` 饰 ${character}` : ''}`
+
+  return (
+    <div className="cast-portrait">
+      {portraitURL && !failed ? (
+        <img src={portraitURL} alt={label} loading="lazy" onError={() => setFailed(true)} />
+      ) : (
+        <span role="img" aria-label={`${label} 暂无头像`}>{initial(name)}</span>
+      )}
+    </div>
   )
 }
 

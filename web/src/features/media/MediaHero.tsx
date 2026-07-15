@@ -1,7 +1,8 @@
 import { Star } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { type CSSProperties, type ReactNode, useState } from 'react'
 
 import type { MediaDetails, MediaSearchResult, RecordState, TMDBMovieDetails, TMDBTVDetails } from '../../api/types'
+import { sampleMediaAccent } from '../../lib/mediaAccent'
 import { mediaImageURL } from '../../lib/mediaImage'
 import { MediaPoster } from './MediaPoster'
 
@@ -26,6 +27,13 @@ export function MediaHero({ media, record, external, linker }: MediaHeroProps) {
   const posterPath = external?.posterPath || media.posterPath
   const backdropPath = external?.backdropPath || media.backdropPath
   const backdropURL = mediaImageURL(backdropPath)
+  const backdropIdentity = `${media.id}:${title}:${backdropURL ?? ''}`
+  const [failedBackdrop, setFailedBackdrop] = useState<string | null>(null)
+  const [loadedBackdrop, setLoadedBackdrop] = useState<string | null>(null)
+  const [accent, setAccent] = useState<{ identity: string; value: string } | null>(null)
+  const backdropFailed = failedBackdrop === backdropIdentity
+  const hasBackdrop = Boolean(backdropURL && !backdropFailed && loadedBackdrop === backdropIdentity)
+  const mediaAccent = accent?.identity === backdropIdentity ? accent.value : 'var(--brand)'
   const overview = external?.overview || media.overview || '暂无简介'
   const genres = external?.genres.length ? external.genres : media.genres
   const posterItem: MediaSearchResult = {
@@ -41,9 +49,30 @@ export function MediaHero({ media, record, external, linker }: MediaHeroProps) {
   }
 
   return (
-    <header className={`media-hero${backdropURL ? ' has-backdrop' : ''}`}>
-      {backdropURL ? (
-        <img className="media-hero-backdrop" src={backdropURL} alt={`${title} 背景`} loading="eager" fetchPriority="high" />
+    <header
+      className={`media-hero${hasBackdrop ? ' has-backdrop' : ''}`}
+      data-backdrop-state={hasBackdrop ? 'ready' : backdropFailed ? 'failed' : backdropURL ? 'loading' : 'empty'}
+      style={{ '--media-accent': mediaAccent } as CSSProperties}
+    >
+      {backdropURL && !backdropFailed ? (
+        <img
+          className="media-hero-backdrop"
+          src={backdropURL}
+          alt=""
+          loading="eager"
+          fetchPriority="high"
+          onLoad={(event) => {
+            setLoadedBackdrop(backdropIdentity)
+            setAccent({
+              identity: backdropIdentity,
+              value: sampleMediaAccent(event.currentTarget) ?? 'var(--brand)',
+            })
+          }}
+          onError={() => {
+            setFailedBackdrop(backdropIdentity)
+            setAccent({ identity: backdropIdentity, value: 'var(--brand)' })
+          }}
+        />
       ) : null}
       <div className="media-hero-shade" aria-hidden="true" />
       <div className="media-hero-content">
@@ -52,10 +81,10 @@ export function MediaHero({ media, record, external, linker }: MediaHeroProps) {
           <p className="media-type-label">{isMovie ? '电影' : '剧集'}</p>
           <h1>{title}</h1>
           <div className="media-hero-facts">
-            {originalTitle ? <span>{originalTitle}</span> : null}
-            {releaseDate ? <span>{releaseDate.slice(0, 4)}</span> : null}
-            {runtime > 0 ? <span>{runtime} 分钟</span> : null}
-            {genres.map((genre) => <span key={genre}>{genre}</span>)}
+            {originalTitle ? <span className="media-hero-original-title">{originalTitle}</span> : null}
+            {releaseDate ? <span className="media-hero-year">{releaseDate.slice(0, 4)}</span> : null}
+            {runtime > 0 ? <span className="media-hero-runtime">{runtime} 分钟</span> : null}
+            {genres.map((genre) => <span className="media-hero-genre" key={genre}>{genre}</span>)}
           </div>
           {record.rating !== null ? (
             <span className="media-hero-rating"><Star aria-hidden="true" size={17} />{record.rating.toFixed(1)} / 10</span>

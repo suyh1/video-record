@@ -21,7 +21,7 @@ test('loads a selected season, records current time from the circle, and support
   await page.goto('/media/e2e-series')
 
   await expect(page.getByRole('heading', { level: 1, name: '潮汐档案' })).toBeVisible()
-  await expectImageLoaded(page.getByRole('img', { name: '潮汐档案 背景' }))
+  await expectImageLoaded(page.locator('.media-hero-backdrop'))
   await expectImageLoaded(page.getByRole('img', { name: '潮汐档案 海报' }))
   await expect(page.getByRole('region', { name: '主要演员' })).toContainText('林见川')
   await expect(page.getByText('低潮线')).toBeVisible()

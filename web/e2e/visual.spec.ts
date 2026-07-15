@@ -1,7 +1,13 @@
 import { expect, test } from '@playwright/test'
 import { deflateSync } from 'node:zlib'
 
-import { expectImageLoaded, expectNoFixedElementOverlap, expectNoHorizontalOverflow, login } from './support'
+import {
+  expectImageLoaded,
+  expectNoBlockingA11yViolations,
+  expectNoFixedElementOverlap,
+  expectNoHorizontalOverflow,
+  login,
+} from './support'
 
 test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -110,6 +116,19 @@ test('matches the approved light and dark responsive library views', async ({ pa
 })
 
 test('matches the approved light and dark responsive details views', async ({ page }) => {
+  const directTMDBImages: string[] = []
+  const runtimeErrors: string[] = []
+  page.on('request', (request) => {
+    if (new URL(request.url()).hostname.endsWith('image.tmdb.org')) directTMDBImages.push(request.url())
+  })
+  page.on('console', (message) => {
+    if (message.type() === 'error') runtimeErrors.push(message.text())
+  })
+  page.on('pageerror', (error) => runtimeErrors.push(error.message))
+  await page.route('**/api/v1/public/tmdb/highlights', (route) => route.fulfill({
+    json: { items: [] },
+    status: 200,
+  }))
   await login(page)
 
   for (const viewport of viewports) {
@@ -121,8 +140,25 @@ test('matches the approved light and dark responsive details views', async ({ pa
       await expect(page.getByText('林见川')).toBeVisible()
       await page.getByRole('combobox', { name: '选择季' }).selectOption('2')
       await expect(page.getByText('重返北堤')).toBeVisible()
-      await expectImageLoaded(page.getByRole('img', { name: '潮汐档案 背景' }))
+      const hero = page.locator('.media-hero')
+      const backdrop = hero.locator('.media-hero-backdrop')
+      await expect(hero).toHaveAttribute('data-backdrop-state', 'ready')
+      await expectImageLoaded(backdrop)
+      await expect(backdrop).toHaveAttribute('alt', '')
+      await expect(backdrop).toHaveAttribute('src', /^\/api\/v1\/public\/tmdb\/images\/w1280\//)
+      await expectDetailsHeaderLayout(page)
+      const seasonSelector = page.getByRole('combobox', { name: '选择季' })
+      await seasonSelector.focus()
+      await expect(seasonSelector).toBeFocused()
+      await page.keyboard.press('Tab')
+      await expect(page.getByRole('button', { name: /推进下一集/ })).toBeFocused()
       await expectNoHorizontalOverflow(page)
+      await expectNoFixedElementOverlap(page)
+      await page.evaluate(() => {
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+        window.scrollTo(0, 0)
+      })
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
       await expect(page).toHaveScreenshot(`details-${viewport.width}x${viewport.height}-${theme}.png`, {
         animations: 'disabled',
         fullPage: true,
@@ -130,6 +166,62 @@ test('matches the approved light and dark responsive details views', async ({ pa
       })
     }
   }
+
+  await expectNoBlockingA11yViolations(page)
+  expect(directTMDBImages).toEqual([])
+  expect(runtimeErrors).toEqual([])
+})
+
+test('keeps failed details imagery and a long title neutral, named, and usable', async ({ page }) => {
+  const directTMDBImages: string[] = []
+  page.on('request', (request) => {
+    if (new URL(request.url()).hostname.endsWith('image.tmdb.org')) directTMDBImages.push(request.url())
+  })
+  await page.route('**/api/v1/public/tmdb/highlights', (route) => route.fulfill({
+    json: { items: [] },
+    status: 200,
+  }))
+  await login(page)
+  await page.route('**/api/v1/media/e2e-series', async (route) => {
+    const response = await route.fetch()
+    const body = await response.json() as Record<string, unknown>
+    await route.fulfill({
+      response,
+      json: { ...body, title: '潮汐档案：在漫长海岸线上追索一段被遗忘的家庭影像记录' },
+    })
+  })
+  await page.route('**/api/v1/public/tmdb/images/w1280/tide-backdrop.png**', (route) => route.fulfill({
+    body: Buffer.from('not a decodable image'),
+    contentType: 'image/png',
+    status: 200,
+  }))
+  await page.route('**/api/v1/public/tmdb/images/w300/cast-one.png**', (route) => route.fulfill({
+    body: Buffer.from('not a decodable image'),
+    contentType: 'image/png',
+    status: 200,
+  }))
+  await page.setViewportSize({ width: 375, height: 812 })
+  await page.goto('/media/e2e-series')
+
+  await expect(page.getByRole('heading', {
+    level: 1,
+    name: '潮汐档案：在漫长海岸线上追索一段被遗忘的家庭影像记录',
+  })).toBeVisible()
+  const hero = page.locator('.media-hero')
+  await expect(hero).toHaveAttribute('data-backdrop-state', 'failed')
+  await expect(hero.locator('.media-hero-backdrop')).toHaveCount(0)
+  await expect(page.getByRole('img', { name: '林见川 饰 顾潮 暂无头像' })).toBeVisible()
+  await expectDetailsHeaderLayout(page)
+
+  const seasonSelector = page.getByRole('combobox', { name: '选择季' })
+  await seasonSelector.selectOption('2')
+  await seasonSelector.focus()
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('button', { name: /推进下一集/ })).toBeFocused()
+  await expectNoHorizontalOverflow(page)
+  await expectNoFixedElementOverlap(page)
+  await expectNoBlockingA11yViolations(page)
+  expect(directTMDBImages).toEqual([])
 })
 
 const viewports = [
@@ -137,6 +229,35 @@ const viewports = [
   { width: 768, height: 1024 },
   { width: 1440, height: 900 },
 ]
+
+async function expectDetailsHeaderLayout(page: import('@playwright/test').Page) {
+  const header = page.getByRole('banner', { name: '应用导航' })
+  const hero = page.locator('.media-hero')
+  const heroContent = hero.locator('.media-hero-content')
+  const castHeading = page.getByRole('heading', { level: 2, name: '主要演员' })
+  const skipLink = page.getByRole('link', { name: '跳到主要内容' })
+
+  expect(await page.evaluate(() => window.scrollY)).toBe(0)
+  const [headerBox, heroBox, contentBox, castBox, skipBox] = await Promise.all([
+    header.boundingBox(),
+    hero.boundingBox(),
+    heroContent.boundingBox(),
+    castHeading.boundingBox(),
+    skipLink.boundingBox(),
+  ])
+  expect(headerBox?.y).toBe(0)
+  expect(heroBox?.y).toBe(0)
+  expect(contentBox?.y).toBeGreaterThanOrEqual(headerBox?.height ?? 0)
+  expect(castBox?.y).toBeGreaterThanOrEqual((heroBox?.y ?? 0) + (heroBox?.height ?? 0))
+  expect((skipBox?.y ?? 0) + (skipBox?.height ?? 0)).toBeLessThanOrEqual(0)
+
+  await page.evaluate(() => window.scrollTo(0, 96))
+  await expect(header).toHaveClass(/is-scrolled/)
+  expect((await header.boundingBox())?.y).toBe(0)
+  expect(await header.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await expect(header).not.toHaveClass(/is-scrolled/)
+}
 
 async function expectContinueWatchingHint(page: import('@playwright/test').Page, viewportHeight: number) {
   const section = page.getByRole('region', { name: '继续观看' })
