@@ -95,6 +95,100 @@ func TestSearchCacheExpiresAfterSixHours(t *testing.T) {
 	require.Equal(t, int32(2), requests.Load())
 }
 
+func TestClientPopularMoviesAndTVUseSixHourCache(t *testing.T) {
+	clock := &fakeClock{now: time.Date(2026, time.July, 15, 12, 0, 0, 0, time.UTC)}
+	cache := newTestCache(t, clock.Now)
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		require.Equal(t, "zh-CN", r.URL.Query().Get("language"))
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/movie/popular":
+			_, _ = w.Write([]byte(`{
+				"page":1,
+				"results":[{
+					"id":329865,
+					"title":"降临",
+					"original_title":"Arrival",
+					"release_date":"2016-11-10",
+					"backdrop_path":"/arrival.jpg",
+					"overview":"语言开启未知世界。"
+				}],
+				"total_pages":12,
+				"total_results":240
+			}`))
+		case "/tv/popular":
+			_, _ = w.Write([]byte(`{
+				"page":2,
+				"results":[{
+					"id":1399,
+					"name":"权力的游戏",
+					"original_name":"Game of Thrones",
+					"first_air_date":"2011-04-17",
+					"backdrop_path":"/thrones.jpg",
+					"overview":"维斯特洛的冬天将至。"
+				}],
+				"total_pages":25,
+				"total_results":500
+			}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := NewClient(ClientOptions{BaseURL: server.URL, Token: "synthetic-token", Cache: cache})
+
+	movies, err := client.Popular(context.Background(), "movie", "zh-CN")
+	require.NoError(t, err)
+	require.Equal(t, 1, movies.Page)
+	require.Equal(t, 12, movies.TotalPages)
+	require.Equal(t, 240, movies.TotalResults)
+	require.Len(t, movies.Results, 1)
+	require.Equal(t, 329865, movies.Results[0].ID)
+	require.Equal(t, "降临", movies.Results[0].Title)
+	require.Equal(t, "Arrival", movies.Results[0].OriginalTitle)
+	require.Equal(t, "2016-11-10", movies.Results[0].ReleaseDate)
+	require.Equal(t, "/arrival.jpg", movies.Results[0].BackdropPath)
+	require.Equal(t, "语言开启未知世界。", movies.Results[0].Overview)
+
+	shows, err := client.Popular(context.Background(), "tv", "zh-CN")
+	require.NoError(t, err)
+	require.Equal(t, 2, shows.Page)
+	require.Equal(t, 25, shows.TotalPages)
+	require.Equal(t, 500, shows.TotalResults)
+	require.Len(t, shows.Results, 1)
+	require.Equal(t, 1399, shows.Results[0].ID)
+	require.Equal(t, "权力的游戏", shows.Results[0].Name)
+	require.Equal(t, "Game of Thrones", shows.Results[0].OriginalName)
+	require.Equal(t, "2011-04-17", shows.Results[0].FirstAirDate)
+	require.Equal(t, "/thrones.jpg", shows.Results[0].BackdropPath)
+	require.Equal(t, "维斯特洛的冬天将至。", shows.Results[0].Overview)
+	require.Equal(t, int32(2), requests.Load())
+
+	cachedMovies, err := client.Popular(context.Background(), "movie", "zh-CN")
+	require.NoError(t, err)
+	cachedShows, err := client.Popular(context.Background(), "tv", "zh-CN")
+	require.NoError(t, err)
+	require.Equal(t, movies, cachedMovies)
+	require.Equal(t, shows, cachedShows)
+	require.Equal(t, int32(2), requests.Load())
+
+	clock.Advance(6*time.Hour + time.Millisecond)
+	_, err = client.Popular(context.Background(), "movie", "zh-CN")
+	require.NoError(t, err)
+	_, err = client.Popular(context.Background(), "tv", "zh-CN")
+	require.NoError(t, err)
+	require.Equal(t, int32(4), requests.Load())
+
+	t.Run("rejects unsupported media type without an upstream request", func(t *testing.T) {
+		_, err := client.Popular(context.Background(), "person", "zh-CN")
+
+		require.ErrorIs(t, err, ErrUpstreamUnavailable)
+		require.Equal(t, int32(4), requests.Load())
+	})
+}
+
 func TestClientFetchesLiveTVSeasonAndCredits(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "zh-CN", r.URL.Query().Get("language"))

@@ -20,6 +20,7 @@ const (
 	defaultBaseURL   = "https://api.themoviedb.org/3"
 	defaultTimeout   = 8 * time.Second
 	searchCacheTTL   = 6 * time.Hour
+	popularCacheTTL  = 6 * time.Hour
 	liveMetadataTTL  = 6 * time.Hour
 	maxResponseBytes = 5 << 20
 )
@@ -114,6 +115,21 @@ func (client *Client) Search(ctx context.Context, query, language string) (Searc
 	response.Results = filtered
 	response.TotalResults = len(filtered)
 	return response, nil
+}
+
+func (client *Client) Popular(ctx context.Context, mediaType, language string) (PopularResponse, error) {
+	if mediaType != "movie" && mediaType != "tv" {
+		return PopularResponse{}, &ClientError{Kind: ErrUpstreamUnavailable}
+	}
+	var response PopularResponse
+	err := client.get(
+		ctx,
+		fmt.Sprintf("/%s/popular", mediaType),
+		languageQuery(language),
+		popularCacheTTL,
+		&response,
+	)
+	return response, err
 }
 
 func (client *Client) MovieDetails(ctx context.Context, id int, language string) (MovieDetails, error) {

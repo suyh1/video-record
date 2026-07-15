@@ -20,6 +20,25 @@ type SearchResult struct {
 	Overview      string `json:"overview"`
 }
 
+type PopularResponse struct {
+	Page         int           `json:"page"`
+	Results      []PopularItem `json:"results"`
+	TotalPages   int           `json:"total_pages"`
+	TotalResults int           `json:"total_results"`
+}
+
+type PopularItem struct {
+	ID            int    `json:"id"`
+	Title         string `json:"title"`
+	Name          string `json:"name"`
+	OriginalTitle string `json:"original_title"`
+	OriginalName  string `json:"original_name"`
+	ReleaseDate   string `json:"release_date"`
+	FirstAirDate  string `json:"first_air_date"`
+	BackdropPath  string `json:"backdrop_path"`
+	Overview      string `json:"overview"`
+}
+
 type MovieDetails struct {
 	ID            int     `json:"id"`
 	Title         string  `json:"title"`
