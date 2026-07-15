@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"video-record/internal/auth"
+	"video-record/internal/integrations/tmdb"
 	"video-record/internal/media"
 	"video-record/internal/records"
 	"video-record/internal/storage"
@@ -150,7 +151,7 @@ func TestRecordHandlerClearsExplicitNullRatingAndNote(t *testing.T) {
 }
 
 func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
-	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
+	router, cookie, csrfToken, mediaID, _, db := newRecordsTestRouter(t)
 	roundURL := "http://example.test/api/v1/records/" + mediaID + "/rounds/current"
 	headers := map[string]string{
 		"Cookie": cookie.String(), "Origin": "http://example.test", "X-CSRF-Token": csrfToken,
@@ -179,6 +180,39 @@ func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
 	require.Contains(t, library.Body.String(), `"title":"测试电影"`)
 	require.Contains(t, library.Body.String(), `"status":"completed"`)
 	require.Contains(t, library.Body.String(), `"tmdbId":329865`)
+	var libraryBody struct {
+		Items []catalogItemResponse `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(library.Body.Bytes(), &libraryBody))
+	require.Len(t, libraryBody.Items, 1)
+	require.NotNil(t, libraryBody.Items[0].PosterPath)
+	requireSignedTMDBImageURL(t, *libraryBody.Items[0].PosterPath, "w342", "library.jpg")
+	require.NotContains(t, library.Body.String(), `"posterPath":"/library.jpg"`)
+	require.NotContains(t, library.Body.String(), "https://image.tmdb.org")
+
+	mediaService := media.NewService(media.NewRepository(db))
+	_, err := mediaService.CreateCustom(context.Background(), media.CreateCustomInput{
+		MediaType: media.MediaTypeMovie, Title: "测试空海报",
+	})
+	require.NoError(t, err)
+	absoluteItem, err := mediaService.CreateCustom(context.Background(), media.CreateCustomInput{
+		MediaType: media.MediaTypeMovie, Title: "测试绝对海报",
+	})
+	require.NoError(t, err)
+	_, err = mediaService.LinkExternal(context.Background(), absoluteItem.ID, media.ExternalSnapshot{
+		Source: "custom-provider", SourceID: "absolute", MediaType: media.MediaTypeMovie,
+		Title: "测试绝对海报", PosterPath: "https://cdn.example.test/custom-library.jpg",
+	})
+	require.NoError(t, err)
+	invalidItem, err := mediaService.CreateCustom(context.Background(), media.CreateCustomInput{
+		MediaType: media.MediaTypeMovie, Title: "测试非法海报",
+	})
+	require.NoError(t, err)
+	_, err = mediaService.LinkExternal(context.Background(), invalidItem.ID, media.ExternalSnapshot{
+		Source: "custom-provider", SourceID: "invalid", MediaType: media.MediaTypeMovie,
+		Title: "测试非法海报", PosterPath: "/nested/invalid.jpg",
+	})
+	require.NoError(t, err)
 
 	search := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/media/search?q=测试", nil, map[string]string{
 		"Cookie": cookie.String(),
@@ -186,6 +220,22 @@ func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
 	require.Equal(t, http.StatusOK, search.Code)
 	require.Contains(t, search.Body.String(), mediaID)
 	require.Contains(t, search.Body.String(), `"source":"local"`)
+	var searchBody struct {
+		Items []catalogItemResponse `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(search.Body.Bytes(), &searchBody))
+	require.Len(t, searchBody.Items, 4)
+	itemsByTitle := make(map[string]catalogItemResponse, len(searchBody.Items))
+	for _, item := range searchBody.Items {
+		itemsByTitle[item.Title] = item
+	}
+	require.NotNil(t, itemsByTitle["测试电影"].PosterPath)
+	requireSignedTMDBImageURL(t, *itemsByTitle["测试电影"].PosterPath, "w342", "library.jpg")
+	require.Nil(t, itemsByTitle["测试空海报"].PosterPath)
+	require.NotNil(t, itemsByTitle["测试绝对海报"].PosterPath)
+	require.Equal(t, "https://cdn.example.test/custom-library.jpg", *itemsByTitle["测试绝对海报"].PosterPath)
+	require.Nil(t, itemsByTitle["测试非法海报"].PosterPath)
+	require.NotContains(t, search.Body.String(), "https://image.tmdb.org")
 
 	events := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/records/"+mediaID+"/events", nil, map[string]string{
 		"Cookie": cookie.String(),
@@ -237,6 +287,7 @@ func newRecordsTestRouter(t *testing.T) (http.Handler, *http.Cookie, string, str
 	require.NoError(t, err)
 	item, err = mediaService.LinkExternal(context.Background(), item.ID, media.ExternalSnapshot{
 		Source: "tmdb", SourceID: "329865", MediaType: media.MediaTypeMovie, Title: "测试电影",
+		PosterPath: "/library.jpg",
 	})
 	require.NoError(t, err)
 	recordService := records.NewService(records.NewRepository(db))
@@ -244,6 +295,7 @@ func newRecordsTestRouter(t *testing.T) (http.Handler, *http.Cookie, string, str
 		Storage: db,
 		Auth:    authService,
 		Records: recordService,
+		TMDB:    tmdb.NewClient(tmdb.ClientOptions{Token: "synthetic-token"}),
 	})
 	cookie, csrfToken := loginForHTTPTest(t, router)
 	return router, cookie, csrfToken, item.ID, recordService, db

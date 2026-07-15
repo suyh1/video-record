@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -15,6 +17,7 @@ import (
 
 type tmdbHandlers struct {
 	client *tmdb.Client
+	now    func() time.Time
 }
 
 type tmdbSearchResponse struct {
@@ -139,7 +142,7 @@ func (handlers tmdbHandlers) search(w http.ResponseWriter, r *http.Request) {
 			Title:         title,
 			OriginalTitle: originalTitle,
 			Year:          yearFromDate(date),
-			PosterPath:    result.PosterPath,
+			PosterPath:    signedTMDBImageURL(handlers.client, "w342", result.PosterPath, handlerTime(handlers.now)),
 			Overview:      result.Overview,
 		})
 	}
@@ -163,8 +166,10 @@ func (handlers tmdbHandlers) movie(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, tmdbMovieResponse{
 		ID: item.ID, Title: item.Title, OriginalTitle: item.OriginalTitle,
-		ReleaseDate: item.ReleaseDate, PosterPath: item.PosterPath,
-		BackdropPath: item.BackdropPath, Overview: item.Overview, Runtime: item.Runtime,
+		ReleaseDate:  item.ReleaseDate,
+		PosterPath:   signedTMDBImageURL(handlers.client, "w342", item.PosterPath, handlerTime(handlers.now)),
+		BackdropPath: signedTMDBImageURL(handlers.client, "w1280", item.BackdropPath, handlerTime(handlers.now)),
+		Overview:     item.Overview, Runtime: item.Runtime,
 		Genres: genreNames(item.Genres),
 	})
 }
@@ -183,14 +188,17 @@ func (handlers tmdbHandlers) tv(w http.ResponseWriter, r *http.Request) {
 	for _, season := range item.Seasons {
 		seasons = append(seasons, tmdbSeasonSummaryResponse{
 			ID: season.ID, Name: season.Name, Overview: season.Overview,
-			PosterPath: season.PosterPath, AirDate: season.AirDate,
+			PosterPath:   signedTMDBImageURL(handlers.client, "w342", season.PosterPath, handlerTime(handlers.now)),
+			AirDate:      season.AirDate,
 			SeasonNumber: season.SeasonNumber, EpisodeCount: season.EpisodeCount,
 		})
 	}
 	writeJSON(w, http.StatusOK, tmdbTVResponse{
 		ID: item.ID, Name: item.Name, OriginalName: item.OriginalName,
-		FirstAirDate: item.FirstAirDate, PosterPath: item.PosterPath,
-		BackdropPath: item.BackdropPath, Overview: item.Overview,
+		FirstAirDate:  item.FirstAirDate,
+		PosterPath:    signedTMDBImageURL(handlers.client, "w342", item.PosterPath, handlerTime(handlers.now)),
+		BackdropPath:  signedTMDBImageURL(handlers.client, "w1280", item.BackdropPath, handlerTime(handlers.now)),
+		Overview:      item.Overview,
 		NumberSeasons: item.NumberSeasons, NumberEpisodes: item.NumberEpisodes,
 		EpisodeRuntime: item.EpisodeRunTime, Genres: genreNames(item.Genres), Seasons: seasons,
 	})
@@ -212,11 +220,12 @@ func (handlers tmdbHandlers) season(w http.ResponseWriter, r *http.Request) {
 	}
 	episodes := make([]tmdbEpisodeResponse, 0, len(item.Episodes))
 	for _, episode := range item.Episodes {
-		episodes = append(episodes, newTMDBEpisodeResponse(episode))
+		episodes = append(episodes, handlers.newTMDBEpisodeResponse(episode))
 	}
 	writeJSON(w, http.StatusOK, tmdbSeasonResponse{
 		ID: item.ID, Name: item.Name, Overview: item.Overview,
-		PosterPath: item.PosterPath, AirDate: item.AirDate,
+		PosterPath:   signedTMDBImageURL(handlers.client, "w342", item.PosterPath, handlerTime(handlers.now)),
+		AirDate:      item.AirDate,
 		SeasonNumber: item.SeasonNumber, Episodes: episodes,
 	})
 }
@@ -239,14 +248,15 @@ func (handlers tmdbHandlers) episode(w http.ResponseWriter, r *http.Request) {
 		writeTMDBError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, newTMDBEpisodeResponse(item))
+	writeJSON(w, http.StatusOK, handlers.newTMDBEpisodeResponse(item))
 }
 
-func newTMDBEpisodeResponse(item tmdb.EpisodeDetails) tmdbEpisodeResponse {
+func (handlers tmdbHandlers) newTMDBEpisodeResponse(item tmdb.EpisodeDetails) tmdbEpisodeResponse {
 	return tmdbEpisodeResponse{
 		ID: item.ID, Name: item.Name, Overview: item.Overview, AirDate: item.AirDate,
 		SeasonNumber: item.SeasonNumber, EpisodeNumber: item.EpisodeNumber,
-		Runtime: item.Runtime, StillPath: item.StillPath,
+		Runtime:   item.Runtime,
+		StillPath: signedTMDBImageURL(handlers.client, "w780", item.StillPath, handlerTime(handlers.now)),
 	}
 }
 
@@ -273,10 +283,42 @@ func (handlers tmdbHandlers) credits(w http.ResponseWriter, r *http.Request) {
 	for _, member := range credits.Cast {
 		cast = append(cast, tmdbCastResponse{
 			ID: member.ID, Name: member.Name, Character: member.Character,
-			ProfilePath: member.ProfilePath, Order: member.Order,
+			ProfilePath: signedTMDBImageURL(handlers.client, "w300", member.ProfilePath, handlerTime(handlers.now)),
+			Order:       member.Order,
 		})
 	}
 	writeJSON(w, http.StatusOK, tmdbCreditsResponse{Cast: cast})
+}
+
+func signedTMDBImageURL(client *tmdb.Client, size, imagePath string, now time.Time) string {
+	if imagePath == "" || client == nil {
+		return ""
+	}
+	expires := now.Add(publicTMDBImageTTL)
+	signature, err := client.SignImage(size, imagePath, expires)
+	if err != nil {
+		return ""
+	}
+	return buildPublicTMDBImageURL(size, imagePath, expires, signature)
+}
+
+func proxiedTMDBOrCustomImageURL(client *tmdb.Client, size, imagePath string, now time.Time) string {
+	parsed, err := url.Parse(imagePath)
+	if err == nil && (strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")) &&
+		parsed.Host != "" {
+		if strings.EqualFold(parsed.Hostname(), "image.tmdb.org") {
+			return ""
+		}
+		return imagePath
+	}
+	return signedTMDBImageURL(client, size, imagePath, now)
+}
+
+func handlerTime(now func() time.Time) time.Time {
+	if now == nil {
+		return time.Now()
+	}
+	return now()
 }
 
 func genreNames(genres []tmdb.Genre) []string {

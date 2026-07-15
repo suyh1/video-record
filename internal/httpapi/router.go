@@ -105,7 +105,11 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post("/restore", backupAPI.restore)
 				}
 				if dependencies.Records != nil {
-					recordAPI := recordHandlers{service: dependencies.Records}
+					recordAPI := recordHandlers{
+						service: dependencies.Records,
+						tmdb:    dependencies.TMDB,
+						now:     time.Now,
+					}
 					protected.Get("/calendar", recordAPI.calendar)
 					protected.Get("/collections", recordAPI.collections)
 					protected.Get("/data/export", recordAPI.exportData)
@@ -191,7 +195,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					}
 				}
 				if dependencies.TMDB != nil {
-					tmdbAPI := tmdbHandlers{client: dependencies.TMDB}
+					tmdbAPI := tmdbHandlers{client: dependencies.TMDB, now: time.Now}
 					protected.Get("/tmdb/status", tmdbAPI.status)
 					protected.Get("/tmdb/connectivity", tmdbAPI.connectivity)
 					protected.Get("/tmdb/search", tmdbAPI.search)
@@ -202,7 +206,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protected.Get("/tmdb/{mediaType}/{id}/credits", tmdbAPI.credits)
 				}
 				if dependencies.Media != nil && dependencies.TMDB != nil {
-					mediaAPI := mediaHandlers{service: dependencies.Media, tmdb: dependencies.TMDB}
+					mediaAPI := mediaHandlers{service: dependencies.Media, tmdb: dependencies.TMDB, now: time.Now}
 					protected.Get("/media/{id}", mediaAPI.get)
 					protected.With(protectedWriteMiddleware...).Post(
 						"/media/tmdb/{mediaType}/{externalID}", mediaAPI.createFromTMDB,

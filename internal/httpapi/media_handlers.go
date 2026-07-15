@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -16,6 +17,7 @@ import (
 type mediaHandlers struct {
 	service *media.Service
 	tmdb    *tmdb.Client
+	now     func() time.Time
 }
 
 type customMediaRequest struct {
@@ -51,7 +53,7 @@ func (handlers mediaHandlers) get(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
 		return
 	}
-	writeJSON(w, http.StatusOK, newMediaItemResponse(item))
+	writeJSON(w, http.StatusOK, handlers.newMediaItemResponse(item))
 }
 
 func (handlers mediaHandlers) createFromTMDB(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +66,7 @@ func (handlers mediaHandlers) createFromTMDB(w http.ResponseWriter, r *http.Requ
 		writeMediaError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, newMediaItemResponse(item))
+	writeJSON(w, http.StatusOK, handlers.newMediaItemResponse(item))
 }
 
 func (handlers mediaHandlers) createCustom(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +85,7 @@ func (handlers mediaHandlers) createCustom(w http.ResponseWriter, r *http.Reques
 		writeMediaError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, newMediaItemResponse(item))
+	writeJSON(w, http.StatusCreated, handlers.newMediaItemResponse(item))
 }
 
 func (handlers mediaHandlers) linkTMDB(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +98,7 @@ func (handlers mediaHandlers) linkTMDB(w http.ResponseWriter, r *http.Request) {
 		writeMediaError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, newMediaItemResponse(item))
+	writeJSON(w, http.StatusOK, handlers.newMediaItemResponse(item))
 }
 
 func (handlers mediaHandlers) tmdbSnapshot(w http.ResponseWriter, r *http.Request) (media.ExternalSnapshot, bool) {
@@ -145,12 +147,13 @@ func (handlers mediaHandlers) tmdbSnapshot(w http.ResponseWriter, r *http.Reques
 	return snapshot, true
 }
 
-func newMediaItemResponse(item media.Item) mediaItemResponse {
+func (handlers mediaHandlers) newMediaItemResponse(item media.Item) mediaItemResponse {
 	return mediaItemResponse{
 		ID: item.ID, TMDBID: item.TMDBID, MediaType: item.MediaType, Title: item.Title, Overview: item.Overview,
 		ExternalTitle: item.ExternalTitle, ExternalOverview: item.ExternalOverview,
 		OriginalTitle: item.OriginalTitle, ReleaseDate: item.ReleaseDate,
-		PosterPath: item.PosterPath, BackdropPath: item.BackdropPath,
+		PosterPath:     proxiedTMDBOrCustomImageURL(handlers.tmdb, "w342", item.PosterPath, handlerTime(handlers.now)),
+		BackdropPath:   proxiedTMDBOrCustomImageURL(handlers.tmdb, "w1280", item.BackdropPath, handlerTime(handlers.now)),
 		RuntimeMinutes: item.RuntimeMinutes, Genres: item.Genres,
 	}
 }

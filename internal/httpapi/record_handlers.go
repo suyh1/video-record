@@ -11,12 +11,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"video-record/internal/integrations/tmdb"
 	"video-record/internal/records"
 )
 
 type recordHandlers struct {
 	service     *records.Service
 	idempotency *idempotencyMiddleware
+	tmdb        *tmdb.Client
+	now         func() time.Time
 }
 
 type recordResponse struct {
@@ -79,7 +82,7 @@ func (handlers recordHandlers) library(w http.ResponseWriter, r *http.Request) {
 		writeRecordError(w, r, err, 0)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": newCatalogResponses(items), "nextCursor": nil})
+	writeJSON(w, http.StatusOK, map[string]any{"items": handlers.newCatalogResponses(items), "nextCursor": nil})
 }
 
 func (handlers recordHandlers) localSearch(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +96,7 @@ func (handlers recordHandlers) localSearch(w http.ResponseWriter, r *http.Reques
 		writeRecordError(w, r, err, 0)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": newCatalogResponses(items)})
+	writeJSON(w, http.StatusOK, map[string]any{"items": handlers.newCatalogResponses(items)})
 }
 
 func (handlers recordHandlers) setTags(w http.ResponseWriter, r *http.Request) {
@@ -252,13 +255,15 @@ type catalogItemResponse struct {
 	Status        records.Status `json:"status"`
 }
 
-func newCatalogResponses(items []records.CatalogItem) []catalogItemResponse {
+func (handlers recordHandlers) newCatalogResponses(items []records.CatalogItem) []catalogItemResponse {
 	response := make([]catalogItemResponse, 0, len(items))
 	for _, item := range items {
 		var posterPath *string
 		if item.PosterPath != "" {
-			value := item.PosterPath
-			posterPath = &value
+			value := proxiedTMDBOrCustomImageURL(handlers.tmdb, "w342", item.PosterPath, handlerTime(handlers.now))
+			if value != "" {
+				posterPath = &value
+			}
 		}
 		response = append(response, catalogItemResponse{
 			ID: item.ID, TMDBID: item.TMDBID, Source: "local", MediaType: item.MediaType, Title: item.Title,

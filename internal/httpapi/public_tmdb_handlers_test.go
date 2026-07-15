@@ -165,6 +165,34 @@ func TestPublicTMDBImageAllowsAnonymousAccessWithGeneratedURL(t *testing.T) {
 	require.Empty(t, <-imageAuthorization)
 }
 
+func TestPublicTMDBHighlightsRejectNonTMDBImageURLs(t *testing.T) {
+	router, _ := newPublicTMDBTestRouter(t, "synthetic-token", 0, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/movie/popular":
+			_, _ = w.Write([]byte(`{"results":[
+				{"id":1,"title":"外部图片","backdrop_path":"https://cdn.example.test/external.jpg"},
+				{"id":2,"title":"TMDB 图片","backdrop_path":"/trusted.jpg"}
+			]}`))
+		case "/tv/popular":
+			_, _ = w.Write([]byte(`{"results":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+
+	response := performJSONRequest(router, http.MethodGet,
+		"http://example.test/api/v1/public/tmdb/highlights", nil, nil)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	var body publicTMDBHighlightsTestResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Len(t, body.Items, 1)
+	require.Equal(t, 2, body.Items[0].ID)
+	require.Equal(t, "TMDB 图片", body.Items[0].Title)
+	require.NotContains(t, response.Body.String(), "cdn.example.test")
+	require.NotContains(t, response.Body.String(), "https://image.tmdb.org")
+}
+
 func TestPublicTMDBImageRejectsInvalidAndTamperedRequests(t *testing.T) {
 	unexpectedRequests := make(chan string, 16)
 	router, client := newPublicTMDBTestRouter(t, "synthetic-token", 0, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -77,9 +77,9 @@ func (handlers publicTMDBHandlers) highlights(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	expires := handlers.now().Add(publicTMDBImageTTL)
-	movies := handlers.mapHighlights(feeds["movie"].Results, "movie", expires)
-	shows := handlers.mapHighlights(feeds["tv"].Results, "tv", expires)
+	now := handlerTime(handlers.now)
+	movies := handlers.mapHighlights(feeds["movie"].Results, "movie", now)
+	shows := handlers.mapHighlights(feeds["tv"].Results, "tv", now)
 	items := make([]publicTMDBHighlight, 0, min(publicTMDBHighlightLimit, len(movies)+len(shows)))
 	for movieIndex, showIndex := 0, 0; len(items) < publicTMDBHighlightLimit &&
 		(movieIndex < len(movies) || showIndex < len(shows)); {
@@ -101,15 +101,15 @@ func (handlers publicTMDBHandlers) highlights(w http.ResponseWriter, r *http.Req
 func (handlers publicTMDBHandlers) mapHighlights(
 	items []tmdb.PopularItem,
 	mediaType string,
-	expires time.Time,
+	now time.Time,
 ) []publicTMDBHighlight {
 	highlights := make([]publicTMDBHighlight, 0, len(items))
 	for _, item := range items {
 		if item.BackdropPath == "" {
 			continue
 		}
-		signature, err := handlers.client.SignImage(publicTMDBImageSize, item.BackdropPath, expires)
-		if err != nil {
+		backdropURL := signedTMDBImageURL(handlers.client, publicTMDBImageSize, item.BackdropPath, now)
+		if backdropURL == "" {
 			continue
 		}
 		title, originalTitle, date := item.Title, item.OriginalTitle, item.ReleaseDate
@@ -123,9 +123,7 @@ func (handlers publicTMDBHandlers) mapHighlights(
 			OriginalTitle: originalTitle,
 			Year:          yearFromDate(date),
 			Overview:      item.Overview,
-			BackdropURL: buildPublicTMDBImageURL(
-				publicTMDBImageSize, item.BackdropPath, expires, signature,
-			),
+			BackdropURL:   backdropURL,
 		})
 	}
 	return highlights
