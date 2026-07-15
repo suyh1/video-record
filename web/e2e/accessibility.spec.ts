@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from '@playwright/test'
+import { expect, test, type Locator, type Page, type Route } from '@playwright/test'
 
 import {
   baseURL,
@@ -16,6 +16,49 @@ test('has no blocking WCAG 2.2 AA violations on major pages', async ({ page }) =
     if (path === '/media/e2e-series') await expect(page.getByText('低潮线')).toBeVisible()
     await expectNoBlockingA11yViolations(page)
   }
+})
+
+test('keeps real loading skeletons visible in light and dark themes', async ({ page }) => {
+  await login(page)
+  const requestHold = await holdRequest(page, '**/api/v1/library*', 'GET')
+
+  try {
+    await page.goto('/library')
+    const skeleton = page.locator('.library-poster-skeleton').first()
+    await expect(skeleton).toBeVisible()
+
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((selectedTheme) => document.documentElement.setAttribute('data-theme', selectedTheme), theme)
+      const contrast = await computedBackgroundContrast(skeleton)
+      expect(contrast, `${theme} skeleton contrast`).toBeGreaterThanOrEqual(1.25)
+    }
+  } finally {
+    await requestHold.release()
+  }
+})
+
+test('keeps busy visuals separate from native disabled semantics', async ({ page }) => {
+  await login(page)
+  await page.evaluate(() => {
+    const button = document.createElement('button')
+    button.id = 'busy-foundation-probe'
+    button.className = 'button-primary'
+    button.type = 'button'
+    button.ariaBusy = 'true'
+    button.dataset.activations = '0'
+    button.textContent = '正在处理'
+    button.addEventListener('click', () => {
+      button.dataset.activations = String(Number(button.dataset.activations) + 1)
+    })
+    document.body.append(button)
+  })
+
+  const busyButton = page.locator('#busy-foundation-probe')
+  await expect(busyButton).toBeVisible()
+  expect(await busyButton.evaluate((element) => getComputedStyle(element).pointerEvents)).not.toBe('none')
+  await busyButton.focus()
+  await page.keyboard.press('Enter')
+  await expect(busyButton).toHaveAttribute('data-activations', '1')
 })
 
 test('keeps specialized form controls at the shared minimum height', async ({ page }) => {
@@ -54,23 +97,7 @@ test('keeps a disabled specialized input on the disabled surface', async ({ page
   await page.getByRole('combobox', { name: '选择季' }).selectOption('2')
   await expect(page.getByText('重返北堤')).toBeVisible()
 
-  const requestPattern = '**/api/v1/records/e2e-series/progress?seasonNumber=2'
-  let releaseRequest = () => {}
-  let markRequestFinished = () => {}
-  const heldRequest = new Promise<void>((resolve) => { releaseRequest = resolve })
-  const requestFinished = new Promise<void>((resolve) => { markRequestFinished = resolve })
-  await page.route(requestPattern, async (route) => {
-    if (route.request().method() !== 'POST') {
-      await route.continue()
-      return
-    }
-    await heldRequest
-    try {
-      await route.abort()
-    } finally {
-      markRequestFinished()
-    }
-  })
+  const requestHold = await holdRequest(page, '**/api/v1/records/e2e-series/progress?seasonNumber=2', 'POST')
 
   const timeButton = page.getByRole('button', { name: '设置 S02E01 观看时间' })
   await timeButton.click()
@@ -80,13 +107,17 @@ test('keeps a disabled specialized input on the disabled surface', async ({ page
 
   try {
     await expect(timeInput).toBeDisabled()
+    const confirmButton = page.getByRole('button', { name: '确定 S02E01 观看时间' })
+    await expect(confirmButton).toBeDisabled()
+    await confirmButton.focus()
+    await expect(confirmButton).not.toBeFocused()
+    await page.keyboard.press('Enter')
+    expect(requestHold.requestCount()).toBe(1)
     await expectTokenStyle(timeInput, 'backgroundColor', '--surface')
     await expectTokenStyle(timeInput, 'color', '--muted')
     await expect.poll(() => timeInput.evaluate((element) => getComputedStyle(element).cursor)).toBe('not-allowed')
   } finally {
-    releaseRequest()
-    await requestFinished
-    await page.unroute(requestPattern)
+    await requestHold.release()
   }
 })
 
@@ -227,4 +258,59 @@ async function expectTokenStyle(
     (element, propertyName) => getComputedStyle(element)[propertyName],
     property,
   )).toBe(expected)
+}
+
+async function computedBackgroundContrast(element: Locator) {
+  return element.evaluate((target) => {
+    const context = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
+    if (!context) throw new Error('Canvas 2D context is unavailable')
+
+    const luminance = (color: string) => {
+      context.clearRect(0, 0, 1, 1)
+      context.fillStyle = color
+      context.fillRect(0, 0, 1, 1)
+      const channels = [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map((channel) => {
+        const value = channel / 255
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+      })
+      return (channels[0] ?? 0) * 0.2126 + (channels[1] ?? 0) * 0.7152 + (channels[2] ?? 0) * 0.0722
+    }
+
+    const loading = luminance(getComputedStyle(target).backgroundColor)
+    const canvas = luminance(getComputedStyle(document.body).backgroundColor)
+    return (Math.max(loading, canvas) + 0.05) / (Math.min(loading, canvas) + 0.05)
+  })
+}
+
+async function holdRequest(page: Page, pattern: string, method: string) {
+  let intercepted = false
+  let count = 0
+  let releaseRequest = () => {}
+  let markRequestFinished = () => {}
+  const heldRequest = new Promise<void>((resolve) => { releaseRequest = resolve })
+  const requestFinished = new Promise<void>((resolve) => { markRequestFinished = resolve })
+  const handler = async (route: Route) => {
+    if (route.request().method() !== method) {
+      await route.continue()
+      return
+    }
+    intercepted = true
+    count += 1
+    await heldRequest
+    try {
+      await route.abort()
+    } finally {
+      markRequestFinished()
+    }
+  }
+  await page.route(pattern, handler)
+
+  return {
+    requestCount: () => count,
+    release: async () => {
+      releaseRequest()
+      if (intercepted) await requestFinished
+      await page.unroute(pattern, handler)
+    },
+  }
 }
