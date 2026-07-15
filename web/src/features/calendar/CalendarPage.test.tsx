@@ -116,6 +116,65 @@ it('explains an empty selected day instead of rendering an empty agenda', async 
   expect(screen.getByRole('button', { name: '查看全月' })).toBeVisible()
 })
 
+it('keeps an empty selected day mounted inside the mobile agenda view', async () => {
+  server.use(http.get('*/api/v1/calendar', () => HttpResponse.json(response)))
+  const user = userEvent.setup()
+  renderWithQueryClient(<MemoryRouter><CalendarPage now={new Date('2026-07-13T12:00:00Z')} timezone="Asia/Shanghai" /></MemoryRouter>)
+
+  const viewControl = await screen.findByRole('group', { name: '日历视图' })
+  const month = screen.getByRole('table', { name: '2026年7月观影日历' })
+  await user.click(within(month).getByRole('button', { name: '7月14日，0 条记录' }))
+
+  const agendaViews = document.querySelectorAll('#calendar-agenda-view')
+  expect(agendaViews).toHaveLength(1)
+  const [agendaView] = agendaViews
+  if (!(agendaView instanceof HTMLElement)) throw new Error('expected an agenda view')
+  expect(agendaView).toHaveClass('is-active')
+  expect(within(agendaView).getByRole('status')).toHaveTextContent('7月14日暂无观看记录')
+
+  await user.click(within(viewControl).getByRole('button', { name: '月历' }))
+
+  expect(agendaView).not.toHaveClass('is-active')
+  expect(within(agendaView).getByRole('status')).toBeInTheDocument()
+
+  await user.click(within(viewControl).getByRole('button', { name: '日程' }))
+
+  expect(agendaView).toHaveClass('is-active')
+})
+
+it('moves focus to the agenda view after selecting a date with the keyboard', async () => {
+  server.use(http.get('*/api/v1/calendar', () => HttpResponse.json(response)))
+  const user = userEvent.setup()
+  renderWithQueryClient(<MemoryRouter><CalendarPage now={new Date('2026-07-13T12:00:00Z')} timezone="Asia/Shanghai" /></MemoryRouter>)
+
+  const viewControl = await screen.findByRole('group', { name: '日历视图' })
+  await user.click(within(viewControl).getByRole('button', { name: '月历' }))
+  const month = screen.getByRole('table', { name: '2026年7月观影日历' })
+  const selectedDay = within(month).getByRole('button', { name: '7月13日，2 条记录' })
+  selectedDay.focus()
+
+  await user.keyboard('{Enter}')
+
+  expect(within(viewControl).getByRole('button', { name: '日程', pressed: true })).toBeVisible()
+  expect(document.querySelector('#calendar-agenda-view')).toHaveFocus()
+})
+
+it('keeps focus in the agenda view after restoring the full month', async () => {
+  server.use(http.get('*/api/v1/calendar', () => HttpResponse.json(response)))
+  const user = userEvent.setup()
+  renderWithQueryClient(<MemoryRouter><CalendarPage now={new Date('2026-07-13T12:00:00Z')} timezone="Asia/Shanghai" /></MemoryRouter>)
+
+  const month = await screen.findByRole('table', { name: '2026年7月观影日历' })
+  await user.click(within(month).getByRole('button', { name: '7月13日，2 条记录' }))
+  const agendaView = document.querySelector('#calendar-agenda-view')
+  expect(agendaView).toBeInTheDocument()
+
+  await user.click(screen.getByRole('button', { name: '查看全月' }))
+
+  expect(agendaView).toHaveFocus()
+  expect(document.body).not.toHaveFocus()
+})
+
 it('clears a selected date when moving to another month', async () => {
   server.use(http.get('*/api/v1/calendar', ({ request }) => {
     const requestedMonth = new URL(request.url).searchParams.get('month')

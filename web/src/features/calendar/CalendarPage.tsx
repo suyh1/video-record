@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, CalendarDays, RefreshCw } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { getCalendar } from '../../api/client'
@@ -28,6 +28,8 @@ export function CalendarPage({
   const [filter, setFilter] = useState<CalendarFilter>('all')
   const [view, setView] = useState<'agenda' | 'month'>('agenda')
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [agendaFocusRequest, setAgendaFocusRequest] = useState(0)
+  const agendaViewRef = useRef<HTMLDivElement>(null)
   const calendar = useQuery({
     queryKey: ['calendar', month, timezone, filter],
     queryFn: ({ signal }) => getCalendar(month, timezone, filter, signal),
@@ -39,6 +41,11 @@ export function CalendarPage({
     setMonth(value)
   }
   const moveMonth = (offset: number) => displayMonth(shiftMonth(month, offset))
+  const requestAgendaFocus = () => setAgendaFocusRequest((request) => request + 1)
+
+  useEffect(() => {
+    if (agendaFocusRequest > 0) agendaViewRef.current?.focus()
+  }, [agendaFocusRequest])
 
   return (
     <div className="page calendar-page">
@@ -91,7 +98,15 @@ export function CalendarPage({
       {selectedDate ? (
         <div className="calendar-selection-summary">
           <p>{formatCalendarDate(selectedDate)}日程</p>
-          <button type="button" onClick={() => setSelectedDate(null)}>查看全月</button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedDate(null)
+              requestAgendaFocus()
+            }}
+          >
+            查看全月
+          </button>
         </div>
       ) : null}
 
@@ -116,24 +131,33 @@ export function CalendarPage({
               onSelectDate={(date) => {
                 setSelectedDate(date)
                 setView('agenda')
+                requestAgendaFocus()
               }}
               selectedDate={selectedDate}
               todayDate={todayDate}
               year={calendar.data.year}
             />
-            {selectedDate && !calendar.data.events.some((event) => event.localDate === selectedDate) ? (
-              <div className="calendar-agenda-empty" role="status">
-                {formatCalendarDate(selectedDate)}暂无观看记录
-              </div>
-            ) : (
-              <AgendaList
-                active={view === 'agenda'}
-                events={selectedDate
-                  ? calendar.data.events.filter((event) => event.localDate === selectedDate)
-                  : calendar.data.events}
-                timezone={calendar.data.timezone}
-              />
-            )}
+            <div
+              ref={agendaViewRef}
+              id="calendar-agenda-view"
+              className={`calendar-agenda-view${view === 'agenda' ? ' is-active' : ''}`}
+              role="region"
+              aria-label="日程视图"
+              tabIndex={-1}
+            >
+              {selectedDate && !calendar.data.events.some((event) => event.localDate === selectedDate) ? (
+                <div className="calendar-agenda-empty" role="status">
+                  {formatCalendarDate(selectedDate)}暂无观看记录
+                </div>
+              ) : (
+                <AgendaList
+                  events={selectedDate
+                    ? calendar.data.events.filter((event) => event.localDate === selectedDate)
+                    : calendar.data.events}
+                  timezone={calendar.data.timezone}
+                />
+              )}
+            </div>
           </div>
         ) : (
           <div className="empty-state page-empty-state calendar-empty" role="region" aria-label="日历暂无记录">

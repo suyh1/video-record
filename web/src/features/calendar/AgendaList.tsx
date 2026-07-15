@@ -4,19 +4,14 @@ import { NavLink } from 'react-router-dom'
 import type { CalendarEvent } from '../../api/types'
 
 type AgendaListProps = {
-  active: boolean
   events: CalendarEvent[]
   timezone: string
 }
 
-export function AgendaList({ active, events, timezone }: AgendaListProps) {
+export function AgendaList({ events, timezone }: AgendaListProps) {
   const groups = groupEvents(events)
   return (
-    <ol
-      id="calendar-agenda-view"
-      className={`calendar-agenda${active ? ' is-active' : ''}`}
-      aria-label="按日议程"
-    >
+    <ol className="calendar-agenda" aria-label="按日议程">
       {groups.map(({ date, events: dayEvents }) => (
         <li key={date} aria-label={formatDay(date)}>
           <div className="agenda-day-heading">

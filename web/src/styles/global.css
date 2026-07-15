@@ -2418,6 +2418,11 @@ body {
   gap: var(--space-8);
 }
 
+.calendar-agenda-view:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
 .calendar-agenda-empty {
   display: grid;
   min-height: 176px;
@@ -2587,7 +2592,7 @@ body {
   }
 
   .calendar-month-grid,
-  .calendar-agenda {
+  .calendar-agenda-view {
     display: none;
   }
 
@@ -2595,8 +2600,8 @@ body {
     display: table;
   }
 
-  .calendar-agenda.is-active {
-    display: grid;
+  .calendar-agenda-view.is-active {
+    display: block;
   }
 
   .calendar-month-grid td {
