@@ -29,6 +29,7 @@ import type {
   SetupStatus,
   TMDBSearchResponse,
   TMDBCastMember,
+  TMDBHighlight,
   TMDBMovieDetails,
   TMDBSeasonDetails,
   TMDBTVDetails,
@@ -97,6 +98,14 @@ export async function searchTMDB(query: string, signal?: AbortSignal): Promise<M
     posterPath: item.posterPath,
     status: 'none',
   }))
+}
+
+export async function getTMDBHighlights(signal?: AbortSignal): Promise<TMDBHighlight[]> {
+  const response = await requestJSON<{ items: TMDBHighlight[] }>(
+    '/api/v1/public/tmdb/highlights',
+    signal ? { signal } : undefined,
+  )
+  return response.items
 }
 
 export function testTMDBConnectivity() {

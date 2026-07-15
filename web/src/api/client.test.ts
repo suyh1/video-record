@@ -1,20 +1,99 @@
 import { http, HttpResponse } from 'msw'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { server } from '../test/server'
 import {
+  APIError,
   createMediaFromTMDB,
   getCurrentRound,
   getEpisodeProgress,
   getRoundDetail,
   getRoundHistory,
   getTMDBCredits,
+  getTMDBHighlights,
   getTMDBSeason,
   getTMDBTV,
   startRewatch,
   updateCurrentRound,
   updateEpisodeProgress,
 } from './client'
+
+describe('public TMDB highlights client', () => {
+  it('requests the same-origin public endpoint and returns its items unchanged', async () => {
+    const backdropURL = '/api/v1/public/tmdb/images/w1280/arrival.jpg?expires=42&signature=signed'
+    const items = [
+      {
+        id: 329865,
+        mediaType: 'movie' as const,
+        title: '降临',
+        originalTitle: 'Arrival',
+        year: '2016',
+        overview: '语言学家试图理解外星来客。',
+        backdropURL,
+      },
+      {
+        id: 1399,
+        mediaType: 'tv' as const,
+        title: '权力的游戏',
+        originalTitle: 'Game of Thrones',
+        year: '2011',
+        overview: '凛冬将至。',
+        backdropURL: '/api/v1/public/tmdb/images/w1280/winter.jpg?expires=42&signature=signed',
+      },
+    ]
+    server.use(
+      http.get('*/api/v1/public/tmdb/highlights', ({ request }) => {
+        expect(new URL(request.url).pathname).toBe('/api/v1/public/tmdb/highlights')
+        expect(new URL(request.url).origin).toBe(window.location.origin)
+        return HttpResponse.json({ items })
+      }),
+    )
+
+    const result = await getTMDBHighlights()
+
+    expect(result).toEqual(items)
+    expect(result[0]?.backdropURL).toBe(backdropURL)
+  })
+
+  it('forwards an AbortSignal to the public request', async () => {
+    const controller = new AbortController()
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ items: [] }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200,
+      }),
+    )
+
+    try {
+      await getTMDBHighlights(controller.signal)
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        new URL('/api/v1/public/tmdb/highlights', window.location.origin),
+        expect.objectContaining({ signal: controller.signal }),
+      )
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it('preserves API errors instead of synthesizing fallback highlights', async () => {
+    server.use(
+      http.get('*/api/v1/public/tmdb/highlights', () => HttpResponse.json(
+        { code: 'tmdb_unavailable', requestId: 'request-highlights' },
+        { status: 503 },
+      )),
+    )
+
+    const request = getTMDBHighlights()
+
+    await expect(request).rejects.toBeInstanceOf(APIError)
+    await expect(request).rejects.toMatchObject({
+      code: 'tmdb_unavailable',
+      requestId: 'request-highlights',
+      status: 503,
+    })
+  })
+})
 
 describe('API client protected writes', () => {
   beforeEach(() => sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token'))

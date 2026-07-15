@@ -195,6 +195,16 @@ export type TMDBCastMember = {
   order: number
 }
 
+export type TMDBHighlight = {
+  id: number
+  mediaType: MediaType
+  title: string
+  originalTitle: string
+  year: string
+  overview: string
+  backdropURL: string
+}
+
 export type EpisodeReference = {
   sourceId: string
   seasonNumber: number
