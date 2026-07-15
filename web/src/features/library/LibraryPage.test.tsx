@@ -59,4 +59,48 @@ describe('LibraryPage', () => {
 
     expect(onSearch).toHaveBeenCalledOnce()
   })
+
+  it('keeps status and collection filters mutually exclusive and counts displayed items', async () => {
+    const items = [
+      {
+        id: 'media-1', source: 'local', mediaType: 'movie', title: '花样年华',
+        originalTitle: 'In the Mood for Love', year: '2000', posterPath: null, status: 'completed',
+      },
+      {
+        id: 'media-2', source: 'local', mediaType: 'tv', title: '漫长的季节',
+        originalTitle: 'The Long Season', year: '2023', posterPath: null, status: 'wishlist',
+      },
+    ]
+    server.use(
+      http.get('*/api/v1/library', ({ request }) => {
+        const status = new URL(request.url).searchParams.get('status')
+        return HttpResponse.json({
+          items: status === 'completed' ? items.slice(0, 1) : items,
+          nextCursor: null,
+        })
+      }),
+      http.get('*/api/v1/collections', () => HttpResponse.json([
+        { id: 'collection-1', name: '周末电影', items: ['media-2'] },
+      ])),
+    )
+    const user = userEvent.setup()
+    renderWithQueryClient(
+      <MemoryRouter>
+        <LibraryPage />
+      </MemoryRouter>,
+    )
+
+    await user.click(await screen.findByRole('button', { name: '周末电影，1 部影视' }))
+    expect(screen.getByRole('button', { name: '周末电影，1 部影视', pressed: true })).toBeVisible()
+    expect(screen.getByRole('button', { name: '全部', pressed: true })).toBeVisible()
+    expect(screen.getByText('1 部影视')).toBeVisible()
+    expect(screen.queryByText('In the Mood for Love')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '看过' }))
+    expect(await screen.findByRole('button', { name: '看过', pressed: true })).toBeVisible()
+    expect(screen.getByRole('button', { name: '周末电影，1 部影视', pressed: false })).toBeVisible()
+    expect(screen.getByText('1 部影视')).toBeVisible()
+    expect(screen.getByText('In the Mood for Love')).toBeVisible()
+    expect(screen.queryByText('The Long Season')).not.toBeInTheDocument()
+  })
 })

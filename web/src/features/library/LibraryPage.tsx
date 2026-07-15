@@ -48,13 +48,16 @@ export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
           if (collectionID) setFilter('all')
         }}
       />
-      <div className="library-toolbar" aria-label="影库筛选">
+      <div className="library-toolbar" role="group" aria-label="观看状态筛选">
         {filters.map((item) => (
           <button
             key={item.value}
             type="button"
             aria-pressed={filter === item.value}
-            onClick={() => setFilter(item.value)}
+            onClick={() => {
+              setSelectedCollectionID('')
+              setFilter(item.value)
+            }}
           >
             {item.label}
           </button>

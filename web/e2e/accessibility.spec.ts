@@ -150,6 +150,67 @@ test('resets new route scroll state while preserving browser back restoration', 
   await expect(header).toHaveClass(/is-scrolled/)
 })
 
+test('keeps the library and grouped search usable by keyboard at 200% zoom', async ({ page }) => {
+  await page.route('**/api/v1/tmdb/search*', (route) => route.fulfill({
+    contentType: 'application/json',
+    json: {
+      results: [{
+        id: 9001,
+        mediaType: 'movie',
+        title: '远端影片',
+        originalTitle: 'Remote Film',
+        year: '2026',
+        posterPath: null,
+      }],
+    },
+    status: 200,
+  }))
+  await login(page)
+  await page.setViewportSize({ width: 640, height: 800 })
+  await page.goto('/library')
+  await page.evaluate(() => { document.documentElement.style.zoom = '2' })
+
+  const posterLinks = page.locator('.poster-grid .poster-link')
+  await expect(posterLinks).toHaveCount(2)
+  const posterLayout = await posterLinks.evaluateAll((links) => links.map((link) => {
+    const rect = link.getBoundingClientRect()
+    return { left: rect.left, right: rect.right, top: rect.top }
+  }))
+  expect(Math.abs((posterLayout[0]?.top ?? 0) - (posterLayout[1]?.top ?? 1))).toBeLessThanOrEqual(1)
+  expect(posterLayout[1]?.left ?? 0).toBeGreaterThan(posterLayout[0]?.right ?? Number.POSITIVE_INFINITY)
+  await expectNoHorizontalOverflow(page)
+
+  const trigger = page.getByRole('banner', { name: '应用导航' }).getByRole('button', { name: '记录', exact: true })
+  await trigger.click()
+  const dialog = page.getByRole('dialog', { name: '搜索影视' })
+  const input = dialog.getByRole('searchbox', { name: '搜索影视' })
+  await input.fill('静默')
+  const localResult = dialog.getByRole('button', { name: /静默轨道/ })
+  const remoteResult = dialog.getByRole('button', { name: /远端影片/ })
+  await expect(localResult).toBeVisible()
+  await expect(remoteResult).toBeVisible()
+  await expect(dialog.getByRole('region', { name: '本地影库' })).toBeVisible()
+  await expect(dialog.getByRole('region', { name: 'TMDB' })).toBeVisible()
+
+  await input.focus()
+  await page.keyboard.press('ArrowDown')
+  await expect(localResult).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(remoteResult).toBeFocused()
+  await page.keyboard.press('ArrowUp')
+  await expect(localResult).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(trigger).toBeFocused()
+
+  await trigger.click()
+  await expect(input).toHaveValue('静默')
+  await input.focus()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/\/media\/e2e-movie$/)
+})
+
 test('keeps real loading skeletons visible in light and dark themes', async ({ page }) => {
   await login(page)
   const requestHold = await holdRequest(page, '**/api/v1/library*', 'GET')

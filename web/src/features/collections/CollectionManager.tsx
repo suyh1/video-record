@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Folder, LoaderCircle, Plus, RefreshCw, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Folder, LoaderCircle, Plus, RefreshCw, X } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 
 import { createCollection, getCollections, replaceCollectionItems } from '../../api/client'
@@ -15,12 +15,14 @@ export function CollectionManager({ mediaItems, selectedCollectionID, onSelect }
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [message, setMessage] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
   const collections = useQuery({ queryKey: ['collections'], queryFn: ({ signal }) => getCollections(signal) })
   const createMutation = useMutation({
     mutationFn: () => createCollection(name),
     onSuccess: (created) => {
       queryClient.setQueryData<Collection[]>(['collections'], (current = []) => [...current, created])
       setName('')
+      setCreateOpen(false)
       setMessage(`已创建${created.name}`)
     },
     onError: () => setMessage('创建片单失败，名称已保留。'),
@@ -49,6 +51,12 @@ export function CollectionManager({ mediaItems, selectedCollectionID, onSelect }
   const replace = (mediaIDs: string[]) => {
     if (selected) replaceMutation.mutate({ collectionID: selected.id, mediaIDs })
   }
+  const closeCreate = () => {
+    setCreateOpen(false)
+    setName('')
+    setMessage('')
+    createMutation.reset()
+  }
 
   return (
     <section className="collection-manager" aria-labelledby="collections-heading">
@@ -57,16 +65,6 @@ export function CollectionManager({ mediaItems, selectedCollectionID, onSelect }
           <h2 id="collections-heading">个人片单</h2>
           <p>片单只对当前账户可见</p>
         </div>
-        <form onSubmit={submit}>
-          <label>
-            <span>片单名称</span>
-            <input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} />
-          </label>
-          <button type="submit" disabled={!name.trim() || createMutation.isPending}>
-            {createMutation.isPending ? <LoaderCircle className="loading-icon" aria-hidden="true" size={16} /> : <Plus aria-hidden="true" size={16} />}
-            {createMutation.isPending ? '正在创建' : '创建片单'}
-          </button>
-        </form>
       </div>
 
       {collections.isPending ? <div className="skeleton collection-manager-skeleton" aria-label="正在加载个人片单" /> : null}
@@ -76,23 +74,57 @@ export function CollectionManager({ mediaItems, selectedCollectionID, onSelect }
           <button type="button" onClick={() => void collections.refetch()}><RefreshCw aria-hidden="true" size={16} />重试</button>
         </div>
       ) : null}
-      {collections.data ? (
-        <div className="collection-tabs" role="group" aria-label="个人片单筛选">
-          <button type="button" aria-pressed={!selectedCollectionID} onClick={() => onSelect('')}>全部记录</button>
-          {collections.data.map((collection) => (
-            <button
-              key={collection.id}
-              type="button"
-              aria-pressed={selectedCollectionID === collection.id}
-              aria-label={`${collection.name}，${collection.items.length} 部影视`}
-              onClick={() => onSelect(collection.id)}
-            >
-              <Folder aria-hidden="true" size={16} />
-              <span>{collection.name}</span>
-              <small>{collection.items.length}</small>
-            </button>
-          ))}
-        </div>
+      <div className="collection-strip">
+        {collections.data ? (
+          <div className="collection-tabs" role="group" aria-label="个人片单筛选">
+            <button type="button" aria-pressed={!selectedCollectionID} onClick={() => onSelect('')}>全部记录</button>
+            {collections.data.map((collection) => (
+              <button
+                key={collection.id}
+                type="button"
+                aria-pressed={selectedCollectionID === collection.id}
+                aria-label={`${collection.name}，${collection.items.length} 部影视`}
+                onClick={() => onSelect(collection.id)}
+              >
+                <Folder aria-hidden="true" size={16} />
+                <span>{collection.name}</span>
+                <small>{collection.items.length}</small>
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {!createOpen ? (
+          <button
+            className="icon-button collection-create-trigger"
+            type="button"
+            aria-label="创建片单"
+            title="创建片单"
+            aria-expanded="false"
+            onClick={() => {
+              setCreateOpen(true)
+              setMessage('')
+              createMutation.reset()
+            }}
+          >
+            <Plus aria-hidden="true" size={18} />
+          </button>
+        ) : null}
+      </div>
+
+      {createOpen ? (
+        <form className="collection-create-form" onSubmit={submit}>
+          <label>
+            <span>片单名称</span>
+            <input autoFocus value={name} maxLength={100} onChange={(event) => setName(event.target.value)} />
+          </label>
+          <button type="submit" disabled={!name.trim() || createMutation.isPending}>
+            {createMutation.isPending ? <LoaderCircle className="loading-icon" aria-hidden="true" size={16} /> : <Check aria-hidden="true" size={16} />}
+            {createMutation.isPending ? '正在创建' : '确认创建片单'}
+          </button>
+          <button type="button" aria-label="取消创建片单" title="取消创建片单" onClick={closeCreate}>
+            <X aria-hidden="true" size={18} />
+          </button>
+        </form>
       ) : null}
 
       {selected && selected.items.length > 0 ? (

@@ -1,4 +1,5 @@
 import { Bookmark, Check, CircleStop, Play } from 'lucide-react'
+import { useState } from 'react'
 
 import type { MediaSearchResult, RecordStatus } from '../../api/types'
 import { mediaImageURL } from '../../lib/mediaImage'
@@ -25,13 +26,7 @@ export function MediaPoster({ item, compact = false }: { item: MediaSearchResult
   return (
     <div className={`media-poster${compact ? ' compact' : ''}`}>
       <div className="poster-frame">
-        {posterURL ? (
-          <img src={posterURL} alt={`${item.title} 海报`} loading="lazy" />
-        ) : (
-          <span className="poster-placeholder" aria-label={`${item.title} 暂无海报`}>
-            {Array.from(item.title)[0] ?? '影'}
-          </span>
-        )}
+        <PosterArtwork key={`${item.id}:${item.title}:${posterURL ?? ''}`} title={item.title} posterURL={posterURL} />
       </div>
       <div className="poster-copy">
         <strong>{item.title}</strong>
@@ -49,4 +44,18 @@ export function MediaPoster({ item, compact = false }: { item: MediaSearchResult
       </div>
     </div>
   )
+}
+
+function PosterArtwork({ title, posterURL }: { title: string; posterURL: string | null }) {
+  const [failed, setFailed] = useState(false)
+
+  if (!posterURL || failed) {
+    return (
+      <span className="poster-placeholder" aria-label={`${title} 暂无海报`}>
+        {Array.from(title)[0] ?? '影'}
+      </span>
+    )
+  }
+
+  return <img src={posterURL} alt={`${title} 海报`} loading="lazy" onError={() => setFailed(true)} />
 }
