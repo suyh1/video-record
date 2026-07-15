@@ -1,11 +1,10 @@
-import { expect, test, type Page, type Request } from '@playwright/test'
+import { expect, test, type Locator, type Page, type Request } from '@playwright/test'
 
-import { admin, baseURL, expectImageLoaded, login } from './support'
+import { admin, baseURL, expectImageLoaded, login, syntheticTMDBOrigin } from './support'
 
 test('keeps authentication and media imagery behind the signed same-origin proxy', async ({ page }) => {
   const signedBackdrop = await readSignedBackdrop(page)
   await page.context().clearCookies()
-  await page.addInitScript(() => window.sessionStorage.clear())
   await page.route('**/api/v1/public/tmdb/highlights', (route) => route.fulfill({
     json: {
       items: [{
@@ -22,11 +21,11 @@ test('keeps authentication and media imagery behind the signed same-origin proxy
   }))
 
   const requests: string[] = []
-  const directTMDBRequests: string[] = []
+  const forbiddenUpstreamRequests: string[] = []
   const proxyResponses = new Map<string, number>()
   page.on('request', (request) => {
     requests.push(request.url())
-    if (isDirectTMDBRequest(request)) directTMDBRequests.push(request.url())
+    if (isForbiddenUpstreamRequest(request)) forbiddenUpstreamRequests.push(request.url())
   })
   page.on('response', (response) => {
     const url = new URL(response.url())
@@ -37,26 +36,26 @@ test('keeps authentication and media imagery behind the signed same-origin proxy
 
   await page.goto('/')
   await expect(page.getByRole('heading', { name: '登录 video-record' })).toBeVisible()
-  await expectImageLoaded(page.locator('.auth-backdrop .backdrop-carousel__image.is-active'))
+  await expectSignedProxyImage(page.locator('.auth-backdrop .backdrop-carousel__image.is-active'), proxyResponses)
 
   const csrfToken = await login(page)
   const homeHero = page.getByRole('region', { name: '首页主视觉' })
   await expect(homeHero).toHaveAttribute('data-backdrop-state', 'ready')
-  await expectImageLoaded(homeHero.locator('.backdrop-carousel__image.is-active'))
+  await expectSignedProxyImage(homeHero.locator('.backdrop-carousel__image.is-active'), proxyResponses)
 
   await refreshSeededMediaImages(page, csrfToken)
   await page.goto('/library')
   await expect(page.getByRole('heading', { level: 1, name: '影库' })).toBeVisible()
   const libraryPosters = page.locator('.poster-frame img')
   await expect(libraryPosters).toHaveCount(2)
-  for (const poster of await libraryPosters.all()) await expectImageLoaded(poster)
+  for (const poster of await libraryPosters.all()) await expectSignedProxyImage(poster, proxyResponses)
 
   await page.goto('/media/e2e-series')
   await expect(page.getByRole('heading', { level: 1, name: '潮汐档案' })).toBeVisible()
   const detailsBackdrop = page.locator('.media-hero-backdrop')
-  await expectImageLoaded(detailsBackdrop)
+  await expectSignedProxyImage(detailsBackdrop, proxyResponses)
 
-  expect(directTMDBRequests, directTMDBRequests.join('\n')).toEqual([])
+  expect(forbiddenUpstreamRequests, forbiddenUpstreamRequests.join('\n')).toEqual([])
   const proxyRequests = requests.filter((value) => new URL(value).pathname.startsWith('/api/v1/public/tmdb/images/'))
   expect(proxyRequests.length).toBeGreaterThan(0)
   for (const value of proxyRequests) {
@@ -68,6 +67,17 @@ test('keeps authentication and media imagery behind the signed same-origin proxy
     expect(proxyResponses.get(value), value).toBe(200)
   }
 })
+
+async function expectSignedProxyImage(image: Locator, proxyResponses: Map<string, number>) {
+  await expectImageLoaded(image)
+  const source = await image.evaluate((element) => (element as HTMLImageElement).currentSrc)
+  const url = new URL(source)
+  expect(url.origin, source).toBe(baseURL)
+  expect(url.pathname, source).toMatch(/^\/api\/v1\/public\/tmdb\/images\/(?:w300|w342|w780|w1280)\/[^/]+\.png$/)
+  expect(url.searchParams.get('expires'), source).toMatch(/^\d+$/)
+  expect(url.searchParams.get('signature'), source).toMatch(/^[a-f0-9]{64}$/)
+  expect(proxyResponses.get(source), source).toBe(200)
+}
 
 async function refreshSeededMediaImages(page: Page, csrfToken: string) {
   const media = [
@@ -102,9 +112,11 @@ async function readSignedBackdrop(page: Page) {
   return body.backdropPath
 }
 
-function isDirectTMDBRequest(request: Request) {
-  const hostname = new URL(request.url()).hostname.toLowerCase()
-  return hostname === 'image.tmdb.org'
+function isForbiddenUpstreamRequest(request: Request) {
+  const url = new URL(request.url())
+  const hostname = url.hostname.toLowerCase()
+  return url.origin === syntheticTMDBOrigin
+    || hostname === 'image.tmdb.org'
     || hostname.endsWith('.image.tmdb.org')
     || hostname === 'api.themoviedb.org'
     || hostname.endsWith('.api.themoviedb.org')

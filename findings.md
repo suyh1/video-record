@@ -638,3 +638,4 @@
 - 响应式视图切换会把当前焦点元素置为 `display:none`；稳定做法是让有记录/空日共用唯一、可聚焦的 agenda region，并在选日和清除日期的 React 提交后把焦点交到该可见目标。清除选择还必须同步恢复 agenda active 状态，不能只调用隐藏节点的 `focus()`。
 - 固定表格可以让子内容跨列而 document `scrollWidth` 仍为零，因此全页无溢出检查不能证明组件内部安全。移动七列月历需要用真实有数据 Chromium 比较 date/count/button/cell 边界；本轮两位数 `12 条` 在 320/375 均通过，手机格内影片列表隐藏后仍通过选日进入 Agenda 查看详情。
 - Task 13 的代理旅程不能用 `.poster-frame` 数量替代图片加载证据；version 2 E2E 导入种子按离线边界保存空 `posterPath/backdropPath`，因此必须通过真实受保护的媒体-TMDB 关联接口刷新服务端快照，影库响应才会生成可由浏览器解码的 `w342` 签名同源 URL。
+- 仅断言“旅程中至少存在代理请求且官方 TMDB 域名未出现”仍可能让某一页面改走其他上游而假绿；网络边界必须对登录、首页、影库每张海报和详情目标 `<img>.currentSrc` 分别验证本站 origin、允许尺寸路径、expires、64 位签名与对应 200 响应，并把合成上游 origin 也列为浏览器禁连源。

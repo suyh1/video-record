@@ -278,3 +278,5 @@
 - Task 12 质量审查以真实 Chromium 证明 375px 七列月历内部跨列约 1.88px，而页面级 `scrollWidth` 仍为零；最终用手机纵向日期/计数和有数据 320/375 子元素边界回归关闭，最终规格与质量复审均无 Critical/Important/Minor。
 - Task 12 最终提交链为 `e7544d3`、`83502e1`、`5740e0e`、`21b0d59`、`f41da3c`；主控 Vitest 227/227、accessibility 24/24 及全部静态门禁通过。
 - Task 13 首轮规格复审发现 1 个 Important：影库步骤只统计海报容器，没有等待可见图片解码；补强断言后进一步暴露真实导入种子不含图片快照，需先经受保护的后端 TMDB 关联接口刷新媒体，再验证浏览器只加载签名同源海报。
+- Task 13 首轮质量复审发现 2 个 Important：全局代理请求断言不能证明四页各自目标图片走代理，且合成 TMDB 上游未列入浏览器禁连源；发布清单把 27 项专项子集误记为完整 E2E，实际 Playwright 配置为 36 项。另有永久 sessionStorage 清理脚本的 Minor，一并移除。
+- 用 `npm --prefix web exec playwright test -- --list` 统计 E2E 时参数位置错误，Playwright 未读取 `web/playwright.config.ts` 并误收集 Vitest 文件；没有文件变化，改为在 `web` 工作目录运行 `npx playwright test --list`，正确得到 10 文件 36 项。
