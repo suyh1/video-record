@@ -120,6 +120,34 @@ func TestMediaHandlersCreateReadAndLinkTMDBItems(t *testing.T) {
 	require.Equal(t, "http://cdn.example.test/custom-backdrop.webp", customImageBody.BackdropPath)
 }
 
+func TestMediaHandlerRejectsTMDBCustomImageHostAliases(t *testing.T) {
+	router, cookie, _, mediaService := newMediaTestRouter(t)
+	item, err := mediaService.CreateCustom(context.Background(), media.CreateCustomInput{
+		MediaType: media.MediaTypeMovie, Title: "TMDB 域名别名",
+	})
+	require.NoError(t, err)
+	item, err = mediaService.LinkExternal(context.Background(), item.ID, media.ExternalSnapshot{
+		Source: "custom-provider", SourceID: "tmdb-host-alias", MediaType: media.MediaTypeMovie,
+		Title:        "TMDB 域名别名",
+		PosterPath:   "https://ImAgE.TmDb.OrG./t/p/w342/poster.jpg",
+		BackdropPath: "http://image.tmdb.org../t/p/w1280/backdrop.jpg",
+	})
+	require.NoError(t, err)
+
+	response := performJSONRequest(router, http.MethodGet,
+		"http://example.test/api/v1/media/"+item.ID, nil,
+		map[string]string{"Cookie": cookie.String()})
+
+	require.Equal(t, http.StatusOK, response.Code)
+	var body mediaItemResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Nil(t, body.TMDBID)
+	require.Empty(t, body.PosterPath)
+	require.Empty(t, body.BackdropPath)
+	require.NotContains(t, response.Body.String(), "TmDb.OrG")
+	require.NotContains(t, response.Body.String(), "tmdb.org")
+}
+
 func newMediaTestRouter(t *testing.T) (http.Handler, *http.Cookie, string, *media.Service) {
 	t.Helper()
 	db, err := storage.Open(context.Background(), filepath.Join(t.TempDir(), "video-record.db"))

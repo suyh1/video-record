@@ -40,7 +40,7 @@ func (client *Client) SignImage(size, path string, expires time.Time) (string, e
 	if client.token == "" {
 		return "", &ClientError{Kind: ErrNotConfigured}
 	}
-	now := time.Now()
+	now := client.now()
 	if !validImageRequest(size, path) || !expires.After(now) || expires.After(now.Add(maxImageSignatureTTL)) {
 		return "", &ClientError{Kind: ErrInvalidImage}
 	}
@@ -48,7 +48,7 @@ func (client *Client) SignImage(size, path string, expires time.Time) (string, e
 }
 
 func (client *Client) VerifyImage(size, path string, expires time.Time, signature string) bool {
-	now := time.Now()
+	now := client.now()
 	if client.token == "" || !validImageRequest(size, path) || !expires.After(now) ||
 		expires.After(now.Add(maxImageSignatureTTL)) {
 		return false

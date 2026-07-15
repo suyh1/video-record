@@ -314,7 +314,8 @@ func sourceAwareMediaImageURL(
 	parsed, err := url.Parse(imagePath)
 	if err == nil && (strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")) &&
 		parsed.Host != "" {
-		if strings.EqualFold(parsed.Hostname(), "image.tmdb.org") {
+		hostname := strings.TrimRight(strings.ToLower(parsed.Hostname()), ".")
+		if hostname == "image.tmdb.org" {
 			return ""
 		}
 		return imagePath

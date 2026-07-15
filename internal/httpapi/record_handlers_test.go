@@ -264,6 +264,45 @@ func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, events.Code)
 }
 
+func TestCatalogRejectsTMDBCustomImageHostAliases(t *testing.T) {
+	router, cookie, _, _, recordService, db := newRecordsTestRouter(t)
+	mediaService := media.NewService(media.NewRepository(db))
+	item, err := mediaService.CreateCustom(context.Background(), media.CreateCustomInput{
+		MediaType: media.MediaTypeMovie, Title: "尾随点海报",
+	})
+	require.NoError(t, err)
+	item, err = mediaService.LinkExternal(context.Background(), item.ID, media.ExternalSnapshot{
+		Source: "custom-provider", SourceID: "trailing-dot", MediaType: media.MediaTypeMovie,
+		Title: "尾随点海报", PosterPath: "https://IMAGE.TMDB.ORG./t/p/w342/poster.jpg",
+	})
+	require.NoError(t, err)
+	_, err = recordService.UpdateRound(context.Background(), records.UpdateRoundInput{
+		Scope: records.RoundScope{
+			UserID: currentUserID(t, router, cookie), MediaID: item.ID,
+		},
+		Status: records.StatusWishlist, Source: records.SourceManual, ExpectedVersion: 0,
+	})
+	require.NoError(t, err)
+
+	for _, endpoint := range []string{"/api/v1/library", "/api/v1/media/search?q=尾随点"} {
+		response := performJSONRequest(router, http.MethodGet, "http://example.test"+endpoint, nil,
+			map[string]string{"Cookie": cookie.String()})
+		require.Equal(t, http.StatusOK, response.Code)
+		var body struct {
+			Items []catalogItemResponse `json:"items"`
+		}
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+		itemsByTitle := make(map[string]catalogItemResponse, len(body.Items))
+		for _, catalogItem := range body.Items {
+			itemsByTitle[catalogItem.Title] = catalogItem
+		}
+		require.Contains(t, itemsByTitle, "尾随点海报")
+		require.Nil(t, itemsByTitle["尾随点海报"].TMDBID)
+		require.Nil(t, itemsByTitle["尾随点海报"].PosterPath)
+		require.NotContains(t, response.Body.String(), "TMDB.ORG")
+	}
+}
+
 func TestLegacyRecordWriteAndWatchEventRoutesAreRemoved(t *testing.T) {
 	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
 	recordURL := "http://example.test/api/v1/records/" + mediaID

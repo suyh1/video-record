@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -147,6 +148,44 @@ func TestTMDBSearchReturnsCamelCaseMovieAndTVResultsWithProxiedPosters(t *testin
 		"http://example.test"+body.Results[0].PosterPath, nil, nil)
 	require.Equal(t, http.StatusOK, imageResponse.Code)
 	require.Equal(t, "proxied-search-poster", imageResponse.Body.String())
+}
+
+func TestTMDBSearchSignedPosterUsesSharedFixedClock(t *testing.T) {
+	now := time.Date(2020, time.January, 2, 3, 4, 5, 0, time.UTC)
+	clock := func() time.Time { return now }
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/search/multi", r.URL.Path)
+		_, _ = w.Write([]byte(`{"page":1,"results":[{
+			"id":1,"media_type":"movie","title":"固定时钟","poster_path":"/fixed-clock.jpg"
+		}],"total_pages":1,"total_results":1}`))
+	}))
+	t.Cleanup(upstream.Close)
+	client := tmdb.NewClient(tmdb.ClientOptions{
+		BaseURL: upstream.URL,
+		Token:   "synthetic-token",
+		Now:     clock,
+	})
+	handlers := tmdbHandlers{client: client, now: clock}
+	request := httptest.NewRequest(http.MethodGet, "http://example.test/api/v1/tmdb/search?q=clock", nil)
+	response := httptest.NewRecorder()
+
+	handlers.search(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	var body tmdbSearchResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Len(t, body.Results, 1)
+	parsed, err := url.Parse(body.Results[0].PosterPath)
+	require.NoError(t, err)
+	require.Equal(t, "/api/v1/public/tmdb/images/w342/fixed-clock.jpg", parsed.Path)
+	expiresUnix, err := strconv.ParseInt(parsed.Query().Get("expires"), 10, 64)
+	require.NoError(t, err)
+	expires := time.Unix(expiresUnix, 0)
+	require.Equal(t, now.Add(publicTMDBImageTTL).Unix(), expiresUnix)
+	signature := parsed.Query().Get("signature")
+	require.True(t, client.VerifyImage("w342", "/fixed-clock.jpg", expires, signature))
+	now = expires.Add(time.Nanosecond)
+	require.False(t, client.VerifyImage("w342", "/fixed-clock.jpg", expires, signature))
 }
 
 func TestTMDBRateLimitReturnsStableProblemAndRetryAfter(t *testing.T) {

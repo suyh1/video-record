@@ -55,6 +55,7 @@ type ClientOptions struct {
 	Cache        *Cache
 	Logger       *slog.Logger
 	Timeout      time.Duration
+	Now          func() time.Time
 }
 
 type Client struct {
@@ -65,6 +66,7 @@ type Client struct {
 	cache        *Cache
 	logger       *slog.Logger
 	timeout      time.Duration
+	now          func() time.Time
 }
 
 func NewClient(options ClientOptions) *Client {
@@ -88,6 +90,10 @@ func NewClient(options ClientOptions) *Client {
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
+	now := options.Now
+	if now == nil {
+		now = time.Now
+	}
 	return &Client{
 		baseURL:      baseURL,
 		imageBaseURL: imageBaseURL,
@@ -96,6 +102,7 @@ func NewClient(options ClientOptions) *Client {
 		cache:        options.Cache,
 		logger:       logger,
 		timeout:      timeout,
+		now:          now,
 	}
 }
 

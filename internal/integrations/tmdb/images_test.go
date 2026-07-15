@@ -79,6 +79,22 @@ func TestSignedImageRejectsMissingTokenTamperingAndInvalidExpiry(t *testing.T) {
 	require.False(t, emptyTokenClient.VerifyImage("w1280", "/arrival.webp", expires, signature))
 }
 
+func TestSignedImageUsesConfiguredClockForExpiryValidation(t *testing.T) {
+	now := time.Date(2020, time.January, 2, 3, 4, 5, 0, time.UTC)
+	client := NewClient(ClientOptions{
+		Token: "synthetic-token",
+		Now:   func() time.Time { return now },
+	})
+	expires := now.Add(maxImageSignatureTTL)
+
+	signature, err := client.SignImage("w1280", "/historical.jpg", expires)
+
+	require.NoError(t, err)
+	require.True(t, client.VerifyImage("w1280", "/historical.jpg", expires, signature))
+	now = expires.Add(time.Nanosecond)
+	require.False(t, client.VerifyImage("w1280", "/historical.jpg", expires, signature))
+}
+
 func TestImageUsesConfiguredBaseURLWithoutBearerToken(t *testing.T) {
 	contents := []byte("jpeg-image")
 	type requestSnapshot struct {
