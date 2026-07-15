@@ -81,11 +81,20 @@ func TestSignedImageRejectsMissingTokenTamperingAndInvalidExpiry(t *testing.T) {
 
 func TestImageUsesConfiguredBaseURLWithoutBearerToken(t *testing.T) {
 	contents := []byte("jpeg-image")
+	type requestSnapshot struct {
+		path          string
+		rawQuery      string
+		authorization string
+		accept        string
+	}
+	requestReceived := make(chan requestSnapshot, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/t/p/w1280/arrival.jpg", r.URL.EscapedPath())
-		require.Empty(t, r.URL.RawQuery)
-		require.Empty(t, r.Header.Get("Authorization"))
-		require.Equal(t, "image/jpeg, image/png, image/webp", r.Header.Get("Accept"))
+		requestReceived <- requestSnapshot{
+			path:          r.URL.EscapedPath(),
+			rawQuery:      r.URL.RawQuery,
+			authorization: r.Header.Get("Authorization"),
+			accept:        r.Header.Get("Accept"),
+		}
 		w.Header().Set("Content-Type", "image/jpeg")
 		_, _ = w.Write(contents)
 	}))
@@ -98,6 +107,11 @@ func TestImageUsesConfiguredBaseURLWithoutBearerToken(t *testing.T) {
 	asset, err := client.Image(context.Background(), "w1280", "/arrival.jpg")
 
 	require.NoError(t, err)
+	request := <-requestReceived
+	require.Equal(t, "/t/p/w1280/arrival.jpg", request.path)
+	require.Empty(t, request.rawQuery)
+	require.Empty(t, request.authorization)
+	require.Equal(t, "image/jpeg, image/png, image/webp", request.accept)
 	require.Equal(t, "image/jpeg", asset.ContentType)
 	require.Equal(t, contents, asset.Contents)
 }
@@ -259,6 +273,36 @@ func TestImageRejectsWrongContentTypeAndOversizedResponses(t *testing.T) {
 
 		_, err := client.Image(context.Background(), "w1280", "/large.webp")
 
+		require.ErrorIs(t, err, ErrUpstreamUnavailable)
+	})
+
+	t.Run("oversized chunked response", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "image/webp")
+			w.WriteHeader(http.StatusOK)
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			_, _ = w.Write(bytes.Repeat([]byte{'x'}, maxImageResponseBytes+1))
+		}))
+		t.Cleanup(server.Close)
+		contentLength := make(chan int64, 1)
+		httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			response, err := http.DefaultTransport.RoundTrip(request)
+			if response != nil {
+				contentLength <- response.ContentLength
+			}
+			return response, err
+		})}
+		client := NewClient(ClientOptions{
+			ImageBaseURL: server.URL,
+			Token:        "synthetic-token",
+			HTTPClient:   httpClient,
+		})
+
+		_, err := client.Image(context.Background(), "w1280", "/large.webp")
+
+		require.Equal(t, int64(-1), <-contentLength)
 		require.ErrorIs(t, err, ErrUpstreamUnavailable)
 	})
 }
