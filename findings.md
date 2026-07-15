@@ -631,3 +631,9 @@
 - Task 11 质量审查证明图片 identity 不能只用于比较 state：若 identity 包含 title 而 img `src` 未变，浏览器不会重发 load，ready 状态会永久失配；需按 identity remount 或分离 load/source identity。详情 header 从浅色 loading 切深色 ready 也必须避免颜色缓动穿过低对比中间帧，reduced-motion visual 无法替代正常动效逐帧检查。
 - CSS transition 的 after-change 样式决定是否创建动画；仅在 `has-backdrop:not(.is-scrolled)` 中设 `transition:none` 只能保证进入 ready，离开 ready 或增加 `is-scrolled` 时选择器失效、基础过渡重新生效。详情 header 的高对比策略与正常动效采样必须覆盖 loading/ready/failed/scroll 双向全生命周期。
 - 详情页最终以 `body:has(.media-details-page)` 作为 header 高对比与无颜色过渡的稳定生命周期边界，不依赖图片或滚动状态；四次独立 MutationObserver 各采 mutation 当帧和随后 20 个 rAF 帧，可同时证明双向状态切换、滚动切换和搜索 placeholder 对比度，而 Home 仍保留自身 header 逻辑。
+- Task 12 基线审计确认 Calendar 已有完整月份、筛选、月表格和议程语义，但 CSS 当前在桌面隐藏议程、手机隐藏月历，也没有移动“日程/月历”切换；改造只需在现有同一 query 数据上增加响应式视图状态，不需要后端或 DTO 变化。
+- Stats 现有六个 `AccessibleChart` 已同时提供可见条形图和语义表格，Task 12 应保留该无障碍契约，只增强 summary band、tabular numbers 与零数据空态，不能用装饰性图表替代文字数据。
+- Settings 已具备账户、TMDB、三类媒体服务器、同步、家庭、导入导出和备份恢复的全部业务组件；主要缺口是五段锚点章节导航与统一分组节奏，实施应只包裹无表面的定位容器，避免重写表单或产生卡片嵌套。
+- Task 12 规格复审证明“桌面同时显示月历与日程”并不等于联动：日期按钮仍需 `aria-current=date`、`aria-pressed`、可见记录数和本地 selectedDate；选日必须过滤 Agenda，空日要有说明，换月/查看全月要清理选择且移动端自动回到可见日程。
+- 响应式视图切换会把当前焦点元素置为 `display:none`；稳定做法是让有记录/空日共用唯一、可聚焦的 agenda region，并在选日和清除日期的 React 提交后把焦点交到该可见目标。清除选择还必须同步恢复 agenda active 状态，不能只调用隐藏节点的 `focus()`。
+- 固定表格可以让子内容跨列而 document `scrollWidth` 仍为零，因此全页无溢出检查不能证明组件内部安全。移动七列月历需要用真实有数据 Chromium 比较 date/count/button/cell 边界；本轮两位数 `12 条` 在 320/375 均通过，手机格内影片列表隐藏后仍通过选日进入 Agenda 查看详情。

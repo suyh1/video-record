@@ -585,3 +585,7 @@
 - Task 11 质量修复 `8ffb9c6` 已关闭图片 remount、重复 credit key 与进入 ready 的低对比；第二轮质量复审又复现退出 ready/进入 scroll 的反向过渡低至 1.57:1，剩余 1 个 Important 已交回继续修复。
 - Task 11 最终提交链为 `bcb5091`、`8ffb9c6`、`e5be6e6`：Hero 四态、动态取色回落、演员失败占位、详情叠层和 header 全生命周期高对比均完成；最终规格与质量复审无 Critical/Important/Minor。
 - Task 11 主控新鲜验证通过：38 文件 Vitest 215/215、visual/episodes/recording 17/17、typecheck、lint、production build、API 漂移、`git diff --check` 与 Impeccable detector `[]`；六张详情基线已逐张检查，生产代码不构造 TMDB 图片直连。
+- Task 12 初版 `e7544d3` 完成桌面月历+日程、移动视图切换、统计 summary band/零数据空态和设置五锚点；首轮规格复审随后指出日期联动和普通成员空锚点两个 Important。
+- `83502e1` 增加 today/selected/watched 日期语义、选日过滤/查看全月/换月清除与普通成员权限说明；`5740e0e`、`21b0d59` 继续关闭空日 agenda 目标和选日/清除后的隐藏焦点路径，第四次规格复审最终通过。
+- Task 12 质量审查用有数据 Chromium 测得 320/375 的日期+计数跨列且全页 overflow 假绿；`f41da3c` 将手机月历压缩为纵向日期/两位数计数并隐藏格内影片标题，新增逐子元素边界回归后 320/375 均无内部溢出。
+- Task 12 主控新鲜验证通过：38 文件 Vitest 227/227、完整 accessibility/视觉依赖 24/24、typecheck、lint、production build、API 漂移、`git diff --check` 与 Impeccable detector `[]`；最终规格和质量复审均无 Critical/Important/Minor。

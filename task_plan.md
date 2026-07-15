@@ -253,7 +253,7 @@
 - [x] Task 9：个性化首页主视觉与内容布局
 - [x] Task 10：影库、片单栏与搜索体验
 - [x] Task 11：详情页代理图片与视觉层次
-- [ ] Task 12：日历、统计、设置与统一状态
+- [x] Task 12：日历、统计、设置与统一状态
 - [ ] Task 13：全站视觉、网络、无障碍与最终验证
 
 ### 本轮约束
@@ -274,3 +274,6 @@
 - Task 11 首轮质量审查发现 2 个 Important：同 URL 仅标题变化会让 ready Hero 永久卡 loading，正常动效下详情 header ready 切换前 20ms 对比度最低 1.08:1；另有重复演员 credit key 的 Minor。均需 TDD 修复并复审。
 - Task 11 第二轮质量复审关闭 identity/key 后发现 1 个 Important：transition:none 只在 ready/未滚动选择器生效，退出 ready 或进入 scroll 时基础过渡恢复并产生最低 1.57:1 中间帧；需覆盖反向与滚动全生命周期。
 - Task 11 最终修复 `e5be6e6` 将详情页 header 的高对比 token 与无过渡策略覆盖 loading/ready/failed/scrolled 全生命周期；四段 84 帧正常动效采样全部达到 4.5:1，第三轮质量复审无 Critical/Important/Minor。
+- Task 12 首轮规格复审发现 2 个 Important：月历缺少今天/已观看/选中日期与议程联动，普通成员的家庭/备份锚点落到空目标；后续复审又补齐空日视图容器及选日、查看全月的完整焦点交接。
+- Task 12 质量审查以真实 Chromium 证明 375px 七列月历内部跨列约 1.88px，而页面级 `scrollWidth` 仍为零；最终用手机纵向日期/计数和有数据 320/375 子元素边界回归关闭，最终规格与质量复审均无 Critical/Important/Minor。
+- Task 12 最终提交链为 `e7544d3`、`83502e1`、`5740e0e`、`21b0d59`、`f41da3c`；主控 Vitest 227/227、accessibility 24/24 及全部静态门禁通过。
