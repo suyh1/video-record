@@ -46,6 +46,35 @@ test('keeps ordinary and immersive navigation stable across responsive viewports
       await expect(mobileNavigation).toBeVisible()
       await expect(page.getByRole('link', { name: 'video-record 首页' })).toBeVisible()
       await expect(ordinaryHeader.getByRole('button', { name: '记录', exact: true })).toBeVisible()
+      const activeMobileLink = mobileNavigation.getByRole('link', { name: '影库', exact: true })
+      const mobileSearch = mobileNavigation.getByRole('button', { name: '搜索', exact: true })
+      const mobileSearchControl = page.locator('.mobile-navigation .search-trigger')
+      const mobileNavigationStyles = await page.evaluate(() => {
+        const active = document.querySelector<HTMLElement>('.mobile-nav-link.active')
+        const search = document.querySelector<HTMLElement>('.mobile-nav-link.search-trigger')
+        const inactive = document.querySelector<HTMLElement>('.mobile-nav-link[href="/calendar"]')
+        if (!active || !search || !inactive) throw new Error('Mobile navigation controls are missing')
+        const activeIndicator = getComputedStyle(active, '::before')
+        return {
+          activeFontWeight: Number.parseInt(getComputedStyle(active).fontWeight, 10),
+          activeIndicatorHeight: Number.parseFloat(activeIndicator.height),
+          activeIndicatorWidth: Number.parseFloat(activeIndicator.width),
+          inactiveColor: getComputedStyle(inactive).color,
+          searchColor: getComputedStyle(search).color,
+        }
+      })
+      expect(mobileNavigationStyles.activeFontWeight).toBeGreaterThanOrEqual(600)
+      expect(mobileNavigationStyles.activeIndicatorHeight).toBeGreaterThanOrEqual(2)
+      expect(mobileNavigationStyles.activeIndicatorWidth).toBeGreaterThanOrEqual(16)
+      expect(mobileNavigationStyles.searchColor).toBe(mobileNavigationStyles.inactiveColor)
+      await expect(activeMobileLink).toHaveAttribute('aria-current', 'page')
+      await expect(mobileSearch).toHaveAttribute('aria-expanded', 'false')
+      await mobileSearch.click()
+      await expect(mobileSearchControl).toHaveAttribute('aria-expanded', 'true')
+      const searchSelectedWeight = await mobileSearchControl.evaluate((element) => Number.parseInt(getComputedStyle(element).fontWeight, 10))
+      expect(searchSelectedWeight).toBeGreaterThanOrEqual(600)
+      await page.keyboard.press('Escape')
+      await expect(mobileSearch).toHaveAttribute('aria-expanded', 'false')
       const clearance = await page.locator('#main-content').evaluate((main) => {
         const mobile = document.querySelector<HTMLElement>('.mobile-navigation')
         if (!mobile) throw new Error('Mobile navigation is missing')
@@ -59,7 +88,12 @@ test('keeps ordinary and immersive navigation stable across responsive viewports
       await expect(primaryNavigation).toBeVisible()
       await expect(mobileNavigation).toBeHidden()
       for (const name of ['首页', '影库', '日历', '统计', '设置']) {
-        await expect(primaryNavigation.getByRole('link', { name, exact: true })).toBeVisible()
+        const link = primaryNavigation.getByRole('link', { name, exact: true })
+        await expect(link).toBeVisible()
+        if (viewport.width === 768) {
+          const labelWidth = await link.locator('span').evaluate((label) => label.getBoundingClientRect().width)
+          expect(labelWidth, `${name} label width at 768px`).toBeGreaterThan(20)
+        }
       }
     }
     await expectNoHorizontalOverflow(page)
@@ -83,6 +117,37 @@ test('keeps ordinary and immersive navigation stable across responsive viewports
     await expectNoHorizontalOverflow(page)
     await expectNoFixedElementOverlap(page)
   }
+})
+
+test('resets new route scroll state while preserving browser back restoration', async ({ page }) => {
+  await login(page)
+  await page.goto('/library')
+  await page.evaluate(() => window.scrollTo(0, 120))
+
+  await page.getByRole('link', { name: /潮汐档案/ }).click()
+  await expect(page).toHaveURL(/\/media\/e2e-series$/)
+  const header = page.getByRole('banner', { name: '应用导航' })
+  await expect(header).toHaveClass(/immersive-header/)
+  await expect(header).not.toHaveClass(/is-scrolled/)
+  expect(await page.evaluate(() => window.scrollY)).toBe(0)
+
+  await page.evaluate(() => window.scrollTo(0, 160))
+  await expect(header).toHaveClass(/is-scrolled/)
+  await header.getByRole('button', { name: '记录', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '搜索影视' })
+  await dialog.getByRole('searchbox', { name: '搜索影视' }).fill('静默轨道')
+  await dialog.getByRole('button', { name: /静默轨道/ }).click()
+
+  await expect(page).toHaveURL(/\/media\/e2e-movie$/)
+  await expect(header).not.toHaveClass(/is-scrolled/)
+  expect(await page.evaluate(() => window.scrollY)).toBe(0)
+
+  await page.evaluate(() => window.scrollTo(0, 90))
+  await page.goBack({ waitUntil: 'networkidle' })
+
+  await expect(page).toHaveURL(/\/media\/e2e-series$/)
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(32)
+  await expect(header).toHaveClass(/is-scrolled/)
 })
 
 test('keeps real loading skeletons visible in light and dark themes', async ({ page }) => {
@@ -253,9 +318,8 @@ test('supports keyboard navigation, 200 percent zoom, and reduced motion', async
   await page.reload()
   const primaryNavigation = page.getByRole('navigation', { name: '主导航' })
   await expect(primaryNavigation).toBeVisible()
-  await page.keyboard.press('Tab')
-  await page.keyboard.press('Tab')
-  await expect(page.getByRole('link', { name: 'video-record 首页' })).toBeFocused()
+  const brandLink = page.getByRole('link', { name: 'video-record 首页' })
+  await tabUntilFocused(page, brandLink)
   await page.keyboard.press('Tab')
   await expect(primaryNavigation.getByRole('link', { name: '首页', exact: true })).toBeFocused()
   for (const name of ['影库', '日历', '统计', '设置']) {
@@ -267,16 +331,13 @@ test('supports keyboard navigation, 200 percent zoom, and reduced motion', async
 
   await page.reload()
   await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible()
-  for (let index = 0; index < 8; index += 1) await page.keyboard.press('Tab')
   const dialogSearch = page.getByRole('dialog', { name: '搜索影视' }).getByRole('searchbox', { name: '搜索影视' })
+  await tabUntilFocused(page, dialogSearch)
   await expect(dialogSearch).toBeFocused()
   await dialogSearch.fill('静默轨道')
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog', { name: '搜索影视' })).toHaveCount(0)
-  expect(await page.evaluate(() => ({
-    ariaLabel: document.activeElement?.getAttribute('aria-label'),
-    tagName: document.activeElement?.tagName,
-  }))).toEqual({ ariaLabel: '搜索影视', tagName: 'INPUT' })
+  await expect(page.getByRole('banner', { name: '应用导航' }).getByRole('searchbox', { name: '搜索影视' })).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(page.getByRole('banner', { name: '应用导航' }).getByRole('button', { name: '记录', exact: true })).toBeFocused()
 
@@ -292,6 +353,16 @@ const detailViewports = [
   { width: 768, height: 1024 },
   { width: 375, height: 812 },
 ]
+
+async function tabUntilFocused(page: Page, target: Locator, maxTabs = 12) {
+  for (let index = 0; index < maxTabs; index += 1) {
+    await page.keyboard.press('Tab')
+    const focused = await target.count() > 0
+      && await target.evaluate((element) => element === document.activeElement)
+    if (focused) return
+  }
+  throw new Error(`Target did not receive focus after ${maxTabs} Tab presses`)
+}
 
 async function expectDialogWithinViewport(dialog: Locator) {
   const bounds = await dialog.evaluate((element) => {

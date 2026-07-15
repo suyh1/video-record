@@ -21,6 +21,7 @@ type Config struct {
 	CookieSecure        bool
 	EncryptionKey       []byte
 	TMDBAPIBaseURL      string
+	TMDBImageBaseURL    string
 	TMDBReadAccessToken string
 }
 
@@ -51,6 +52,7 @@ func Load() (Config, error) {
 		CookieSecure:        cookieSecure,
 		EncryptionKey:       encryptionKey,
 		TMDBAPIBaseURL:      strings.TrimSpace(os.Getenv("TMDB_API_BASE_URL")),
+		TMDBImageBaseURL:    strings.TrimSpace(os.Getenv("TMDB_IMAGE_BASE_URL")),
 		TMDBReadAccessToken: strings.TrimSpace(os.Getenv("TMDB_READ_ACCESS_TOKEN")),
 	}, nil
 }

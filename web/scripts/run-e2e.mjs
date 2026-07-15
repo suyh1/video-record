@@ -19,6 +19,7 @@ const environment = playwrightEnvironment({
   ...process.env,
   E2E_TMDB_ORIGIN: syntheticTMDB.origin,
   TMDB_API_BASE_URL: syntheticTMDB.baseURL,
+  TMDB_IMAGE_BASE_URL: syntheticTMDB.imageBaseURL,
   TMDB_READ_ACCESS_TOKEN: syntheticToken,
 })
 

@@ -19,6 +19,7 @@ describe('App', () => {
       http.get('*/api/v1/records/:mediaId', () => HttpResponse.json({ code: 'not_found' }, { status: 404 })),
       http.get('*/api/v1/household/participants', () => HttpResponse.json([])),
       http.get('*/api/v1/sync/candidates', () => HttpResponse.json([])),
+      http.get('*/api/v1/collections', () => HttpResponse.json([])),
     )
   })
 
@@ -97,6 +98,81 @@ describe('App', () => {
     removeEventListener.mockRestore()
   })
 
+  it('resets scroll and immersive header state on PUSH navigation, including between media routes', async () => {
+    window.history.replaceState({}, '', '/library')
+    server.use(
+      http.get('*/api/v1/library', () => HttpResponse.json({ items: [mediaResult('media-a', '第一部')], nextCursor: null })),
+      http.get('*/api/v1/media/search', () => HttpResponse.json({ items: [mediaResult('media-b', '第二部')] })),
+      http.get('*/api/v1/tmdb/search', () => HttpResponse.json({ results: [] })),
+    )
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {
+      Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 })
+      window.dispatchEvent(new Event('scroll'))
+    })
+    const user = userEvent.setup()
+    render(<App />)
+
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 120 })
+    await user.click(await screen.findByRole('link', { name: /第一部/ }))
+
+    await waitFor(() => expect(window.location.pathname).toBe('/media/media-a'))
+    const banner = screen.getByRole('banner', { name: '应用导航' })
+    expect(scrollTo).toHaveBeenCalledWith({ behavior: 'auto', left: 0, top: 0 })
+    expect(banner).toHaveClass('immersive-header')
+    expect(banner).not.toHaveClass('is-scrolled')
+
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 96 })
+    act(() => window.dispatchEvent(new Event('scroll')))
+    await waitFor(() => expect(banner).toHaveClass('is-scrolled'))
+
+    await user.click(screen.getByRole('button', { name: '记录' }))
+    await user.type(within(screen.getByRole('dialog', { name: '搜索影视' })).getByRole('searchbox', { name: '搜索影视' }), '第二部')
+    await user.click(await screen.findByRole('button', { name: /第二部/ }))
+
+    await waitFor(() => expect(window.location.pathname).toBe('/media/media-b'))
+    expect(scrollTo).toHaveBeenCalledTimes(2)
+    expect(banner).not.toHaveClass('is-scrolled')
+    scrollTo.mockRestore()
+  })
+
+  it('preserves restored scroll position on POP navigation', async () => {
+    window.history.replaceState({}, '', '/media/pop-source')
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {
+      Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 })
+      window.dispatchEvent(new Event('scroll'))
+    })
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('link', { name: 'video-record 首页' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/'))
+    scrollTo.mockClear()
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 84 })
+
+    act(() => window.history.back())
+
+    await waitFor(() => expect(window.location.pathname).toBe('/media/pop-source'))
+    expect(scrollTo).not.toHaveBeenCalled()
+    expect(screen.getByRole('banner', { name: '应用导航' })).toHaveClass('is-scrolled')
+    scrollTo.mockRestore()
+  })
+
+  it('exposes mobile search selection only while the dialog is open', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const mobileSearch = await screen.findByRole('navigation', { name: '移动导航' })
+      .then((navigation) => within(navigation).getByRole('button', { name: '搜索' }))
+    expect(mobileSearch).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(mobileSearch)
+    expect(mobileSearch).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('dialog', { name: '搜索影视' })).toBeVisible()
+
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(mobileSearch).toHaveAttribute('aria-expanded', 'false'))
+  })
+
   it('shows TMDB attribution on the settings page', async () => {
     const currentUserRequest = vi.fn()
     server.use(http.get('*/api/v1/auth/me', () => {
@@ -171,3 +247,16 @@ describe('App', () => {
     window.history.pushState({}, '', '/')
   })
 })
+
+function mediaResult(id: string, title: string) {
+  return {
+    id,
+    source: 'local' as const,
+    mediaType: 'movie' as const,
+    title,
+    originalTitle: '',
+    year: '2026',
+    posterPath: null,
+    status: 'none' as const,
+  }
+}

@@ -1,4 +1,5 @@
 import type { TMDBCastMember } from '../../api/types'
+import { mediaImageURL } from '../../lib/mediaImage'
 
 type CastStripProps = {
   cast?: TMDBCastMember[]
@@ -26,26 +27,24 @@ export function CastStrip({ cast = [], pending, error, linked, onRetry }: CastSt
       {!pending && !error && !linked ? <p className="quiet-empty">关联 TMDB 后可显示演员</p> : null}
       {!pending && !error && cast.length > 0 ? (
         <ul className="cast-strip">
-          {cast.map((member) => (
-            <li key={`${member.id}-${member.character}`}>
-              <div className="cast-portrait">
-                {member.profilePath ? (
-                  <img src={profileURL(member.profilePath)} alt={`${member.name}${member.character ? ` 饰 ${member.character}` : ''}`} loading="lazy" />
-                ) : <span aria-hidden="true">{initial(member.name)}</span>}
-              </div>
-              <strong>{member.name}</strong>
-              <span>{member.character || '角色未知'}</span>
-            </li>
-          ))}
+          {cast.map((member) => {
+            const portraitURL = mediaImageURL(member.profilePath)
+            return (
+              <li key={`${member.id}-${member.character}`}>
+                <div className="cast-portrait">
+                  {portraitURL ? (
+                    <img src={portraitURL} alt={`${member.name}${member.character ? ` 饰 ${member.character}` : ''}`} loading="lazy" />
+                  ) : <span aria-hidden="true">{initial(member.name)}</span>}
+                </div>
+                <strong>{member.name}</strong>
+                <span>{member.character || '角色未知'}</span>
+              </li>
+            )
+          })}
         </ul>
       ) : null}
     </section>
   )
-}
-
-function profileURL(path: string) {
-  if (/^https?:\/\//.test(path)) return path
-  return `https://image.tmdb.org/t/p/w300${path}`
 }
 
 function initial(name: string) {

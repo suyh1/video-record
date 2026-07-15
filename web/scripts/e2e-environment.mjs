@@ -1,4 +1,5 @@
 import { createServer } from 'node:http'
+import { deflateSync } from 'node:zlib'
 
 export const syntheticTMDBPort = 18082
 
@@ -27,12 +28,13 @@ export async function startSyntheticTMDB({ port = syntheticTMDBPort, token } = {
       return writeJSON(response, 200, { failingIds: [...failingIDs] })
     }
     if (url.pathname.startsWith('/images/')) {
-      const image = images.get(url.pathname)
+      const imageName = url.pathname.match(/^\/images\/(?:w300|w342|w780|w1280)\/([^/]+\.png)$/)?.[1]
+      const image = imageName ? images.get(imageName) : null
       if (!image) return writeJSON(response, 404, { status_message: 'not found' })
       response.writeHead(200, {
         'Cache-Control': 'public, max-age=3600',
         'Content-Length': image.length,
-        'Content-Type': 'image/bmp',
+        'Content-Type': 'image/png',
       })
       response.end(image)
       return
@@ -43,7 +45,7 @@ export async function startSyntheticTMDB({ port = syntheticTMDBPort, token } = {
     counts.set(url.pathname, (counts.get(url.pathname) ?? 0) + 1)
     const mediaID = Number(url.pathname.match(/^\/3\/(?:movie|tv)\/(\d+)/)?.[1] ?? 0)
     if (failingIDs.has(mediaID)) return writeJSON(response, 502, { status_message: 'synthetic failure' })
-    const payload = tmdbPayload(url.pathname, origin)
+    const payload = tmdbPayload(url.pathname)
     if (!payload) return writeJSON(response, 404, { status_message: 'not found' })
     return writeJSON(response, 200, payload)
   })
@@ -53,13 +55,14 @@ export async function startSyntheticTMDB({ port = syntheticTMDBPort, token } = {
   })
   return {
     baseURL: `${origin}/3`,
+    imageBaseURL: `${origin}/images`,
     origin,
     close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
   }
 }
 
-function tmdbPayload(pathname, origin) {
-  const image = (name) => `${origin}/images/${name}.bmp`
+function tmdbPayload(pathname) {
+  const image = (name) => `/${name}.png`
   if (pathname === '/3/search/multi') return { page: 1, results: [], total_pages: 1, total_results: 0 }
   if (pathname === '/3/tv/1001') {
     return {
@@ -136,50 +139,72 @@ function tmdbPayload(pathname, origin) {
 
 function syntheticImages() {
   return new Map([
-    ['/images/tide-backdrop.bmp', createBitmap(720, 405, [[13, 31, 45], [92, 54, 50], [224, 151, 91]], 0.2)],
-    ['/images/tide-poster.bmp', createBitmap(300, 450, [[15, 42, 54], [139, 72, 54], [235, 178, 105]], 0.7)],
-    ['/images/tide-season-two.bmp', createBitmap(300, 450, [[32, 38, 48], [54, 94, 89], [189, 174, 113]], 1.1)],
-    ['/images/silent-backdrop.bmp', createBitmap(720, 405, [[29, 30, 33], [68, 72, 76], [198, 161, 105]], 1.7)],
-    ['/images/silent-poster.bmp', createBitmap(300, 450, [[24, 25, 28], [84, 75, 65], [208, 174, 119]], 2.1)],
-    ['/images/cast-one.bmp', createBitmap(180, 270, [[31, 48, 56], [126, 82, 66], [224, 174, 124]], 0.4)],
-    ['/images/cast-two.bmp', createBitmap(180, 270, [[44, 38, 47], [126, 75, 83], [231, 177, 144]], 0.9)],
-    ['/images/cast-three.bmp', createBitmap(180, 270, [[32, 45, 43], [78, 104, 87], [207, 177, 118]], 1.4)],
-    ['/images/cast-four.bmp', createBitmap(180, 270, [[37, 37, 40], [98, 85, 69], [218, 180, 126]], 1.9)],
-    ['/images/still-one.bmp', createBitmap(480, 270, [[17, 41, 54], [57, 78, 78], [202, 157, 99]], 0.1)],
-    ['/images/still-two.bmp', createBitmap(480, 270, [[18, 33, 48], [91, 61, 59], [218, 142, 86]], 0.6)],
-    ['/images/still-three.bmp', createBitmap(480, 270, [[24, 36, 44], [61, 82, 76], [185, 160, 105]], 1.1)],
-    ['/images/still-four.bmp', createBitmap(480, 270, [[31, 38, 49], [46, 87, 84], [184, 170, 111]], 1.6)],
-    ['/images/still-five.bmp', createBitmap(480, 270, [[21, 32, 43], [84, 72, 67], [210, 157, 99]], 2.2)],
+    ['tide-backdrop.png', createPNG(720, 405, [[13, 31, 45], [92, 54, 50], [224, 151, 91]], 0.2)],
+    ['tide-poster.png', createPNG(300, 450, [[15, 42, 54], [139, 72, 54], [235, 178, 105]], 0.7)],
+    ['tide-season-two.png', createPNG(300, 450, [[32, 38, 48], [54, 94, 89], [189, 174, 113]], 1.1)],
+    ['silent-backdrop.png', createPNG(720, 405, [[29, 30, 33], [68, 72, 76], [198, 161, 105]], 1.7)],
+    ['silent-poster.png', createPNG(300, 450, [[24, 25, 28], [84, 75, 65], [208, 174, 119]], 2.1)],
+    ['cast-one.png', createPNG(180, 270, [[31, 48, 56], [126, 82, 66], [224, 174, 124]], 0.4)],
+    ['cast-two.png', createPNG(180, 270, [[44, 38, 47], [126, 75, 83], [231, 177, 144]], 0.9)],
+    ['cast-three.png', createPNG(180, 270, [[32, 45, 43], [78, 104, 87], [207, 177, 118]], 1.4)],
+    ['cast-four.png', createPNG(180, 270, [[37, 37, 40], [98, 85, 69], [218, 180, 126]], 1.9)],
+    ['still-one.png', createPNG(480, 270, [[17, 41, 54], [57, 78, 78], [202, 157, 99]], 0.1)],
+    ['still-two.png', createPNG(480, 270, [[18, 33, 48], [91, 61, 59], [218, 142, 86]], 0.6)],
+    ['still-three.png', createPNG(480, 270, [[24, 36, 44], [61, 82, 76], [185, 160, 105]], 1.1)],
+    ['still-four.png', createPNG(480, 270, [[31, 38, 49], [46, 87, 84], [184, 170, 111]], 1.6)],
+    ['still-five.png', createPNG(480, 270, [[21, 32, 43], [84, 72, 67], [210, 157, 99]], 2.2)],
   ])
 }
 
-function createBitmap(width, height, [top, bottom, accent], seed) {
-  const rowSize = Math.ceil(width * 3 / 4) * 4
-  const imageSize = rowSize * height
-  const buffer = Buffer.alloc(54 + imageSize)
-  buffer.write('BM', 0)
-  buffer.writeUInt32LE(buffer.length, 2)
-  buffer.writeUInt32LE(54, 10)
-  buffer.writeUInt32LE(40, 14)
-  buffer.writeInt32LE(width, 18)
-  buffer.writeInt32LE(height, 22)
-  buffer.writeUInt16LE(1, 26)
-  buffer.writeUInt16LE(24, 28)
-  buffer.writeUInt32LE(imageSize, 34)
+function createPNG(width, height, [top, bottom, accent], seed) {
+  const rowSize = 1 + width * 3
+  const pixels = Buffer.alloc(rowSize * height)
   for (let row = 0; row < height; row += 1) {
-    const y = 1 - row / Math.max(height - 1, 1)
+    const y = row / Math.max(height - 1, 1)
+    pixels[row * rowSize] = 0
     for (let x = 0; x < width; x += 1) {
       const nx = x / Math.max(width - 1, 1)
       const glow = Math.max(0, 1 - Math.hypot(nx - 0.7, y - 0.36) * 1.55)
       const texture = (Math.sin((nx * 5.2 + y * 2.3 + seed) * Math.PI) + 1) * 0.025
-      const offset = 54 + row * rowSize + x * 3
+      const offset = row * rowSize + 1 + x * 3
       const channels = top.map((value, index) => value * (1 - y) + bottom[index] * y + accent[index] * glow * 0.34 + 255 * texture)
-      buffer[offset] = clamp(channels[2])
-      buffer[offset + 1] = clamp(channels[1])
-      buffer[offset + 2] = clamp(channels[0])
+      pixels[offset] = clamp(channels[0])
+      pixels[offset + 1] = clamp(channels[1])
+      pixels[offset + 2] = clamp(channels[2])
     }
   }
-  return buffer
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(width, 0)
+  header.writeUInt32BE(height, 4)
+  header[8] = 8
+  header[9] = 2
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk('IHDR', header),
+    pngChunk('IDAT', deflateSync(pixels)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ])
+}
+
+function pngChunk(type, contents) {
+  const typeBytes = Buffer.from(type)
+  const chunk = Buffer.alloc(12 + contents.length)
+  chunk.writeUInt32BE(contents.length, 0)
+  typeBytes.copy(chunk, 4)
+  contents.copy(chunk, 8)
+  chunk.writeUInt32BE(crc32(Buffer.concat([typeBytes, contents])), 8 + contents.length)
+  return chunk
+}
+
+function crc32(contents) {
+  let crc = 0xffffffff
+  for (const byte of contents) {
+    crc ^= byte
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1))
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0
 }
 
 function clamp(value) {

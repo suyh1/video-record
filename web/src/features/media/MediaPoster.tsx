@@ -1,6 +1,7 @@
 import { Bookmark, Check, CircleStop, Play } from 'lucide-react'
 
 import type { MediaSearchResult, RecordStatus } from '../../api/types'
+import { mediaImageURL } from '../../lib/mediaImage'
 
 const statusLabels: Record<RecordStatus, string> = {
   none: '未记录',
@@ -19,7 +20,7 @@ const statusIcons = {
 
 export function MediaPoster({ item, compact = false }: { item: MediaSearchResult; compact?: boolean }) {
   const StatusIcon = item.status === 'none' ? null : statusIcons[item.status]
-  const posterURL = imageURL(item.posterPath)
+  const posterURL = mediaImageURL(item.posterPath)
 
   return (
     <div className={`media-poster${compact ? ' compact' : ''}`}>
@@ -48,10 +49,4 @@ export function MediaPoster({ item, compact = false }: { item: MediaSearchResult
       </div>
     </div>
   )
-}
-
-function imageURL(path: string | null) {
-  if (!path) return null
-  if (/^https?:\/\//.test(path)) return path
-  return `https://image.tmdb.org/t/p/w342${path}`
 }

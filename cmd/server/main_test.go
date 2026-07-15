@@ -3,15 +3,40 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"video-record/internal/config"
 	"video-record/internal/integrations"
 	"video-record/internal/storage"
 )
+
+func TestNewTMDBClientUsesConfiguredImageBaseURL(t *testing.T) {
+	var requestedPath string
+	imageServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPath = r.URL.Path
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write([]byte("synthetic-image"))
+	}))
+	t.Cleanup(imageServer.Close)
+	client := newTMDBClient(config.Config{
+		TMDBImageBaseURL:    imageServer.URL + "/images",
+		TMDBReadAccessToken: "synthetic-token",
+	}, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	asset, err := client.Image(context.Background(), "w1280", "/fixture.jpg")
+
+	require.NoError(t, err)
+	require.Equal(t, "/images/w1280/fixture.jpg", requestedPath)
+	require.Equal(t, []byte("synthetic-image"), asset.Contents)
+}
 
 func TestNewBackupManagerCleansInterruptedArtifacts(t *testing.T) {
 	ctx := context.Background()

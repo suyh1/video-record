@@ -9,8 +9,8 @@ import {
   Settings,
   type LucideIcon,
 } from 'lucide-react'
-import { type FormEvent, useEffect, useRef, useState } from 'react'
-import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 
 import { createMediaFromTMDB, getSetupStatus } from '../api/client'
 import type { MediaSearchResult } from '../api/types'
@@ -74,7 +74,13 @@ function ApplicationShell() {
   const restoringSearchFocus = useRef(false)
   const location = useLocation()
   const navigate = useNavigate()
+  const navigationType = useNavigationType()
   const immersiveHeader = location.pathname === '/' || /^\/media\/[^/]+\/?$/.test(location.pathname)
+
+  useLayoutEffect(() => {
+    if (navigationType !== 'POP') window.scrollTo({ behavior: 'auto', left: 0, top: 0 })
+    setHeaderScrolled(immersiveHeader && window.scrollY > 32)
+  }, [immersiveHeader, location.pathname, navigationType])
 
   useEffect(() => {
     if (!immersiveHeader) {
@@ -85,7 +91,7 @@ function ApplicationShell() {
     updateHeader()
     window.addEventListener('scroll', updateHeader, { passive: true })
     return () => window.removeEventListener('scroll', updateHeader)
-  }, [immersiveHeader])
+  }, [immersiveHeader, location.pathname])
 
   useEffect(() => () => {
     if (restoreFocusTimer.current !== null) window.clearTimeout(restoreFocusTimer.current)
@@ -175,7 +181,7 @@ function ApplicationShell() {
         </Routes>
       </main>
 
-      <MobileNavigation onSearch={focusSearch} />
+      <MobileNavigation searchOpen={searchOpen} onSearch={focusSearch} />
       <SearchDialog open={searchOpen} onClose={closeSearch} onSelect={selectSearchResult} />
     </div>
   )
@@ -205,7 +211,10 @@ function PrimaryNavigation({ className }: { className: string }) {
   )
 }
 
-function MobileNavigation({ onSearch }: { onSearch: (trigger: HTMLButtonElement) => void }) {
+function MobileNavigation({ onSearch, searchOpen }: {
+  onSearch: (trigger: HTMLButtonElement) => void
+  searchOpen: boolean
+}) {
   const leadingItems = navigationItems.slice(0, 2)
   const trailingItems = navigationItems.slice(2)
 
@@ -214,7 +223,13 @@ function MobileNavigation({ onSearch }: { onSearch: (trigger: HTMLButtonElement)
       {leadingItems.map((item) => (
         <MobileNavigationLink key={item.path} item={item} />
       ))}
-      <button className="mobile-nav-link search-trigger" type="button" onClick={(event) => onSearch(event.currentTarget)}>
+      <button
+        aria-expanded={searchOpen}
+        aria-haspopup="dialog"
+        className="mobile-nav-link search-trigger"
+        type="button"
+        onClick={(event) => onSearch(event.currentTarget)}
+      >
         <Search aria-hidden="true" size={20} strokeWidth={1.8} />
         <span>搜索</span>
       </button>

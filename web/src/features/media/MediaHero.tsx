@@ -2,6 +2,7 @@ import { Star } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import type { MediaDetails, MediaSearchResult, RecordState, TMDBMovieDetails, TMDBTVDetails } from '../../api/types'
+import { mediaImageURL } from '../../lib/mediaImage'
 import { MediaPoster } from './MediaPoster'
 
 type MediaHeroProps = {
@@ -24,6 +25,7 @@ export function MediaHero({ media, record, external, linker }: MediaHeroProps) {
   const releaseDate = liveDate || media.releaseDate
   const posterPath = external?.posterPath || media.posterPath
   const backdropPath = external?.backdropPath || media.backdropPath
+  const backdropURL = mediaImageURL(backdropPath)
   const overview = external?.overview || media.overview || '暂无简介'
   const genres = external?.genres.length ? external.genres : media.genres
   const posterItem: MediaSearchResult = {
@@ -39,9 +41,9 @@ export function MediaHero({ media, record, external, linker }: MediaHeroProps) {
   }
 
   return (
-    <header className={`media-hero${backdropPath ? ' has-backdrop' : ''}`}>
-      {backdropPath ? (
-        <img className="media-hero-backdrop" src={imageURL(backdropPath, 'w1280')} alt={`${title} 背景`} loading="eager" fetchPriority="high" />
+    <header className={`media-hero${backdropURL ? ' has-backdrop' : ''}`}>
+      {backdropURL ? (
+        <img className="media-hero-backdrop" src={backdropURL} alt={`${title} 背景`} loading="eager" fetchPriority="high" />
       ) : null}
       <div className="media-hero-shade" aria-hidden="true" />
       <div className="media-hero-content">
@@ -64,9 +66,4 @@ export function MediaHero({ media, record, external, linker }: MediaHeroProps) {
       </div>
     </header>
   )
-}
-
-function imageURL(path: string, width: 'w1280') {
-  if (/^https?:\/\//.test(path)) return path
-  return `https://image.tmdb.org/t/p/${width}${path}`
 }

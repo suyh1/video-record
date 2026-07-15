@@ -68,12 +68,7 @@ func main() {
 		os.Exit(1)
 	}
 	authService := auth.NewService(auth.NewRepository(db), auth.ServiceOptions{})
-	tmdbClient := tmdb.NewClient(tmdb.ClientOptions{
-		BaseURL: cfg.TMDBAPIBaseURL,
-		Token:   cfg.TMDBReadAccessToken,
-		Cache:   tmdb.NewCache(db, nil),
-		Logger:  logger,
-	})
+	tmdbClient := newTMDBClient(cfg, tmdb.NewCache(db, nil), logger)
 	mediaService := media.NewService(media.NewRepository(db))
 	recordService := records.NewService(records.NewRepository(db))
 	statsService := statsdomain.NewService(statsdomain.NewRepository(db))
@@ -126,6 +121,16 @@ func main() {
 		logger.Error("server stopped", slog.Any("error", err))
 		os.Exit(1)
 	}
+}
+
+func newTMDBClient(cfg config.Config, cache *tmdb.Cache, logger *slog.Logger) *tmdb.Client {
+	return tmdb.NewClient(tmdb.ClientOptions{
+		BaseURL:      cfg.TMDBAPIBaseURL,
+		ImageBaseURL: cfg.TMDBImageBaseURL,
+		Token:        cfg.TMDBReadAccessToken,
+		Cache:        cache,
+		Logger:       logger,
+	})
 }
 
 func newBackupManager(
