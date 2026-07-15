@@ -13,13 +13,17 @@ test('initializes the closed installation and supports a fresh login', async ({ 
   await page.keyboard.press('Tab')
   await expect(page.getByLabel('管理员用户名')).toBeFocused()
   await page.keyboard.press('Tab')
-  await expect(page.getByLabel('管理员密码')).toBeFocused()
+  await expect(page.getByLabel('管理员密码', { exact: true })).toBeFocused()
   await page.keyboard.press('Tab')
-  await expect(page.getByLabel('确认密码')).toBeFocused()
+  await expect(page.getByRole('button', { name: '显示管理员密码' })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(page.getByLabel('确认密码', { exact: true })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('button', { name: '显示确认密码' })).toBeFocused()
 
   await page.getByLabel('管理员用户名').fill(admin.username)
-  await page.getByLabel('管理员密码').fill(admin.password)
-  await page.getByLabel('确认密码').fill(admin.password)
+  await page.getByLabel('管理员密码', { exact: true }).fill(admin.password)
+  await page.getByLabel('确认密码', { exact: true }).fill(admin.password)
   await page.getByRole('button', { name: '创建管理员' }).click()
 
   await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible()
@@ -41,11 +45,11 @@ test('initializes the closed installation and supports a fresh login', async ({ 
   await expect(page.getByLabel('用户名')).toBeFocused()
 
   await page.getByLabel('用户名').fill(admin.username)
-  await page.getByLabel('密码').fill('wrong-synthetic-password')
+  await page.getByLabel('密码', { exact: true }).fill('wrong-synthetic-password')
   await page.getByRole('button', { name: '登录' }).click()
   await expect(page.getByRole('alert')).toContainText('用户名或密码不正确')
 
-  await page.getByLabel('密码').fill(admin.password)
+  await page.getByLabel('密码', { exact: true }).fill(admin.password)
   await page.getByRole('button', { name: '登录' }).click()
   await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible()
 
