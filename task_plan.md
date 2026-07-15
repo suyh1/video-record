@@ -254,7 +254,7 @@
 - [x] Task 10：影库、片单栏与搜索体验
 - [x] Task 11：详情页代理图片与视觉层次
 - [x] Task 12：日历、统计、设置与统一状态
-- [ ] Task 13：全站视觉、网络、无障碍与最终验证
+- [x] Task 13：全站视觉、网络、无障碍与最终验证
 
 ### 本轮约束
 
@@ -280,3 +280,5 @@
 - Task 13 首轮规格复审发现 1 个 Important：影库步骤只统计海报容器，没有等待可见图片解码；补强断言后进一步暴露真实导入种子不含图片快照，需先经受保护的后端 TMDB 关联接口刷新媒体，再验证浏览器只加载签名同源海报。
 - Task 13 首轮质量复审发现 2 个 Important：全局代理请求断言不能证明四页各自目标图片走代理，且合成 TMDB 上游未列入浏览器禁连源；发布清单把 27 项专项子集误记为完整 E2E，实际 Playwright 配置为 36 项。另有永久 sessionStorage 清理脚本的 Minor，一并移除。
 - 用 `npm --prefix web exec playwright test -- --list` 统计 E2E 时参数位置错误，Playwright 未读取 `web/playwright.config.ts` 并误收集 Vitest 文件；没有文件变化，改为在 `web` 工作目录运行 `npx playwright test --list`，正确得到 10 文件 36 项。
+- Task 13 最终质量复审在 `d4bd28a` 后无 Critical/Important/Minor；主控全量 Go race/vet、227 项 Vitest、36 项 Playwright、静态/构建/API/文档/检测器门禁全部通过，Task 13 完成。
+- `planning-with-files` 通用完成脚本不识别本仓库的中文阶段/Task 自定义清单，返回 `0/0 phases` 提示但退出 0；以本节 13 项逐项勾选和实际门禁记录作为完成依据。

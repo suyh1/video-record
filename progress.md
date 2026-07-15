@@ -593,3 +593,5 @@
 - Task 13 根因修正不改生产代码：旅程使用登录所得 CSRF 和幂等键，经后端 TMDB 关联接口刷新两条种子媒体，再访问影库逐张等待签名同源海报解码；先以强制 503 取得预期 RED，撤销故障注入后真实缺图仍 RED，加入后端刷新后依赖链 `14/14` GREEN。
 - Task 13 修复提交 `011ffe3` 的规格复审通过，无 Critical/Important/Minor；首轮最终质量复审随后指出两个 Important：四页图片缺少逐元素签名代理证明、合成上游未禁连，以及发布清单完整 E2E 数应为 36 而非专项 27；sessionStorage 永久清理 Minor 同步处理。
 - 第二轮代理负向控制把影库首张海报临时改成合成上游直链，新逐图 helper 以 origin `18082 != 15173` 准确 RED；撤销故障注入后登录、首页、两张影库海报和详情 backdrop 均逐项验证 decode、本站 origin、签名路径、expires、signature 与 200，依赖链 `14/14` GREEN。
+- Task 13 最终质量复审无 Critical/Important/Minor；主控新鲜验证通过：`go test ./... -race -count=1`、Go vet、38 文件 Vitest `227/227`、完整 Playwright `36/36`、lint、typecheck、production build、API 漂移、文档验收和 `git diff --check`。
+- 最终娱乐化 UI 快照矩阵精确为 48 张，Impeccable detector 返回 `[]`；`b3a0576..d4bd28a` 仅包含 E2E、快照和文档/跟踪文件，无生产或后端改动，外部发布授权继续保持未勾选。
