@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CircleAlert, CircleCheck, Clapperboard, Database, LoaderCircle, LogIn, UserRoundPlus } from 'lucide-react'
+import { CircleAlert, CircleCheck, Database, LoaderCircle, LogIn, UserRoundPlus } from 'lucide-react'
 import { type FormEvent, type ReactNode, useState } from 'react'
 
 import {
@@ -10,6 +10,7 @@ import {
   loginUser,
 } from '../../api/client'
 import type { CurrentUser, SetupStatus } from '../../api/types'
+import { BrandMark } from '../../app/BrandMark'
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
@@ -161,7 +162,7 @@ function LoginPage({ onAuthenticated }: { onAuthenticated: (user: CurrentUser) =
 function AuthBrand() {
   return (
     <div className="auth-brand" aria-label="video-record">
-      <Clapperboard aria-hidden="true" size={22} strokeWidth={1.8} />
+      <BrandMark size={22} />
       <span>video-record</span>
     </div>
   )

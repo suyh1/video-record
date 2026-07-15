@@ -19,6 +19,7 @@ describe('App', () => {
 
     expect(await screen.findByRole('navigation', { name: '主导航' })).toBeVisible()
     expect(screen.getByRole('searchbox', { name: '搜索影视' })).toBeVisible()
+    expect(document.querySelectorAll('[data-brand-mark="film-archive"]')).toHaveLength(2)
   })
 
   it('shows TMDB attribution on the settings page', async () => {

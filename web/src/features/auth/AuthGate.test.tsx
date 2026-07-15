@@ -22,6 +22,7 @@ describe('AuthGate', () => {
     renderWithQueryClient(<AuthGate><p>私人影库已打开</p></AuthGate>)
 
     expect(await screen.findByRole('heading', { name: '开始使用 video-record' })).toBeVisible()
+    expect(document.querySelector('[data-brand-mark="film-archive"]')).toBeInTheDocument()
     expect(screen.getByText('数据存储已就绪')).toBeVisible()
     expect(screen.getByText('TMDB 尚未配置')).toBeVisible()
 

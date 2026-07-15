@@ -2,7 +2,6 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import {
   BarChart3,
   CalendarDays,
-  Clapperboard,
   Home,
   LibraryBig,
   Plus,
@@ -15,6 +14,7 @@ import { BrowserRouter, NavLink, Route, Routes, useNavigate } from 'react-router
 
 import { createMediaFromTMDB, getSetupStatus } from '../api/client'
 import type { MediaSearchResult } from '../api/types'
+import { BrandMark } from './BrandMark'
 import { CalendarPage } from '../features/calendar/CalendarPage'
 import { AuthGate } from '../features/auth/AuthGate'
 import { HomePage } from '../features/home/HomePage'
@@ -104,7 +104,7 @@ function ApplicationShell() {
       <div className="app-column">
         <header className="topbar">
           <div className="mobile-brand" aria-hidden="true">
-            <Clapperboard size={22} strokeWidth={1.8} />
+            <BrandMark size={22} />
           </div>
           <form className="global-search" role="search" onSubmit={submitSearch}>
             <Search aria-hidden="true" size={18} strokeWidth={1.8} />
@@ -147,7 +147,7 @@ function Brand() {
   return (
     <div className="brand" aria-label="video-record">
       <span className="brand-mark" aria-hidden="true">
-        <Clapperboard size={22} strokeWidth={1.8} />
+        <BrandMark size={22} />
       </span>
       <span className="brand-name">video-record</span>
     </div>
