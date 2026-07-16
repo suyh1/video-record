@@ -178,9 +178,10 @@ func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
 		Title: "测试不可信 TMDB 海报", PosterPath: "https://cdn.example.test/untrusted-library.jpg",
 	})
 	require.NoError(t, err)
+	userID := currentUserID(t, router, cookie)
 	_, err = recordService.UpdateRound(context.Background(), records.UpdateRoundInput{
 		Scope: records.RoundScope{
-			UserID: currentUserID(t, router, cookie), MediaID: untrustedTMDBItem.ID,
+			UserID: userID, MediaID: untrustedTMDBItem.ID,
 		},
 		Status: records.StatusWishlist, Source: records.SourceManual, ExpectedVersion: 0,
 	})
@@ -232,6 +233,13 @@ func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
 		Title: "测试非法海报", PosterPath: "/nested/invalid.jpg",
 	})
 	require.NoError(t, err)
+	for _, itemID := range []string{absoluteItem.ID, invalidItem.ID} {
+		_, err = recordService.UpdateRound(context.Background(), records.UpdateRoundInput{
+			Scope: records.RoundScope{UserID: userID, MediaID: itemID},
+			Status: records.StatusWishlist, Source: records.SourceManual, ExpectedVersion: 0,
+		})
+		require.NoError(t, err)
+	}
 
 	search := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/media/search?q=测试", nil, map[string]string{
 		"Cookie": cookie.String(),
@@ -243,7 +251,7 @@ func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
 		Items []catalogItemResponse `json:"items"`
 	}
 	require.NoError(t, json.Unmarshal(search.Body.Bytes(), &searchBody))
-	require.Len(t, searchBody.Items, 5)
+	require.Len(t, searchBody.Items, 4)
 	itemsByTitle := make(map[string]catalogItemResponse, len(searchBody.Items))
 	for _, item := range searchBody.Items {
 		itemsByTitle[item.Title] = item
@@ -252,7 +260,8 @@ func TestRecordReadLibraryAndLocalSearchSupportTheUI(t *testing.T) {
 	requireSignedTMDBImageURL(t, *itemsByTitle["测试电影"].PosterPath, "w342", "library.jpg")
 	require.NotNil(t, itemsByTitle["测试不可信 TMDB 海报"].TMDBID)
 	require.Nil(t, itemsByTitle["测试不可信 TMDB 海报"].PosterPath)
-	require.Nil(t, itemsByTitle["测试空海报"].PosterPath)
+	_, containsUnrecordedItem := itemsByTitle["测试空海报"]
+	require.False(t, containsUnrecordedItem)
 	require.NotNil(t, itemsByTitle["测试绝对海报"].PosterPath)
 	require.Equal(t, "https://cdn.example.test/custom-library.jpg", *itemsByTitle["测试绝对海报"].PosterPath)
 	require.Nil(t, itemsByTitle["测试非法海报"].PosterPath)

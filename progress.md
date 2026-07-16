@@ -624,3 +624,11 @@
 - 旧 backdrop 单色契约已迁移：backdrop 只负责 loading/ready/failed，失败不再清空海报调色板；Hero 本身不持有 `--media-accent`。
 - 整页 CSS 以三层线性颜色场扩展到沉浸式内容边缘和底部，light/dark 使用不同低强度混色；记录面板轻透底色但无 blur/glass，移动端覆盖底栏安全区。
 - Task 5 验证：媒体 7 文件 40 项测试、typecheck、lint 与 `git diff --check` 全部通过。
+- Task 6 首轮：Go vet、39 文件 239 项 Vitest、lint、production build、OpenAPI 漂移与 Impeccable detector `[]` 通过；全仓 race 在 HTTP 本地搜索旧 5 项预期失败，其他包通过。
+- Task 6 HTTP 定向 race 在修正夹具顺序后通过；第二轮 `go test ./... -race -count=1` 全仓通过，`httpapi` 171.8 秒完成。
+- 首轮完整 Playwright 34/36 通过、1 失败、recovery 未运行；唯一失败是 200% 搜索旅程仍期待旧 TMDB import 失败 alert，新产品已正确进入只读预览。
+- 更新 200% 键盘旅程后，标准 `npm --prefix web run e2e` 36/36 通过；远端结果进入 `/tmdb/movie/9001`，导入 POST 计数保持 0。
+- 应用内浏览器使用独立临时数据库验证：打开 `/tmdb/movie/2002` 前后 `media_items/user_media_profiles/watch_rounds` 均为 0，后端日志只有详情、演员和签名图片 GET；海报、头图和演员图自然尺寸均非零且来源为本站签名代理。
+- 真实浏览器首次暴露低饱和合成海报被全部过滤并退回单品牌色；按 TDD 将可用色度阈值从 `0.04` 调整为 `0.012`，同时移除可能覆盖缓存海报采样的挂载清空。浏览器随后得到暖棕、青绿、紫蓝三种不同 OKLCH 色，修复提交为 `8811867`。
+- 显式点击“想看 → 保存记录”后临时数据库才变为 1 个媒体、1 个 Profile、1 个手动 wishlist 轮次；跳转后的本地详情在桌面和移动端将同一组三色渐变覆盖至记录/多刷区域和文档底部。
+- 最终新鲜验证通过：`go test ./... -race -count=1`、Go vet、39 文件 241 项 Vitest、lint、production build、OpenAPI 漂移、完整 Playwright 36/36 与 `git diff --check`；桌面/移动端页面宽度等于视口且控制台无 warning/error。

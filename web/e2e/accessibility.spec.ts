@@ -265,6 +265,7 @@ test('resets new route scroll state while preserving browser back restoration', 
 })
 
 test('keeps the library and grouped search usable by keyboard at 200% zoom', async ({ page }) => {
+  let importRequests = 0
   await page.route('**/api/v1/tmdb/search*', (route) => route.fulfill({
     contentType: 'application/json',
     json: {
@@ -279,10 +280,33 @@ test('keeps the library and grouped search usable by keyboard at 200% zoom', asy
     },
     status: 200,
   }))
-  await page.route('**/api/v1/media/tmdb/movie/9001', (route) => route.fulfill({
+  await page.route('**/api/v1/media/tmdb/movie/9001', (route) => {
+    importRequests += 1
+    return route.fulfill({
+      contentType: 'application/json',
+      json: { code: 'unexpected_write', requestId: 'search-preview-e2e' },
+      status: 500,
+    })
+  })
+  await page.route('**/api/v1/tmdb/movie/9001', (route) => route.fulfill({
     contentType: 'application/json',
-    json: { code: 'synthetic_failure', requestId: 'search-focus-e2e' },
-    status: 502,
+    json: {
+      id: 9001,
+      title: '远端影片',
+      originalTitle: 'Remote Film',
+      releaseDate: '2026-01-01',
+      posterPath: '',
+      backdropPath: '',
+      overview: '只读远端详情。',
+      runtime: 105,
+      genres: ['剧情'],
+    },
+    status: 200,
+  }))
+  await page.route('**/api/v1/tmdb/movie/9001/credits', (route) => route.fulfill({
+    contentType: 'application/json',
+    json: { cast: [] },
+    status: 200,
   }))
   await login(page)
   await page.setViewportSize({ width: 640, height: 800 })
@@ -329,14 +353,11 @@ test('keeps the library and grouped search usable by keyboard at 200% zoom', asy
   await page.keyboard.press('ArrowDown')
   await expect(remoteResult).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(dialog.getByRole('alert')).toContainText('无法打开这个结果')
-  await expect(dialog).toBeVisible()
-  await expect(remoteResult).toBeFocused()
-  await expect(remoteResult).toHaveAttribute('aria-disabled', 'false')
-  await page.keyboard.press('ArrowUp')
-  await expect(localResult).toBeFocused()
-  await page.keyboard.press('Enter')
-  await expect(page).toHaveURL(/\/media\/e2e-movie$/)
+  await expect(dialog).toBeHidden()
+  await expect(page).toHaveURL(/\/tmdb\/movie\/9001$/)
+  await expect(page.getByRole('heading', { level: 1, name: '远端影片' })).toBeVisible()
+  expect(importRequests).toBe(0)
+  await expectNoHorizontalOverflow(page)
 })
 
 test('keeps real loading skeletons visible in light and dark themes', async ({ page }) => {
