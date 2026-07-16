@@ -1,5 +1,5 @@
 import { Star } from 'lucide-react'
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useState } from 'react'
 
 import type { MediaDetails, MediaSearchResult, RecordState, TMDBMovieDetails, TMDBTVDetails } from '../../api/types'
 import { type MediaPalette, sampleMediaPalette } from '../../lib/mediaAccent'
@@ -27,10 +27,8 @@ export function MediaHero({ media, record, external, linker, onPaletteChange }: 
   const releaseDate = liveDate || media.releaseDate
   const posterPath = external?.posterPath || media.posterPath
   const backdropPath = external?.backdropPath || media.backdropPath
-  const posterURL = mediaImageURL(posterPath)
   const backdropURL = mediaImageURL(backdropPath)
   const backdropIdentity = `${media.id}:${title}:${backdropURL ?? ''}`
-  const posterIdentity = `${media.id}:${title}:${posterURL ?? ''}`
   const [failedBackdrop, setFailedBackdrop] = useState<string | null>(null)
   const [loadedBackdrop, setLoadedBackdrop] = useState<string | null>(null)
   const backdropFailed = failedBackdrop === backdropIdentity
@@ -48,10 +46,6 @@ export function MediaHero({ media, record, external, linker, onPaletteChange }: 
     posterPath,
     status: record.status,
   }
-
-  useEffect(() => {
-    onPaletteChange?.(null)
-  }, [onPaletteChange, posterIdentity])
 
   return (
     <header

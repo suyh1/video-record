@@ -109,6 +109,18 @@ describe('selectMediaPalette', () => {
     ))).toEqual(palette)
   })
 
+  it('keeps a restrained three-color palette for muted cinematic artwork', () => {
+    const palette = selectMediaPalette(pixels(
+      [78, 76, 73, 255],
+      [104, 100, 95, 255],
+      [128, 122, 115, 255],
+      [150, 143, 134, 255],
+    ))
+
+    expect(palette?.colors).toHaveLength(3)
+    expect(new Set(palette?.colors).size).toBe(3)
+  })
+
   it('returns null when no chromatic pixels are usable', () => {
     expect(selectMediaPalette(pixels(
       [72, 72, 72, 255],

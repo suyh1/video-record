@@ -45,6 +45,21 @@ describe('TMDB-backed media images', () => {
     expect(container.querySelector<HTMLElement>('.media-hero')!.style.getPropertyValue('--media-accent')).toBe('')
   })
 
+  it('does not clear the page palette while a cached poster load is being delivered', () => {
+    const onPaletteChange = vi.fn()
+
+    render(
+      <MediaHero
+        media={{ ...media, posterPath: posterURL, backdropPath: backdropURL }}
+        record={record}
+        linker={null}
+        onPaletteChange={onPaletteChange}
+      />,
+    )
+
+    expect(onPaletteChange).not.toHaveBeenCalled()
+  })
+
   it('keeps signed same-origin image proxy URLs unchanged', () => {
     const { container } = render(
       <MediaHero
@@ -122,8 +137,7 @@ describe('TMDB-backed media images', () => {
     expect(container.querySelector('.media-hero-backdrop')).not.toBeInTheDocument()
     expect(hero).not.toHaveClass('has-backdrop')
     expect(hero).toHaveAttribute('data-backdrop-state', 'failed')
-    expect(onPaletteChange).toHaveBeenCalledTimes(1)
-    expect(onPaletteChange).toHaveBeenLastCalledWith(null)
+    expect(onPaletteChange).not.toHaveBeenCalled()
   })
 
   it('reports a fallback when poster sampling is blocked', () => {

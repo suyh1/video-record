@@ -22,6 +22,7 @@ export type MediaPalette = {
 
 const SAMPLE_WIDTH = 24
 const SAMPLE_HEIGHT = 14
+const MINIMUM_SAMPLE_CHROMA = 0.012
 const MINIMUM_PALETTE_DISTANCE = 0.08
 
 export function selectMediaAccent(pixels: Uint8ClampedArray): string | null {
@@ -37,7 +38,7 @@ export function selectMediaPalette(pixels: Uint8ClampedArray): MediaPalette | nu
 
     const sample = rgbToOKLab(pixels[index]!, pixels[index + 1]!, pixels[index + 2]!)
     const chroma = Math.hypot(sample.a, sample.b)
-    if (sample.lightness < 0.18 || sample.lightness > 0.94 || chroma < 0.04) continue
+    if (sample.lightness < 0.18 || sample.lightness > 0.94 || chroma < MINIMUM_SAMPLE_CHROMA) continue
 
     const hue = normalizeHue(Math.atan2(sample.b, sample.a) * 180 / Math.PI)
     const key = `${Math.floor(hue / 30)}:${Math.floor(sample.lightness / 0.08)}:${Math.floor(chroma / 0.05)}`
