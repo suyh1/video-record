@@ -77,4 +77,23 @@ test('initializes the closed installation and supports a fresh login', async ({ 
 
   const status = await page.context().request.get(`${baseURL}/api/v1/setup/status`)
   await expect(status.json()).resolves.toMatchObject({ initialized: true })
+
+  await page.evaluate(() => window.sessionStorage.clear())
+  await page.goto('/settings')
+  await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible()
+  expect(await page.evaluate(() => window.sessionStorage.getItem('video-record.csrf-token'))).toBeNull()
+
+  const logoutResponse = page.waitForResponse((response) => (
+    new URL(response.url()).pathname === '/api/v1/auth/logout'
+      && response.request().method() === 'POST'
+  ))
+  await page.getByRole('button', { name: '退出登录' }).click()
+  expect((await logoutResponse).status()).toBe(204)
+  await expect(page.getByRole('heading', { name: '登录 video-record' })).toBeVisible()
+  expect((await page.context().cookies()).some((cookie) => cookie.name === 'video_record_session')).toBe(false)
+
+  await page.getByLabel('用户名').fill(admin.username)
+  await page.getByLabel('密码', { exact: true }).fill(admin.password)
+  await page.getByRole('button', { name: '登录' }).click()
+  await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible()
 })
