@@ -682,3 +682,25 @@
 - 应用内浏览器使用独立临时数据库和 250ms 合成上游延迟完成 6 次详情刷新；每轮均为 `loaded=5,total=5,proxyCount=5,failed=[]`，每轮签名过期时间不同，浏览器 warning/error 日志为 0。
 - 最后一轮后端日志精确包含 5 个详情图片请求，状态均为 200，未出现 429；海报、头图和三名有头像演员全部经过签名同源代理。
 - 根因修复、回归覆盖、全仓门禁、标准 E2E 和重复真实刷新均有新鲜证据，详情图片并发缺失任务可以完成收尾。
+
+## 2026-07-16 登录与退出故障发现
+
+- 用户报告：当前浏览器已登录但退出失败；换浏览器后，已注册管理员登录失败。
+- 两个页面都显示连接类错误文案，优先调查请求是否到达服务端及认证边界是否共享同一错误。
+- 尚未修改业务代码，需先稳定复现并取得网络/服务端证据。
+- 当前为 `main`，HEAD `7a56277`；业务代码无未提交改动，只有本轮三个跟踪文件变化。
+- 本机 video-record 容器实际入口是 `http://127.0.0.1:18080`，初始化和存储均就绪；`8080` 属于另一个项目，不能用于本轮复现。
+- `video-record-preview` 的现有日志只有 7 月 14 日一次成功登录，7 月 16 日没有截图对应的 `/auth/login`、`/auth/logout` 或 `/auth/me` 请求；截图流量没有到达这个实例。
+- `RequireSameOrigin` 仅用 `r.TLS` 推断协议。HTTPS 在反向代理终止而 Go 后端收到 HTTP 时，正常 `Origin: https://...` 会被拒为 `403 invalid_origin`；登录页把该已知 API 错误泛化为“请检查连接”。
+- 已登录状态由 HttpOnly cookie 恢复，但退出额外依赖 `sessionStorage` 中的 CSRF token。若浏览器恢复持久 cookie 而未恢复该标签页存储，`/auth/me` 可成功、`/auth/logout` 会稳定返回 `403 invalid_csrf`。
+- 下一步需确认截图入口是直连 HTTP、Vite 开发地址还是 HTTPS 反向代理；这决定两个症状是否由同源协议判断统一解释。
+- Task 1 RED 已确认：合法 `Forwarded` 和 `X-Forwarded-Proto` HTTPS 登录均返回 `403`；非法/冲突协议、错误 Host、缺失 Origin 继续返回 `403`，直连 TLS 登录保持 `200`。
+- Task 2 RED 已确认：有效 cookie 但缺少标签页 CSRF 时退出返回 `403`；已撤销 cookie 和无 cookie 时退出均返回 `401`。
+- Task 3 RED 已确认三层契约差距：OpenAPI 仍声明退出 CSRF、仍继承全局会话认证，前端在无标签页状态时仍发送空 CSRF 头。
+- Task 1 GREEN：直连 TLS、`Forwarded` 和 `X-Forwarded-Proto` 三条合法路径通过；两个代理头冲突、非法协议、错误 Host 和缺失 Origin 继续稳定拒绝，Host 从未由代理头改写。
+- Task 2 GREEN：有效、已撤销和缺失会话 cookie 的同源退出都返回 `204` 并下发 `MaxAge=-1` 的同路径 cookie；跨站和缺失 Origin 仍返回 `403`，有效会话确实在数据库撤销。
+- Task 3 GREEN：退出显式 `security: []` 且没有 CSRF 参数，前端不读取或发送标签页 CSRF；其余受保护写路由仍由合约表逐一要求 CSRF 和幂等键。
+- 新 E2E 在真实 Chromium 中先清空 `sessionStorage`、保留 HttpOnly cookie 并刷新设置页，随后验证退出 `204`、cookie 消失、登录页出现和再次登录成功。
+- 新鲜全仓结果：Go race 全部通过（HTTP API 192.576 秒、records 80.596 秒）；Go vet 无输出；Vitest 39/39 文件、242/242 项通过；lint、typecheck、build 和 API 漂移通过；Playwright 37/37 通过（2.3 分钟）。
+- 当前源码实时链路状态为 `setup 201 → login 200 → me 200 → logout-no-csrf 204 → me 401 → login 200`；HTTPS Origin + `X-Forwarded-Proto: https` 探针已进入凭据校验并返回 `401 invalid_credentials`，不再被 `403 invalid_origin` 提前拦截。
+- 最终本地安全审查覆盖 `7a56277..76f9d68`，未发现 Critical、Important 或 Minor；未使用子代理，因为用户要求直接在 `main` 工作且未授权子代理。
