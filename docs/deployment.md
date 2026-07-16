@@ -89,12 +89,13 @@ docker compose up -d
 生产部署应只把反向代理暴露到不受信任网络，并在 Compose 中把 `APP_COOKIE_SECURE` 改为 `"true"`。代理必须：
 
 - 保留原始 `Host` 与 `Origin`
+- 设置 `Forwarded: proto=https` 或 `X-Forwarded-Proto: https`；两个头同时存在时必须一致
 - 转发到 `video-record:8080` 或宿主机发布端口
 - 使用 HTTPS 并把 HTTP 重定向到 HTTPS
 - 不缓存 `/api/` 响应
 - 允许备份恢复上传和最长 30 秒的应用响应时间
 
-应用会校验写请求的 Origin 与 CSRF token。反向代理改写 Origin 或跨域嵌入会导致写请求被拒绝。
+应用只接受 `http` 或 `https` 代理协议，并会拒绝冲突值。写请求继续校验 Origin 与 CSRF token；反向代理改写 Origin、遗漏原始 HTTPS 协议或跨域嵌入会导致写请求被拒绝。
 
 ## 发布镜像部署
 

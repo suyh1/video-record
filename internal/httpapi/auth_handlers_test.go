@@ -86,6 +86,82 @@ func TestLoginSetsOpaqueSessionCookieWithConditionalSecurity(t *testing.T) {
 	}
 }
 
+func TestLoginAcceptsHTTPSOriginForwardedByProxy(t *testing.T) {
+	tests := map[string]map[string]string{
+		"forwarded": {
+			"Origin":    "https://example.test",
+			"Forwarded": `for=192.0.2.1;proto="https", for=172.18.0.1;proto=http`,
+		},
+		"x-forwarded-proto": {
+			"Origin":            "https://example.test",
+			"X-Forwarded-Proto": "https, http",
+		},
+	}
+	for name, headers := range tests {
+		t.Run(name, func(t *testing.T) {
+			router, service := newAuthTestRouter(t, true)
+			_, err := service.Initialize(context.Background(), "owner", "correct horse battery staple")
+			require.NoError(t, err)
+
+			response := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/auth/login", map[string]string{
+				"username": "owner",
+				"password": "correct horse battery staple",
+			}, headers)
+
+			require.Equal(t, http.StatusOK, response.Code)
+		})
+	}
+}
+
+func TestLoginRejectsInvalidForwardedOrigin(t *testing.T) {
+	tests := map[string]map[string]string{
+		"conflicting proxy protocols": {
+			"Origin":            "https://example.test",
+			"Forwarded":         "for=192.0.2.1;proto=https",
+			"X-Forwarded-Proto": "http",
+		},
+		"unsupported proxy protocol": {
+			"Origin":            "https://example.test",
+			"X-Forwarded-Proto": "websocket",
+		},
+		"wrong origin host": {
+			"Origin":            "https://attacker.test",
+			"X-Forwarded-Proto": "https",
+		},
+		"missing origin": {
+			"X-Forwarded-Proto": "https",
+		},
+	}
+	for name, headers := range tests {
+		t.Run(name, func(t *testing.T) {
+			router, service := newAuthTestRouter(t, true)
+			_, err := service.Initialize(context.Background(), "owner", "correct horse battery staple")
+			require.NoError(t, err)
+
+			response := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/auth/login", map[string]string{
+				"username": "owner",
+				"password": "correct horse battery staple",
+			}, headers)
+
+			require.Equal(t, http.StatusForbidden, response.Code)
+			require.Contains(t, response.Body.String(), `"code":"invalid_origin"`)
+		})
+	}
+}
+
+func TestLoginAcceptsMatchingDirectTLSOrigin(t *testing.T) {
+	router, service := newAuthTestRouter(t, true)
+	_, err := service.Initialize(context.Background(), "owner", "correct horse battery staple")
+	require.NoError(t, err)
+
+	response := performJSONRequest(router, http.MethodPost, "https://example.test/api/v1/auth/login", map[string]string{
+		"username": "owner",
+		"password": "correct horse battery staple",
+	}, map[string]string{"Origin": "https://example.test"})
+
+	require.Equal(t, http.StatusOK, response.Code)
+}
+
 func TestCSRFAndOriginProtectLogout(t *testing.T) {
 	router, service := newAuthTestRouter(t, false)
 	_, err := service.Initialize(context.Background(), "owner", "correct horse battery staple")
