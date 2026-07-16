@@ -104,13 +104,15 @@ func (handlers authHandlers) login(w http.ResponseWriter, r *http.Request) {
 
 func (handlers authHandlers) logout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(SessionCookieName)
-	if err != nil {
-		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
-		return
-	}
-	if err := handlers.service.Revoke(r.Context(), cookie.Value); err != nil {
+	if err != nil && !errors.Is(err, http.ErrNoCookie) {
 		writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
 		return
+	}
+	if err == nil && cookie.Value != "" {
+		if err := handlers.service.Revoke(r.Context(), cookie.Value); err != nil {
+			writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
+			return
+		}
 	}
 	expired := handlers.sessionCookie("", time.Unix(1, 0).UTC())
 	expired.MaxAge = -1

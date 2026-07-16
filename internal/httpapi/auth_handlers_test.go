@@ -162,41 +162,58 @@ func TestLoginAcceptsMatchingDirectTLSOrigin(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 }
 
-func TestCSRFAndOriginProtectLogout(t *testing.T) {
+func TestLogoutRequiresSameOriginWithoutDependingOnCSRF(t *testing.T) {
 	router, service := newAuthTestRouter(t, false)
 	_, err := service.Initialize(context.Background(), "owner", "correct horse battery staple")
 	require.NoError(t, err)
-	cookie, csrfToken := loginForHTTPTest(t, router)
+	cookie, _ := loginForHTTPTest(t, router)
 
 	withoutOrigin := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/auth/logout", nil, map[string]string{
 		"Cookie": cookie.String(),
 	})
 	require.Equal(t, http.StatusForbidden, withoutOrigin.Code)
 
-	withoutCSRF := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/auth/logout", nil, map[string]string{
-		"Cookie": cookie.String(),
-		"Origin": "http://example.test",
-	})
-	require.Equal(t, http.StatusForbidden, withoutCSRF.Code)
-
 	wrongOrigin := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/auth/logout", nil, map[string]string{
-		"Cookie":       cookie.String(),
-		"Origin":       "https://attacker.test",
-		"X-CSRF-Token": csrfToken,
+		"Cookie": cookie.String(),
+		"Origin": "https://attacker.test",
 	})
 	require.Equal(t, http.StatusForbidden, wrongOrigin.Code)
 
 	logout := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/auth/logout", nil, map[string]string{
-		"Cookie":       cookie.String(),
-		"Origin":       "http://example.test",
-		"X-CSRF-Token": csrfToken,
+		"Cookie": cookie.String(),
+		"Origin": "http://example.test",
 	})
 	require.Equal(t, http.StatusNoContent, logout.Code)
+	require.Len(t, logout.Result().Cookies(), 1)
+	expired := logout.Result().Cookies()[0]
+	require.Equal(t, SessionCookieName, expired.Name)
+	require.Empty(t, expired.Value)
+	require.Equal(t, "/", expired.Path)
+	require.Equal(t, -1, expired.MaxAge)
 
-	me := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/auth/me", nil, map[string]string{
-		"Cookie": cookie.String(),
-	})
-	require.Equal(t, http.StatusUnauthorized, me.Code)
+	_, err = service.Authenticate(context.Background(), cookie.Value)
+	require.ErrorIs(t, err, auth.ErrInvalidSession)
+}
+
+func TestLogoutIsIdempotentWithoutAnActiveSession(t *testing.T) {
+	router, service := newAuthTestRouter(t, false)
+	_, err := service.Initialize(context.Background(), "owner", "correct horse battery staple")
+	require.NoError(t, err)
+	cookie, _ := loginForHTTPTest(t, router)
+	require.NoError(t, service.Revoke(context.Background(), cookie.Value))
+
+	for name, headers := range map[string]map[string]string{
+		"revoked cookie": {"Cookie": cookie.String(), "Origin": "http://example.test"},
+		"missing cookie": {"Origin": "http://example.test"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			logout := performJSONRequest(router, http.MethodPost, "http://example.test/api/v1/auth/logout", nil, headers)
+
+			require.Equal(t, http.StatusNoContent, logout.Code)
+			require.Len(t, logout.Result().Cookies(), 1)
+			require.Equal(t, -1, logout.Result().Cookies()[0].MaxAge)
+		})
+	}
 }
 
 func newAuthTestRouter(t *testing.T, cookieSecure bool) (http.Handler, *auth.Service) {

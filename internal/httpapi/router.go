@@ -61,6 +61,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 			api.Get("/setup/status", handlers.setupStatus)
 			api.With(RequireSameOrigin).Post("/setup/admin", handlers.initialize)
 			api.With(RequireSameOrigin).Post("/auth/login", handlers.login)
+			api.With(RequireSameOrigin).Post("/auth/logout", handlers.logout)
 			if dependencies.TMDB != nil {
 				publicTMDB := publicTMDBHandlers{
 					client:        dependencies.TMDB,
@@ -82,7 +83,6 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protectedWriteMiddleware = append(protectedWriteMiddleware, idempotency.Handle)
 				}
 				protected.Get("/auth/me", handlers.me)
-				protected.With(RequireSameOrigin, RequireCSRF(dependencies.Auth)).Post("/auth/logout", handlers.logout)
 				if dependencies.IntegrationAccounts != nil {
 					integrationAPI := integrationHandlers{
 						accounts: dependencies.IntegrationAccounts,
