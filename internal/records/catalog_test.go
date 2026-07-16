@@ -26,6 +26,10 @@ func TestCatalogLibrarySearchAndUserIsolation(t *testing.T) {
 		MediaType: media.MediaTypeMovie, Title: "100%_电影", Year: "2026",
 	})
 	require.NoError(t, err)
+	orphanItem, err := mediaService.UpsertExternal(ctx, media.ExternalSnapshot{
+		Source: "tmdb", SourceID: "998877", MediaType: media.MediaTypeMovie, Title: "仅浏览的 TMDB 电影",
+	})
+	require.NoError(t, err)
 	secondUserID := insertTestUser(t, db, "catalog-second")
 
 	_, err = service.UpdateRound(ctx, UpdateRoundInput{
@@ -67,10 +71,34 @@ func TestCatalogLibrarySearchAndUserIsolation(t *testing.T) {
 	require.Equal(t, StatusDropped, secondSearch[0].Status)
 	symbolSearch, err := service.SearchMedia(ctx, firstUserID, "%_")
 	require.NoError(t, err)
+	require.Empty(t, symbolSearch)
+	orphanSearch, err := service.SearchMedia(ctx, firstUserID, "仅浏览的 TMDB 电影")
+	require.NoError(t, err)
+	require.Empty(t, orphanSearch)
+
+	_, err = service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: firstUserID, MediaID: symbolItem.ID}, Status: StatusWishlist,
+		Source: SourceManual, ExpectedVersion: 0,
+	})
+	require.NoError(t, err)
+	_, err = service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: firstUserID, MediaID: orphanItem.ID}, Status: StatusWishlist,
+		Source: SourceManual, ExpectedVersion: 0,
+	})
+	require.NoError(t, err)
+
+	symbolSearch, err = service.SearchMedia(ctx, firstUserID, "%_")
+	require.NoError(t, err)
 	require.Len(t, symbolSearch, 1)
 	require.Equal(t, symbolItem.ID, symbolSearch[0].ID)
-	require.Equal(t, StatusNone, symbolSearch[0].Status)
+	require.Equal(t, StatusWishlist, symbolSearch[0].Status)
 	require.Nil(t, symbolSearch[0].TMDBID)
+	orphanSearch, err = service.SearchMedia(ctx, firstUserID, "仅浏览的 TMDB 电影")
+	require.NoError(t, err)
+	require.Len(t, orphanSearch, 1)
+	require.Equal(t, orphanItem.ID, orphanSearch[0].ID)
+	require.NotNil(t, orphanSearch[0].TMDBID)
+	require.Equal(t, 998877, *orphanSearch[0].TMDBID)
 }
 
 func TestMediaProfileProjectsWatchingThenLatestSeasonStatus(t *testing.T) {

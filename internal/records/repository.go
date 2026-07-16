@@ -232,12 +232,13 @@ func (repository *SQLiteRepository) SearchMedia(ctx context.Context, userID, que
 		SELECT media.id, media.media_type,
 		       COALESCE(media.custom_title, media.external_title), media.original_title,
 		       SUBSTR(COALESCE(NULLIF(media.release_date, ''), media.custom_year, ''), 1, 4),
-		       media.poster_path, COALESCE(profile.status, 'none'), tmdb.source_id
-		FROM media_items media
-		LEFT JOIN user_media_profiles profile ON profile.media_id = media.id AND profile.user_id = ?
+		       media.poster_path, profile.status, tmdb.source_id
+		FROM user_media_profiles profile
+		JOIN media_items media ON media.id = profile.media_id
 		LEFT JOIN media_external_ids tmdb ON tmdb.media_id = media.id AND tmdb.source = 'tmdb'
-		WHERE COALESCE(media.custom_title, media.external_title) LIKE ? ESCAPE '\'
-		   OR media.original_title LIKE ? ESCAPE '\'
+		WHERE profile.user_id = ?
+		  AND (COALESCE(media.custom_title, media.external_title) LIKE ? ESCAPE '\'
+		       OR media.original_title LIKE ? ESCAPE '\')
 		ORDER BY CASE WHEN COALESCE(media.custom_title, media.external_title) = ? THEN 0 ELSE 1 END,
 		         media.updated_at DESC, media.id
 		LIMIT 20

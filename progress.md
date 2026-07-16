@@ -595,3 +595,15 @@
 - 第二轮代理负向控制把影库首张海报临时改成合成上游直链，新逐图 helper 以 origin `18082 != 15173` 准确 RED；撤销故障注入后登录、首页、两张影库海报和详情 backdrop 均逐项验证 decode、本站 origin、签名路径、expires、signature 与 200，依赖链 `14/14` GREEN。
 - Task 13 最终质量复审无 Critical/Important/Minor；主控新鲜验证通过：`go test ./... -race -count=1`、Go vet、38 文件 Vitest `227/227`、完整 Playwright `36/36`、lint、typecheck、production build、API 漂移、文档验收和 `git diff --check`。
 - 最终娱乐化 UI 快照矩阵精确为 48 张，Impeccable detector 返回 `[]`；`b3a0576..d4bd28a` 仅包含 E2E、快照和文档/跟踪文件，无生产或后端改动，外部发布授权继续保持未勾选。
+
+## 2026-07-16 TMDB 只读预览与详情整页氛围
+
+- 已确认当前位于干净 `main`，基线提交为 `11b4fe8`；用户明确批准直接在 `main` 修改。
+- 已完成搜索选择、media upsert、本地 catalog、签名图片、详情 Hero 与单色取色的数据流追踪，根因与截图表现一致。
+- 已比较三套方案并确认新增 `/tmdb/:mediaType/:tmdbId` GET-only 预览；仅明确记录动作创建本地媒体，本地搜索额外要求当前用户 Profile。
+- 设计文档提交为 `c96bd87`，实施计划提交为 `aa0da86`。
+- 已恢复 planning-with-files 上下文，并读取 Impeccable PRODUCT/product register；视觉实现采用克制的三色背景混色，不引入第二套组件系统。
+- 正在进入 Task 1 的 TDD 红灯：先证明 metadata-only 媒体不应出现在当前用户本地搜索。
+- Task 1 RED：`TestCatalogLibrarySearchAndUserIsolation` 返回未记录的 `100%_电影`，失败位置准确落在新 `require.Empty` 断言。
+- Task 1 GREEN：`SearchMedia` 改为从当前用户 `user_media_profiles` 内连接媒体；记录前自定义/TMDB 元数据均不可见，创建 Profile 后带正确状态和 TMDB ID 返回。
+- Task 1 验证：`go test ./internal/records -run 'TestCatalog' -count=1` 通过。

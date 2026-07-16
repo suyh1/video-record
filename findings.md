@@ -640,3 +640,14 @@
 - Task 13 的代理旅程不能用 `.poster-frame` 数量替代图片加载证据；version 2 E2E 导入种子按离线边界保存空 `posterPath/backdropPath`，因此必须通过真实受保护的媒体-TMDB 关联接口刷新服务端快照，影库响应才会生成可由浏览器解码的 `w342` 签名同源 URL。
 - 仅断言“旅程中至少存在代理请求且官方 TMDB 域名未出现”仍可能让某一页面改走其他上游而假绿；网络边界必须对登录、首页、影库每张海报和详情目标 `<img>.currentSrc` 分别验证本站 origin、允许尺寸路径、expires、64 位签名与对应 200 响应，并把合成上游 origin 也列为浏览器禁连源。
 - 娱乐化 UI 最终验收的 48 张快照覆盖登录有图/白底、首页正常/白底、影库正常/空态、详情有/无 backdrop，在 375x812、768x1024、1440x900 和 light/dark 的完整笛卡尔矩阵；完整 Playwright 36 项还证明代理旅程后的记录、同步与恢复状态未被污染。
+
+## 2026-07-16 TMDB 预览与详情氛围发现
+
+- `ApplicationShell.selectSearchResult` 对所有 TMDB 结果调用 `createMediaFromTMDB`，而该 POST 的服务端语义是 `UpsertExternal`；因此仅查看详情必然创建 `media_items` 和 `media_external_ids`。
+- `records.SQLiteRepository.SearchMedia` 从 `media_items` 出发，并对当前用户 Profile 使用 `LEFT JOIN`；没有任何用户记录的元数据行仍会以 `status=none` 出现在“本地影库”搜索分区。
+- 搜索弹窗随后按 TMDB ID 去重远端结果，导致同一标题再次搜索时只剩本地行，准确解释用户截图中的“TMDB 0 条”。
+- 影库列表本身从 `user_media_profiles` 出发，所以页面总数仍为 0；“影库为空但本地搜索有 1 条”是两个查询边界不一致，不是前端计数问题。
+- 后端已把持久化的 TMDB 原始图片路径在每次媒体读取时重新签名，搜索与详情也都返回同源代理 URL；新预览应继续复用这些 GET 端点，不保存短期签名 URL。
+- 当前 `MediaHero` 从 backdrop 只采一个 `sampleMediaAccent`，并把 `--media-accent` 绑定在 Hero 自身；演员、季集和记录区域无法继承，因此下方保持全局白/深色背景。
+- 当前剧集领域只允许带正整数 `seasonNumber` 的 Round，系列没有无季号的状态写入口；预览页不能伪造系列级状态。电影可在明确提交时直接 import + 写 current round，剧集需在明确“开始记录”后 import 并进入真实季工作区。
+- Impeccable product register 要求 restrained color strategy：三色渐变应由大面积、低对比背景混色承担，控件继续使用现有语义色和表面令牌，海报仍是视觉主角。
