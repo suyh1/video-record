@@ -651,3 +651,14 @@
 - 当前 `MediaHero` 从 backdrop 只采一个 `sampleMediaAccent`，并把 `--media-accent` 绑定在 Hero 自身；演员、季集和记录区域无法继承，因此下方保持全局白/深色背景。
 - 当前剧集领域只允许带正整数 `seasonNumber` 的 Round，系列没有无季号的状态写入口；预览页不能伪造系列级状态。电影可在明确提交时直接 import + 写 current round，剧集需在明确“开始记录”后 import 并进入真实季工作区。
 - Impeccable product register 要求 restrained color strategy：三色渐变应由大面积、低对比背景混色承担，控件继续使用现有语义色和表面令牌，海报仍是视觉主角。
+
+## 2026-07-16 详情图片并发缺失发现
+
+- 用户两张同页截图中 backdrop 均成功，但海报与七名演员只随机成功一部分；刷新后成功集合改变，说明路径和签名并非永久无效，失败与同页并发加载高度相关。
+- 公开图片 OpenAPI 已声明“图片代理并发饱和”响应；`router.go` 为该 handler 注入固定容量 `imageSlots` channel。需要继续检查 handler 是等待槽位还是用非阻塞分支直接拒绝。
+- 当前工作树在 `main` 干净，最近提交 `3e0dbe1`；上一轮独立合成服务仍运行，但用户截图来自具有真实《野狗骨头》数据的另一套本地服务，复现时必须区分两套端口和数据源。
+- `publicTMDBImageConcurrency` 固定为 4；`acquireImageSlot` 在 channel 已满时走 `default`，立即返回 `429`、`Retry-After: 1` 与 `tmdb_image_busy`，不等待已有请求完成。
+- `MediaPoster`/`CastStrip` 收到一次原生 image error 后会将对应图片永久切为占位；浏览器不会替普通 `<img>` 自动重试 429。因此同页头图、海报和七张演员图并发时，最先取得四个槽位的随机子集成功，其余稳定显示占位直到整页刷新。
+- 现有 `TestPublicTMDBImageBoundsConcurrencyAndReleasesCanceledSlots` 明确把“第二个请求立即 429”当作旧契约验证；修复必须先改这条行为测试，不能只在前端补定时器。
+- 实际测试名为 `TestPublicTMDBImageLimitsConcurrencyAndReleasesSlotAfterCancellation`；定向 `-count=10` 全部通过，稳定证明旧行为是“饱和立即拒绝”，不是偶发上游图片缺失。
+- 用户确认服务端有界等待方案：`imageSlots=4` 保持上游并发，`imageRequests=32` 限制活动加等待总量；普通 burst 排队，只有总在途饱和才继续返回 429。
