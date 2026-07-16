@@ -1,10 +1,21 @@
-import { useQuery } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Bookmark, Check, CircleStop, LoaderCircle, Play } from 'lucide-react'
+import { useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 
-import { getTMDBCredits, getTMDBMovie, getTMDBTV } from '../../api/client'
+import {
+  createMediaFromTMDB,
+  getTMDBCredits,
+  getTMDBMovie,
+  getTMDBTV,
+  updateCurrentRound,
+  type UpdateCurrentRoundPayload,
+} from '../../api/client'
 import type {
   MediaDetails,
+  MediaSearchResult,
   MediaType,
+  RecordStatus,
   RecordState,
   TMDBMovieDetails,
   TMDBTVDetails,
@@ -22,8 +33,18 @@ const emptyRecord: RecordState = {
   version: 0,
 }
 
+const movieStatusOptions = [
+  { value: 'wishlist', label: '想看', icon: Bookmark },
+  { value: 'watching', label: '在看', icon: Play },
+  { value: 'completed', label: '看过', icon: Check },
+  { value: 'dropped', label: '弃看', icon: CircleStop },
+] as const
+
 export function TMDBPreviewPage() {
   const { mediaType: rawMediaType = '', tmdbId: rawTMDBID = '' } = useParams()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [selectedStatus, setSelectedStatus] = useState<RecordStatus | null>(null)
   const mediaType = parseMediaType(rawMediaType)
   const tmdbID = parseTMDBID(rawTMDBID)
   const valid = mediaType !== null && tmdbID !== null
@@ -38,6 +59,26 @@ export function TMDBPreviewPage() {
     queryKey: ['tmdb-credits', mediaType, tmdbID],
     queryFn: ({ signal }) => getTMDBCredits(mediaType ?? 'movie', tmdbID ?? 0, signal),
     enabled: valid,
+  })
+  const media = valid && details.data ? previewMedia(mediaType, tmdbID, details.data) : null
+  const searchResult = media ? previewSearchResult(media) : null
+  const materialize = useMutation({
+    mutationFn: async (status: RecordStatus | null) => {
+      if (!searchResult) throw new Error('TMDB preview is not ready')
+      const imported = await createMediaFromTMDB(searchResult)
+      if (searchResult.mediaType === 'movie') {
+        if (!status || status === 'none') throw new Error('Movie status required')
+        const payload: UpdateCurrentRoundPayload = { status }
+        if (status === 'completed') payload.watchedAt = new Date().toISOString()
+        await updateCurrentRound(imported.id, undefined, 0, payload)
+      }
+      return imported
+    },
+    onSuccess: (imported) => {
+      void queryClient.invalidateQueries({ queryKey: ['media-search'] })
+      void queryClient.invalidateQueries({ queryKey: ['library'] })
+      navigate(`/media/${imported.id}`, { replace: true })
+    },
   })
 
   if (!valid) {
@@ -59,7 +100,7 @@ export function TMDBPreviewPage() {
     )
   }
 
-  const media = previewMedia(mediaType, tmdbID, details.data)
+  if (!media) return <PreviewSkeleton />
   const record = { ...emptyRecord, mediaId: media.id }
 
   return (
@@ -79,12 +120,76 @@ export function TMDBPreviewPage() {
       <section className="tmdb-preview-record" aria-labelledby="tmdb-preview-record-heading">
         <div>
           <h2 id="tmdb-preview-record-heading">记录到我的影库</h2>
-          <p>只有开始记录后，这个条目才会保存到本地影库。</p>
+          <p>{mediaType === 'movie'
+            ? '选择状态并保存后，这个条目才会进入本地影库。'
+            : '开始记录后进入季与分集工作区；仅查看预览不会保存。'}</p>
         </div>
-        <button className="primary-button" type="button">开始记录</button>
+        {mediaType === 'movie' ? (
+          <div className="tmdb-preview-movie-record">
+            <fieldset>
+              <legend>观看状态</legend>
+              <div className="status-control" role="radiogroup" aria-label="观看状态">
+                {movieStatusOptions.map(({ value, label, icon: Icon }) => (
+                  <button
+                    key={value}
+                    className={selectedStatus === value ? 'selected' : ''}
+                    type="button"
+                    role="radio"
+                    aria-checked={selectedStatus === value}
+                    disabled={materialize.isPending}
+                    onClick={() => {
+                      setSelectedStatus(value)
+                      materialize.reset()
+                    }}
+                  >
+                    <Icon aria-hidden="true" size={16} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            <button
+              className="primary-button"
+              type="button"
+              disabled={!selectedStatus || materialize.isPending}
+              onClick={() => materialize.mutate(selectedStatus)}
+            >
+              {materialize.isPending ? <LoaderCircle className="loading-icon" aria-hidden="true" size={16} /> : <Check aria-hidden="true" size={16} />}
+              保存记录
+            </button>
+          </div>
+        ) : (
+          <button
+            className="primary-button"
+            type="button"
+            disabled={materialize.isPending}
+            onClick={() => materialize.mutate(null)}
+          >
+            {materialize.isPending ? <LoaderCircle className="loading-icon" aria-hidden="true" size={16} /> : <Play aria-hidden="true" size={16} />}
+            开始记录
+          </button>
+        )}
+        {materialize.isError ? (
+          <p className="form-message error" role="alert">保存失败，请检查连接后重试。你的选择仍保留在此处。</p>
+        ) : null}
       </section>
     </div>
   )
+}
+
+function previewSearchResult(media: MediaDetails): MediaSearchResult {
+  if (media.tmdbId === null) throw new Error('TMDB identity required')
+  return {
+    id: media.id,
+    externalId: media.tmdbId,
+    source: 'tmdb',
+    mediaType: media.mediaType,
+    title: media.title,
+    originalTitle: media.originalTitle,
+    year: media.releaseDate.slice(0, 4),
+    posterPath: media.posterPath,
+    status: 'none',
+  }
 }
 
 function parseMediaType(value: string): MediaType | null {

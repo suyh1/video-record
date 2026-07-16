@@ -611,3 +611,7 @@
 - Task 2 路由 GREEN：TMDB 搜索结果直接进入 `/tmdb/:mediaType/:tmdbId`，预览地址纳入沉浸式 header，App 18/18 通过。
 - Task 2 组件 RED：`TMDBPreviewPage` 尚不存在，Vitest 在 import 边界失败；随后实现严格参数解析、GET-only 详情/演员、签名图片复用、预览标签和重试错误。
 - Task 2 验证：App + TMDBPreviewPage 共 21 项测试通过；正常挂载的本地媒体/记录 GET 与导入 POST 均为 0。
+- Task 3 RED：电影缺少状态/保存控件，剧集“开始记录”没有写入或导航，导入失败没有可保留的错误状态；3 条新增测试均按预期失败。
+- Task 3 GREEN：电影选择状态后才执行 import → `If-Match: "0"` current round，完成状态会补当前时间；剧集仅在点击“开始记录”后 import 并 replace 到本地季工作区。
+- Task 3 错误态：导入/保存失败保持预览、所选状态和可重试按钮状态；metadata-only 行继续被 Task 1 的搜索约束隐藏。
+- Task 3 验证：App、预览、API client 共 32 项测试通过；typecheck 在修正 optional TMDB ID 后通过。
