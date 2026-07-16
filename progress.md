@@ -607,3 +607,7 @@
 - Task 1 RED：`TestCatalogLibrarySearchAndUserIsolation` 返回未记录的 `100%_电影`，失败位置准确落在新 `require.Empty` 断言。
 - Task 1 GREEN：`SearchMedia` 改为从当前用户 `user_media_profiles` 内连接媒体；记录前自定义/TMDB 元数据均不可见，创建 Profile 后带正确状态和 TMDB ID 返回。
 - Task 1 验证：`go test ./internal/records -run 'TestCatalog' -count=1` 通过。
+- Task 2 App RED：选择“野狗骨头”实际请求导入并跳到 `/media/local-wild-dog`；新断言要求 `/tmdb/tv/12345` 且 POST 为 0。
+- Task 2 路由 GREEN：TMDB 搜索结果直接进入 `/tmdb/:mediaType/:tmdbId`，预览地址纳入沉浸式 header，App 18/18 通过。
+- Task 2 组件 RED：`TMDBPreviewPage` 尚不存在，Vitest 在 import 边界失败；随后实现严格参数解析、GET-only 详情/演员、签名图片复用、预览标签和重试错误。
+- Task 2 验证：App + TMDBPreviewPage 共 21 项测试通过；正常挂载的本地媒体/记录 GET 与导入 POST 均为 0。

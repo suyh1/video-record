@@ -12,7 +12,7 @@ import {
 import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 
-import { createMediaFromTMDB, getCurrentUser, getSetupStatus } from '../api/client'
+import { getCurrentUser, getSetupStatus } from '../api/client'
 import type { MediaSearchResult } from '../api/types'
 import { BrandMark } from './BrandMark'
 import { NotFoundPage } from './NotFoundPage'
@@ -23,6 +23,7 @@ import type { HomeHeroBackdropState } from '../features/home/HomeHero'
 import { MemberSettings } from '../features/household/MemberSettings'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { MediaDetailsPage } from '../features/media/MediaDetailsPage'
+import { TMDBPreviewPage } from '../features/media/TMDBPreviewPage'
 import { SearchDialog } from '../features/search/SearchDialog'
 import { TmdbStatus } from '../features/settings/TmdbStatus'
 import { AccountSettings } from '../features/settings/AccountSettings'
@@ -77,7 +78,8 @@ function ApplicationShell() {
   const location = useLocation()
   const navigate = useNavigate()
   const navigationType = useNavigationType()
-  const immersiveHeader = location.pathname === '/' || /^\/media\/[^/]+\/?$/.test(location.pathname)
+  const immersiveHeader = location.pathname === '/'
+    || /^\/(?:media\/[^/]+|tmdb\/(?:movie|tv)\/\d+)\/?$/.test(location.pathname)
   const whiteHomeHeader = location.pathname === '/' && homeHeroBackdropState !== 'ready'
   const imageHomeHeader = location.pathname === '/' && homeHeroBackdropState === 'ready'
 
@@ -134,15 +136,15 @@ function ApplicationShell() {
     focusSearch()
   }
 
-  const selectSearchResult = async (item: MediaSearchResult) => {
+  const selectSearchResult = (item: MediaSearchResult) => {
     if (item.source === 'local') {
       setSearchOpen(false)
       navigate(`/media/${item.id}`)
       return
     }
-    const media = await createMediaFromTMDB(item)
+    if (!item.externalId) throw new Error('TMDB identity required')
     setSearchOpen(false)
-    navigate(`/media/${media.id}`)
+    navigate(`/tmdb/${item.mediaType}/${item.externalId}`)
   }
 
   return (
@@ -189,6 +191,7 @@ function ApplicationShell() {
           />
           <Route path="/library" element={<LibraryPage onSearch={() => focusSearch()} />} />
           <Route path="/media/:mediaId" element={<MediaDetailsPage />} />
+          <Route path="/tmdb/:mediaType/:tmdbId" element={<TMDBPreviewPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/stats" element={<StatsPage />} />
           <Route path="/settings" element={<SettingsPage />} />

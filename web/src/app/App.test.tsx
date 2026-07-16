@@ -292,6 +292,41 @@ describe('App', () => {
     expect(screen.getByRole('dialog', { name: '搜索影视' })).toBeVisible()
   })
 
+  it('opens a TMDB result as a read-only preview without importing it', async () => {
+    let importRequests = 0
+    server.use(
+      http.get('*/api/v1/media/search', () => HttpResponse.json({ items: [] })),
+      http.get('*/api/v1/tmdb/search', () => HttpResponse.json({
+        results: [{
+          id: 12345,
+          mediaType: 'tv',
+          title: '野狗骨头',
+          originalTitle: '野狗骨头',
+          year: '2026',
+          posterPath: null,
+        }],
+      })),
+      http.post('*/api/v1/media/tmdb/tv/12345', () => {
+        importRequests += 1
+        return HttpResponse.json({
+          id: 'local-wild-dog', tmdbId: 12345, mediaType: 'tv', title: '野狗骨头',
+          externalTitle: '野狗骨头', externalOverview: '', originalTitle: '野狗骨头',
+          releaseDate: '2026-01-01', overview: '', posterPath: null, backdropPath: null,
+          runtimeMinutes: 0, genres: [],
+        })
+      }),
+    )
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: '记录' }))
+    await user.type(screen.getByRole('searchbox', { name: '搜索影视' }), '野狗骨头')
+    await user.click(await screen.findByRole('button', { name: /野狗骨头/ }))
+
+    await waitFor(() => expect(window.location.pathname).toBe('/tmdb/tv/12345'))
+    expect(importRequests).toBe(0)
+  })
+
   it('restores focus to the action that opened search', async () => {
     const user = userEvent.setup()
     render(<App />)
