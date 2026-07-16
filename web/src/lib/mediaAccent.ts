@@ -9,10 +9,26 @@ type ColorBucket = OKLabSample & {
   key: string
 }
 
+type PaletteSample = OKLabSample & {
+  chroma: number
+  hue: number
+  key: string
+}
+
+export type MediaPalette = {
+  accent: string
+  colors: [string, string, string]
+}
+
 const SAMPLE_WIDTH = 24
 const SAMPLE_HEIGHT = 14
+const MINIMUM_PALETTE_DISTANCE = 0.08
 
 export function selectMediaAccent(pixels: Uint8ClampedArray): string | null {
+  return selectMediaPalette(pixels)?.accent ?? null
+}
+
+export function selectMediaPalette(pixels: Uint8ClampedArray): MediaPalette | null {
   const buckets = new Map<string, ColorBucket>()
 
   for (let index = 0; index + 3 < pixels.length; index += 4) {
@@ -42,21 +58,52 @@ export function selectMediaAccent(pixels: Uint8ClampedArray): string | null {
     }
   }
 
-  const dominant = Array.from(buckets.values()).sort((left, right) => (
-    right.weight - left.weight || left.key.localeCompare(right.key)
-  ))[0]
-  if (!dominant) return null
+  const candidates = Array.from(buckets.values())
+    .map(normalizeBucket)
+    .sort((left, right) => (
+      right.weight - left.weight
+      || right.chroma - left.chroma
+      || left.key.localeCompare(right.key)
+    ))
+  if (candidates.length === 0) return null
 
-  const lightness = clamp(dominant.lightness / dominant.weight, 0.42, 0.72)
-  const a = dominant.a / dominant.weight
-  const b = dominant.b / dominant.weight
-  const chroma = clamp(Math.hypot(a, b), 0.08, 0.18)
-  const hue = normalizeHue(Math.atan2(b, a) * 180 / Math.PI)
+  const selected: PaletteSample[] = []
+  for (const candidate of candidates) {
+    if (selected.every((current) => paletteDistance(current, candidate) >= MINIMUM_PALETTE_DISTANCE)) {
+      selected.push(candidate)
+    }
+    if (selected.length === 3) break
+  }
 
-  return `oklch(${lightness.toFixed(3)} ${chroma.toFixed(3)} ${hue.toFixed(1)})`
+  const colors = selected.map(formatPaletteSample)
+  const base = selected[0]!
+  const fallbackOffsets = [105, 215, 55, 160, 270]
+  for (const offset of fallbackOffsets) {
+    if (colors.length === 3) break
+    const hue = normalizeHue(base.hue + offset)
+    if (selected.some((sample) => hueDistance(sample.hue, hue) < 42)) continue
+    const fallback: PaletteSample = {
+      a: Math.cos(hue * Math.PI / 180) * base.chroma,
+      b: Math.sin(hue * Math.PI / 180) * base.chroma,
+      chroma: base.chroma,
+      hue,
+      key: `fallback:${offset}`,
+      lightness: clamp(base.lightness + (colors.length % 2 === 0 ? 0.04 : -0.03), 0.42, 0.72),
+      weight: 0,
+    }
+    selected.push(fallback)
+    colors.push(formatPaletteSample(fallback))
+  }
+
+  const paletteColors = colors.slice(0, 3) as [string, string, string]
+  return { accent: paletteColors[0], colors: paletteColors }
 }
 
 export function sampleMediaAccent(image: HTMLImageElement): string | null {
+  return sampleMediaPalette(image)?.accent ?? null
+}
+
+export function sampleMediaPalette(image: HTMLImageElement): MediaPalette | null {
   try {
     const canvas = document.createElement('canvas')
     canvas.width = SAMPLE_WIDTH
@@ -65,10 +112,44 @@ export function sampleMediaAccent(image: HTMLImageElement): string | null {
     if (!context) return null
 
     context.drawImage(image, 0, 0, SAMPLE_WIDTH, SAMPLE_HEIGHT)
-    return selectMediaAccent(context.getImageData(0, 0, SAMPLE_WIDTH, SAMPLE_HEIGHT).data)
+    return selectMediaPalette(context.getImageData(0, 0, SAMPLE_WIDTH, SAMPLE_HEIGHT).data)
   } catch {
     return null
   }
+}
+
+function normalizeBucket(bucket: ColorBucket): PaletteSample {
+  const lightness = bucket.lightness / bucket.weight
+  const a = bucket.a / bucket.weight
+  const b = bucket.b / bucket.weight
+  return {
+    a,
+    b,
+    chroma: Math.hypot(a, b),
+    hue: normalizeHue(Math.atan2(b, a) * 180 / Math.PI),
+    key: bucket.key,
+    lightness,
+    weight: bucket.weight,
+  }
+}
+
+function formatPaletteSample(sample: PaletteSample) {
+  const lightness = clamp(sample.lightness, 0.42, 0.72)
+  const chroma = clamp(sample.chroma, 0.08, 0.18)
+  return `oklch(${lightness.toFixed(3)} ${chroma.toFixed(3)} ${sample.hue.toFixed(1)})`
+}
+
+function paletteDistance(left: PaletteSample, right: PaletteSample) {
+  return Math.hypot(
+    left.lightness - right.lightness,
+    left.a - right.a,
+    left.b - right.b,
+  )
+}
+
+function hueDistance(left: number, right: number) {
+  const distance = Math.abs(left - right) % 360
+  return Math.min(distance, 360 - distance)
 }
 
 function rgbToOKLab(red: number, green: number, blue: number): OKLabSample {

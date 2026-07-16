@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { sampleMediaAccent, selectMediaAccent } from './mediaAccent'
+import {
+  sampleMediaAccent,
+  sampleMediaPalette,
+  selectMediaAccent,
+  selectMediaPalette,
+} from './mediaAccent'
 
 function pixels(...colors: Array<[number, number, number, number]>) {
   return new Uint8ClampedArray(colors.flat())
@@ -65,6 +70,54 @@ describe('selectMediaAccent', () => {
   })
 })
 
+describe('selectMediaPalette', () => {
+  it('selects three stable and visually distinct colorful groups', () => {
+    const data = pixels(
+      [238, 48, 38, 255],
+      [238, 48, 38, 255],
+      [228, 56, 42, 255],
+      [35, 82, 235, 255],
+      [35, 82, 235, 255],
+      [28, 185, 94, 255],
+    )
+
+    const first = selectMediaPalette(data)
+    const second = selectMediaPalette(data)
+
+    expect(first).not.toBeNull()
+    expect(second).toEqual(first)
+    expect(first?.colors).toHaveLength(3)
+    expect(new Set(first?.colors).size).toBe(3)
+    expect(first?.accent).toBe(first?.colors[0])
+    const hues = first!.colors.map((color) => parseAccent(color).hue)
+    expect(hues.some((hue) => hue >= 15 && hue <= 45)).toBe(true)
+    expect(hues.some((hue) => hue >= 245 && hue <= 285)).toBe(true)
+    expect(hues.some((hue) => hue >= 130 && hue <= 165)).toBe(true)
+  })
+
+  it('fills missing palette slots deterministically from one colorful group', () => {
+    const palette = selectMediaPalette(pixels(
+      [238, 48, 38, 255],
+      [228, 56, 42, 255],
+    ))
+
+    expect(palette?.colors).toHaveLength(3)
+    expect(new Set(palette?.colors).size).toBe(3)
+    expect(selectMediaPalette(pixels(
+      [238, 48, 38, 255],
+      [228, 56, 42, 255],
+    ))).toEqual(palette)
+  })
+
+  it('returns null when no chromatic pixels are usable', () => {
+    expect(selectMediaPalette(pixels(
+      [72, 72, 72, 255],
+      [248, 252, 255, 255],
+      [235, 30, 30, 16],
+    ))).toBeNull()
+  })
+})
+
 describe('sampleMediaAccent', () => {
   afterEach(() => vi.restoreAllMocks())
 
@@ -97,5 +150,25 @@ describe('sampleMediaAccent', () => {
     vi.spyOn(document, 'createElement').mockReturnValue(canvas)
 
     expect(sampleMediaAccent(image)).toBeNull()
+  })
+
+  it('samples a three-color palette from the same bounded canvas', () => {
+    const image = document.createElement('img')
+    const canvas = document.createElement('canvas')
+    const drawImage = vi.fn()
+    const getImageData = vi.fn(() => ({
+      data: pixels(
+        [238, 48, 38, 255],
+        [35, 82, 235, 255],
+        [28, 185, 94, 255],
+      ),
+    }))
+    vi.spyOn(canvas, 'getContext').mockReturnValue({ drawImage, getImageData } as unknown as CanvasRenderingContext2D)
+    vi.spyOn(document, 'createElement').mockReturnValue(canvas)
+
+    const palette = sampleMediaPalette(image)
+
+    expect(palette?.colors).toHaveLength(3)
+    expect(drawImage).toHaveBeenCalledWith(image, 0, 0, 24, 14)
   })
 })

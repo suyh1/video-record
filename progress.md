@@ -615,3 +615,7 @@
 - Task 3 GREEN：电影选择状态后才执行 import → `If-Match: "0"` current round，完成状态会补当前时间；剧集仅在点击“开始记录”后 import 并 replace 到本地季工作区。
 - Task 3 错误态：导入/保存失败保持预览、所选状态和可重试按钮状态；metadata-only 行继续被 Task 1 的搜索约束隐藏。
 - Task 3 验证：App、预览、API client 共 32 项测试通过；typecheck 在修正 optional TMDB ID 后通过。
+- Task 4 RED：新增 `selectMediaPalette`/`sampleMediaPalette` 的 4 条测试均因函数不存在失败，旧单色 6 条测试保持通过。
+- Task 4 GREEN：复用 OKLab 色桶，按权重/色度稳定排序，以感知距离选取三簇；不足三簇时用固定色相偏移补足，输出三个确定性 OKLCH 色。
+- Task 4 兼容：`selectMediaAccent`/`sampleMediaAccent` 继续返回调色板第一色，首页无需改调用方。
+- Task 4 验证：mediaAccent + HomeHero 共 19 项测试通过，typecheck 通过。
