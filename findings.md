@@ -662,3 +662,23 @@
 - 现有 `TestPublicTMDBImageBoundsConcurrencyAndReleasesCanceledSlots` 明确把“第二个请求立即 429”当作旧契约验证；修复必须先改这条行为测试，不能只在前端补定时器。
 - 实际测试名为 `TestPublicTMDBImageLimitsConcurrencyAndReleasesSlotAfterCancellation`；定向 `-count=10` 全部通过，稳定证明旧行为是“饱和立即拒绝”，不是偶发上游图片缺失。
 - 用户确认服务端有界等待方案：`imageSlots=4` 保持上游并发，`imageRequests=32` 限制活动加等待总量；普通 burst 排队，只有总在途饱和才继续返回 429。
+- 浏览器慢图 RED 使用空 highlights 避免缓存干扰、250ms 合成上游延迟和剧集详情 5 张图片；当前代理稳定得到 `loaded=4,total=4`，失败图片已被 React 占位替换，复现与用户截图一致。
+- Go 队列测试 RED 因 `publicTMDBHandlers` 尚无 `imageRequests` 字段而编译失败，证明新测试约束的是缺失的 admission/等待语义，而不是既有无关行为。
+- GREEN 实现新增 `imageRequests` 总在途 semaphore：先以非阻塞方式准入，准入后等待 `imageSlots` 或 context；排队取消释放 admission，活动请求结束释放两个名额。上游并发仍为 4，只有 32 个在途名额全部占满才 429。
+- 同一 250ms 慢图浏览器回归修复后 1.6 秒完成 5/5 解码且五个代理响应全为 200；包含依赖在内 15/15 通过。
+- 测试重构保证断言提前失败时仍释放阻塞上游和 queued context；独立设置 synthetic 图片延迟不再清空已有 failing IDs。定向图片 handler race 复验通过。
+
+# 2026-07-16 详情图片并发缺失完成度核查
+
+- 当前分支为 `main`，HEAD 为 `424d0fb fix: queue concurrent TMDB image requests`。
+- 工作区仅 `task_plan.md`、`findings.md`、`progress.md` 有未提交改动，尚未发现未提交业务代码。
+- 提交标题不足以确认完成，仍需审计实际队列边界、详情图片请求路径、回归测试以及并发复现。
+- `424d0fb` 的生产改动与既定根因一致：签名/过期校验后先占用容量 32 的 admission，再等待容量 4 的活动槽；活动结束释放两个名额，排队 context 取消只释放 admission。
+- 回归覆盖三条服务端边界：普通 burst 排队后成功、32 个总在途饱和时 429、排队请求取消后释放名额；浏览器测试用 250ms 慢图同时加载详情页 5 张图片并要求 5/5 解码且代理响应全为 200。
+- 原任务计划的阶段 6 尚未勾选，因此现阶段不能把任务视为完成；需要按计划补跑全仓与连续刷新验证。
+- 新鲜静态/单元门禁通过：`go test ./... -race -count=1` 与 `go vet ./...` 均退出 0；Vitest 39/39 文件、241/241 测试通过，前端 lint、build、OpenAPI 生成一致性检查均退出 0。
+- 标准隔离 E2E 新鲜通过 37/37；慢图详情 burst 回归在 1.6 秒内通过，要求同页 5 张图片全部解码、五个签名代理响应全为 200。
+- 审计与现状复验没有发现需要继续修改业务代码的缺口；剩余工作仅为计划中的应用内浏览器连续五次刷新验收与跟踪收尾。
+- 应用内浏览器使用独立临时数据库和 250ms 合成上游延迟完成 6 次详情刷新；每轮均为 `loaded=5,total=5,proxyCount=5,failed=[]`，每轮签名过期时间不同，浏览器 warning/error 日志为 0。
+- 最后一轮后端日志精确包含 5 个详情图片请求，状态均为 200，未出现 429；海报、头图和三名有头像演员全部经过签名同源代理。
+- 根因修复、回归覆盖、全仓门禁、标准 E2E 和重复真实刷新均有新鲜证据，详情图片并发缺失任务可以完成收尾。
