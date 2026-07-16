@@ -63,9 +63,10 @@ func NewRouter(dependencies Dependencies) http.Handler {
 			api.With(RequireSameOrigin).Post("/auth/login", handlers.login)
 			if dependencies.TMDB != nil {
 				publicTMDB := publicTMDBHandlers{
-					client:     dependencies.TMDB,
-					now:        time.Now,
-					imageSlots: make(chan struct{}, publicTMDBImageConcurrency),
+					client:        dependencies.TMDB,
+					now:           time.Now,
+					imageSlots:    make(chan struct{}, publicTMDBImageConcurrency),
+					imageRequests: make(chan struct{}, publicTMDBImageRequestLimit),
 				}
 				api.Get("/public/tmdb/highlights", publicTMDB.highlights)
 				api.Get("/public/tmdb/images/{size}/{filename}", publicTMDB.image)

@@ -1,6 +1,44 @@
 import { expect, test, type Locator, type Page, type Request } from '@playwright/test'
 
-import { admin, baseURL, expectImageLoaded, login, syntheticTMDBOrigin } from './support'
+import {
+  admin,
+  baseURL,
+  expectImageLoaded,
+  login,
+  setSyntheticTMDBImageDelay,
+  syntheticTMDBOrigin,
+} from './support'
+
+test('queues a slow detail image burst without dropping poster or cast portraits', async ({ page }) => {
+  await page.route('**/api/v1/public/tmdb/highlights', (route) => route.fulfill({
+    json: { items: [] },
+    status: 200,
+  }))
+  await login(page)
+  await setSyntheticTMDBImageDelay(page, 250)
+  try {
+    const imageStatuses: number[] = []
+    page.on('response', (response) => {
+      if (new URL(response.url()).pathname.startsWith('/api/v1/public/tmdb/images/')) {
+        imageStatuses.push(response.status())
+      }
+    })
+
+    await page.goto('/media/e2e-series')
+    await expect(page.getByRole('heading', { level: 1, name: '潮汐档案' })).toBeVisible()
+    await expect.poll(() => page.locator('.media-details-page img').evaluateAll((images) => ({
+      loaded: images.filter((image) => {
+        const target = image as HTMLImageElement
+        return target.complete && target.naturalWidth > 0 && target.naturalHeight > 0
+      }).length,
+      total: images.length,
+    }))).toEqual({ loaded: 5, total: 5 })
+    expect(imageStatuses).toHaveLength(5)
+    expect(imageStatuses.every((status) => status === 200)).toBe(true)
+  } finally {
+    await setSyntheticTMDBImageDelay(page, 0)
+  }
+})
 
 test('keeps authentication and media imagery behind the signed same-origin proxy', async ({ page }) => {
   const signedBackdrop = await readSignedBackdrop(page)

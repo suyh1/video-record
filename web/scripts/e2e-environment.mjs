@@ -13,6 +13,7 @@ export async function startSyntheticTMDB({ port = syntheticTMDBPort, token } = {
   if (!token) throw new Error('Synthetic TMDB token is required')
   const counts = new Map()
   const failingIDs = new Set()
+  let imageDelayMs = 0
   const origin = `http://127.0.0.1:${port}`
   const images = syntheticImages()
   const server = createServer(async (request, response) => {
@@ -22,8 +23,13 @@ export async function startSyntheticTMDB({ port = syntheticTMDBPort, token } = {
     }
     if (url.pathname === '/__control' && request.method === 'POST') {
       const body = await readJSON(request)
-      failingIDs.clear()
-      for (const id of body.failingIds ?? []) failingIDs.add(Number(id))
+      if (Array.isArray(body.failingIds)) {
+        failingIDs.clear()
+        for (const id of body.failingIds) failingIDs.add(Number(id))
+      }
+      if (Number.isFinite(body.imageDelayMs) && body.imageDelayMs >= 0) {
+        imageDelayMs = Math.floor(body.imageDelayMs)
+      }
       if (body.resetCounts) counts.clear()
       return writeJSON(response, 200, { failingIds: [...failingIDs] })
     }
@@ -31,6 +37,9 @@ export async function startSyntheticTMDB({ port = syntheticTMDBPort, token } = {
       const imageName = url.pathname.match(/^\/images\/(?:w300|w342|w780|w1280)\/([^/]+\.png)$/)?.[1]
       const image = imageName ? images.get(imageName) : null
       if (!image) return writeJSON(response, 404, { status_message: 'not found' })
+      if (imageDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, imageDelayMs))
+      }
       response.writeHead(200, {
         'Cache-Control': 'public, max-age=3600',
         'Content-Length': image.length,

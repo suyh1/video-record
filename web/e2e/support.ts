@@ -49,6 +49,13 @@ export async function controlSyntheticTMDB(page: Page, failingIds: number[] = []
   expect(response.ok()).toBeTruthy()
 }
 
+export async function setSyntheticTMDBImageDelay(page: Page, imageDelayMs: number) {
+  const response = await page.request.post(`${syntheticTMDBOrigin}/__control`, {
+    data: { imageDelayMs },
+  })
+  expect(response.ok()).toBeTruthy()
+}
+
 export async function syntheticTMDBCounts(page: Page) {
   const response = await page.request.get(`${syntheticTMDBOrigin}/__counts`)
   expect(response.ok()).toBeTruthy()

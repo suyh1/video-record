@@ -258,7 +258,85 @@ func TestPublicTMDBImageReturnsGoneWhenExpiryPassesDuringSignatureVerification(t
 	require.Contains(t, response.Body.String(), `"code":"image_url_expired"`)
 }
 
-func TestPublicTMDBImageLimitsConcurrencyAndReleasesSlotAfterCancellation(t *testing.T) {
+func TestPublicTMDBImageQueuesUntilSlotAvailable(t *testing.T) {
+	firstStarted := make(chan struct{}, 1)
+	releaseFirst := make(chan struct{}, 1)
+	secondStarted := make(chan struct{}, 1)
+	var upstreamRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestNumber := upstreamRequests.Add(1)
+		if requestNumber == 1 {
+			firstStarted <- struct{}{}
+			<-releaseFirst
+		} else {
+			secondStarted <- struct{}{}
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write([]byte("queued-image"))
+	}))
+	t.Cleanup(server.Close)
+	t.Cleanup(func() {
+		select {
+		case releaseFirst <- struct{}{}:
+		default:
+		}
+	})
+	client := tmdb.NewClient(tmdb.ClientOptions{
+		ImageBaseURL: server.URL,
+		Token:        "synthetic-token",
+		Timeout:      2 * time.Second,
+	})
+	handlers := publicTMDBHandlers{
+		client:        client,
+		now:           time.Now,
+		imageSlots:    make(chan struct{}, 1),
+		imageRequests: make(chan struct{}, 2),
+	}
+	router := chi.NewRouter()
+	router.Get("/api/v1/public/tmdb/images/{size}/{filename}", handlers.image)
+	expires := time.Now().Add(time.Hour).Truncate(time.Second)
+	signature, err := client.SignImage("w1280", "/arrival.jpg", expires)
+	require.NoError(t, err)
+	requestURL := fmt.Sprintf(
+		"http://example.test/api/v1/public/tmdb/images/w1280/arrival.jpg?expires=%d&signature=%s",
+		expires.Unix(), url.QueryEscape(signature),
+	)
+
+	firstResponse := httptest.NewRecorder()
+	firstDone := make(chan struct{})
+	go func() {
+		router.ServeHTTP(firstResponse, httptest.NewRequest(http.MethodGet, requestURL, nil))
+		close(firstDone)
+	}()
+	requireChannelSignal(t, firstStarted, "first upstream image request did not start")
+
+	secondResponse := httptest.NewRecorder()
+	secondDone := make(chan struct{})
+	go func() {
+		router.ServeHTTP(secondResponse, httptest.NewRequest(http.MethodGet, requestURL, nil))
+		close(secondDone)
+	}()
+	require.Eventually(t, func() bool { return len(handlers.imageRequests) == 2 }, time.Second, 10*time.Millisecond)
+	select {
+	case <-secondStarted:
+		t.Fatal("queued image request reached upstream before a slot was released")
+	case <-secondDone:
+		t.Fatal("queued image request returned before a slot was released")
+	default:
+	}
+
+	releaseFirst <- struct{}{}
+	requireChannelSignal(t, firstDone, "first public image handler did not return")
+	requireChannelSignal(t, secondStarted, "queued image request did not reach upstream")
+	requireChannelSignal(t, secondDone, "queued public image handler did not return")
+	require.Equal(t, http.StatusOK, firstResponse.Code)
+	require.Equal(t, http.StatusOK, secondResponse.Code)
+	require.EqualValues(t, 2, upstreamRequests.Load())
+	require.Empty(t, handlers.imageSlots)
+	require.Empty(t, handlers.imageRequests)
+}
+
+func TestPublicTMDBImageRejectsWhenAdmissionLimitIsFull(t *testing.T) {
 	firstStarted := make(chan struct{}, 1)
 	firstCanceled := make(chan struct{}, 1)
 	var upstreamRequests atomic.Int32
@@ -280,9 +358,10 @@ func TestPublicTMDBImageLimitsConcurrencyAndReleasesSlotAfterCancellation(t *tes
 		Timeout:      2 * time.Second,
 	})
 	handlers := publicTMDBHandlers{
-		client:     client,
-		now:        time.Now,
-		imageSlots: make(chan struct{}, 1),
+		client:        client,
+		now:           time.Now,
+		imageSlots:    make(chan struct{}, 1),
+		imageRequests: make(chan struct{}, 1),
 	}
 	router := chi.NewRouter()
 	router.Get("/api/v1/public/tmdb/images/{size}/{filename}", handlers.image)
@@ -321,6 +400,56 @@ func TestPublicTMDBImageLimitsConcurrencyAndReleasesSlotAfterCancellation(t *tes
 	require.Equal(t, "released-slot-image", thirdResponse.Body.String())
 	require.EqualValues(t, 2, upstreamRequests.Load())
 	require.Empty(t, handlers.imageSlots)
+	require.Empty(t, handlers.imageRequests)
+}
+
+func TestPublicTMDBImageReleasesQueuedAdmissionAfterCancellation(t *testing.T) {
+	var upstreamRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamRequests.Add(1)
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write([]byte("unexpected-image"))
+	}))
+	t.Cleanup(server.Close)
+	client := tmdb.NewClient(tmdb.ClientOptions{
+		ImageBaseURL: server.URL,
+		Token:        "synthetic-token",
+		Timeout:      2 * time.Second,
+	})
+	handlers := publicTMDBHandlers{
+		client:        client,
+		now:           time.Now,
+		imageSlots:    make(chan struct{}, 1),
+		imageRequests: make(chan struct{}, 1),
+	}
+	handlers.imageSlots <- struct{}{}
+	router := chi.NewRouter()
+	router.Get("/api/v1/public/tmdb/images/{size}/{filename}", handlers.image)
+	expires := time.Now().Add(time.Hour).Truncate(time.Second)
+	signature, err := client.SignImage("w1280", "/arrival.jpg", expires)
+	require.NoError(t, err)
+	requestURL := fmt.Sprintf(
+		"http://example.test/api/v1/public/tmdb/images/w1280/arrival.jpg?expires=%d&signature=%s",
+		expires.Unix(), url.QueryEscape(signature),
+	)
+
+	requestContext, cancelRequest := context.WithCancel(context.Background())
+	defer cancelRequest()
+	request := httptest.NewRequest(http.MethodGet, requestURL, nil).WithContext(requestContext)
+	response := httptest.NewRecorder()
+	requestDone := make(chan struct{})
+	go func() {
+		router.ServeHTTP(response, request)
+		close(requestDone)
+	}()
+	require.Eventually(t, func() bool { return len(handlers.imageRequests) == 1 }, time.Second, 10*time.Millisecond)
+	cancelRequest()
+	requireChannelSignal(t, requestDone, "canceled queued image request did not return")
+
+	require.Zero(t, upstreamRequests.Load())
+	require.Empty(t, handlers.imageRequests)
+	require.Len(t, handlers.imageSlots, 1)
+	<-handlers.imageSlots
 }
 
 func TestPublicTMDBHighlightsMapUpstreamErrorsWithoutLeaks(t *testing.T) {
