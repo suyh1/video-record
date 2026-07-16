@@ -81,7 +81,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Revoke the current session */
+        /** Idempotently revoke the current session and expire its cookie */
         post: operations["logout"];
         delete?: never;
         options?: never;
@@ -1755,15 +1755,13 @@ export interface operations {
     logout: {
         parameters: {
             query?: never;
-            header: {
-                "X-CSRF-Token": components["parameters"]["CSRFToken"];
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Session revoked. */
+            /** @description Session revoked when present and cookie expired. */
             204: {
                 headers: {
                     [name: string]: unknown;

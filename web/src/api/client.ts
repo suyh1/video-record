@@ -315,10 +315,8 @@ export function loginUser(username: string, password: string) {
 }
 
 export function logoutUser() {
-  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
   return requestJSON<void>('/api/v1/auth/logout', {
     method: 'POST',
-    headers: { 'X-CSRF-Token': csrfToken },
   })
 }
 

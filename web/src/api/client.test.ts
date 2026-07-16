@@ -13,6 +13,7 @@ import {
   getTMDBHighlights,
   getTMDBSeason,
   getTMDBTV,
+  logoutUser,
   startRewatch,
   updateCurrentRound,
   updateEpisodeProgress,
@@ -97,6 +98,18 @@ describe('public TMDB highlights client', () => {
 
 describe('API client protected writes', () => {
   beforeEach(() => sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token'))
+
+  it('logs out without depending on tab CSRF state', async () => {
+    sessionStorage.removeItem('video-record.csrf-token')
+    server.use(
+      http.post('*/api/v1/auth/logout', ({ request }) => {
+        expect(request.headers.has('X-CSRF-Token')).toBe(false)
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    await logoutUser()
+  })
 
   it('sends an idempotency key when creating media from TMDB', async () => {
     server.use(

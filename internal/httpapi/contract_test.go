@@ -39,7 +39,8 @@ type openAPIContract struct {
 }
 
 type openAPIOperation struct {
-	OperationID string `yaml:"operationId"`
+	OperationID string                `yaml:"operationId"`
+	Security    []map[string][]string `yaml:"security"`
 	Parameters  []struct {
 		Ref      string `yaml:"$ref"`
 		Name     string `yaml:"name"`
@@ -196,12 +197,11 @@ func TestContractDefinesCursorETagAndProtectedWriteShapes(t *testing.T) {
 		require.True(t, hasCSRFToken, "%s %s must document X-CSRF-Token", route.Method, route.Path)
 	}
 	logout := decodeOpenAPIOperation(t, contract, http.MethodPost, "/api/v1/auth/logout")
-	require.Contains(t, logout.Parameters, struct {
-		Ref      string `yaml:"$ref"`
-		Name     string `yaml:"name"`
-		In       string `yaml:"in"`
-		Required bool   `yaml:"required"`
-	}{Ref: "#/components/parameters/CSRFToken"})
+	require.NotNil(t, logout.Security)
+	require.Empty(t, logout.Security)
+	for _, parameter := range logout.Parameters {
+		require.NotEqual(t, "#/components/parameters/CSRFToken", parameter.Ref)
+	}
 }
 
 func TestContractProvidesConcreteGeneratedTypesAndRealFileMedia(t *testing.T) {

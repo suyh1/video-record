@@ -69,11 +69,10 @@ paths:
   /api/v1/auth/logout:
     post:
       operationId: logout
-      summary: Revoke the current session
-      parameters:
-        - $ref: '#/components/parameters/CSRFToken'
+      summary: Idempotently revoke the current session and expire its cookie
+      security: []
       responses:
-        '204': { description: Session revoked. }
+        '204': { description: Session revoked when present and cookie expired. }
         default: { $ref: '#/components/responses/Problem' }
   /api/v1/backups:
     get:
