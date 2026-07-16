@@ -290,7 +290,7 @@
 - [x] 阶段 3：比较隐藏元数据、只读预览和临时会话方案，并确认只读预览设计
 - [x] 阶段 4：写入设计文档与 TDD 实施计划并提交
 - [x] 阶段 5：按 TDD 完成本地搜索隔离、TMDB 预览与显式记录转正
-- [ ] 阶段 6：按 TDD 完成海报三色提取与详情整页渐变
+- [x] 阶段 6：按 TDD 完成海报三色提取与详情整页渐变
 - [ ] 阶段 7：完成定向、全仓和桌面/移动端明暗主题浏览器验证
 
 ### 实施任务
@@ -299,7 +299,7 @@
 - [x] Task 2：TMDB 搜索结果进入 GET-only 预览路由
 - [x] Task 3：仅从明确记录动作创建本地媒体
 - [x] Task 4：从海报提取三个稳定且互异的 OKLCH 色彩
-- [ ] Task 5：把氛围变量提升到完整详情/预览页根节点
+- [x] Task 5：把氛围变量提升到完整详情/预览页根节点
 - [ ] Task 6：完整回归、图片代理和响应式浏览器验收
 
 ### 本轮约束
@@ -314,3 +314,4 @@
 ### 本轮错误记录
 
 - Task 3 首次 typecheck 因 `exactOptionalPropertyTypes` 拒绝显式 `externalId: undefined`；预览媒体本就必须有 TMDB ID，helper 改为拒绝 null 并始终传 number，不放宽公共类型。
+- Task 5 首次 typecheck 因 `MediaPoster` 把可选回调显式传给内部 artwork 而拒绝 `undefined`；仅让内部 props 接受显式 undefined，外部组件 API 和运行行为不变。

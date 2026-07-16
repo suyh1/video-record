@@ -68,6 +68,7 @@ describe('TMDBPreviewPage', () => {
     expect(screen.getByRole('img', { name: '野狗骨头 海报' })).toHaveAttribute('src', posterURL)
     expect(screen.getByRole('img', { name: '宋佳 饰 陈异' })).toHaveAttribute('src', portraitURL)
     expect(screen.getByRole('button', { name: '开始记录' })).toBeEnabled()
+    expect(document.querySelector('.media-atmosphere-page')).not.toBeNull()
     expect(localRequests).toBe(0)
     expect(writeRequests).toBe(0)
   })

@@ -19,14 +19,30 @@ const statusIcons = {
   dropped: CircleStop,
 }
 
-export function MediaPoster({ item, compact = false }: { item: MediaSearchResult; compact?: boolean }) {
+export function MediaPoster({
+  item,
+  compact = false,
+  onArtworkLoad,
+  onArtworkError,
+}: {
+  item: MediaSearchResult
+  compact?: boolean
+  onArtworkLoad?: (image: HTMLImageElement) => void
+  onArtworkError?: () => void
+}) {
   const StatusIcon = item.status === 'none' ? null : statusIcons[item.status]
   const posterURL = mediaImageURL(item.posterPath)
 
   return (
     <div className={`media-poster${compact ? ' compact' : ''}`}>
       <div className="poster-frame">
-        <PosterArtwork key={`${item.id}:${item.title}:${posterURL ?? ''}`} title={item.title} posterURL={posterURL} />
+        <PosterArtwork
+          key={`${item.id}:${item.title}:${posterURL ?? ''}`}
+          title={item.title}
+          posterURL={posterURL}
+          onLoad={onArtworkLoad}
+          onError={onArtworkError}
+        />
       </div>
       <div className="poster-copy">
         <strong>{item.title}</strong>
@@ -46,7 +62,12 @@ export function MediaPoster({ item, compact = false }: { item: MediaSearchResult
   )
 }
 
-function PosterArtwork({ title, posterURL }: { title: string; posterURL: string | null }) {
+function PosterArtwork({ title, posterURL, onLoad, onError }: {
+  title: string
+  posterURL: string | null
+  onLoad?: ((image: HTMLImageElement) => void) | undefined
+  onError?: (() => void) | undefined
+}) {
   const [failed, setFailed] = useState(false)
 
   if (!posterURL || failed) {
@@ -57,5 +78,16 @@ function PosterArtwork({ title, posterURL }: { title: string; posterURL: string 
     )
   }
 
-  return <img src={posterURL} alt={`${title} 海报`} loading="lazy" onError={() => setFailed(true)} />
+  return (
+    <img
+      src={posterURL}
+      alt={`${title} 海报`}
+      loading="lazy"
+      onLoad={(event) => onLoad?.(event.currentTarget)}
+      onError={() => {
+        setFailed(true)
+        onError?.()
+      }}
+    />
+  )
 }

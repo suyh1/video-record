@@ -22,6 +22,7 @@ import type {
 } from '../../api/types'
 import { CastStrip } from './CastStrip'
 import { MediaHero } from './MediaHero'
+import { useMediaAtmosphere } from './mediaAtmosphere'
 
 const emptyRecord: RecordState = {
   mediaId: '',
@@ -45,6 +46,7 @@ export function TMDBPreviewPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [selectedStatus, setSelectedStatus] = useState<RecordStatus | null>(null)
+  const atmosphere = useMediaAtmosphere(`${rawMediaType}:${rawTMDBID}`)
   const mediaType = parseMediaType(rawMediaType)
   const tmdbID = parseTMDBID(rawTMDBID)
   const valid = mediaType !== null && tmdbID !== null
@@ -104,11 +106,12 @@ export function TMDBPreviewPage() {
   const record = { ...emptyRecord, mediaId: media.id }
 
   return (
-    <div className="page media-details-page tmdb-preview-page">
+    <div className="page media-details-page tmdb-preview-page media-atmosphere-page" style={atmosphere.style}>
       <MediaHero
         media={media}
         record={record}
         linker={<span className="tmdb-preview-label">TMDB 预览</span>}
+        onPaletteChange={atmosphere.onPaletteChange}
       />
       <CastStrip
         cast={credits.data ?? []}

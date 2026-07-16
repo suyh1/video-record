@@ -2,18 +2,48 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { MediaDetails, MediaSearchResult, RecordState } from '../../api/types'
-import { sampleMediaAccent } from '../../lib/mediaAccent'
+import { sampleMediaPalette } from '../../lib/mediaAccent'
 import { MediaHero } from './MediaHero'
 import { MediaPoster } from './MediaPoster'
 
-vi.mock('../../lib/mediaAccent', () => ({ sampleMediaAccent: vi.fn() }))
+vi.mock('../../lib/mediaAccent', () => ({ sampleMediaPalette: vi.fn() }))
 
 const signature = 'b'.repeat(64)
 const posterURL = `/api/v1/public/tmdb/images/w342/tide-poster.png?expires=1784200000&signature=${signature}`
 const backdropURL = `/api/v1/public/tmdb/images/w1280/tide-backdrop.png?expires=1784200000&signature=${signature}`
 
 describe('TMDB-backed media images', () => {
-  beforeEach(() => vi.mocked(sampleMediaAccent).mockReset())
+  beforeEach(() => {
+    vi.mocked(sampleMediaPalette).mockReset()
+  })
+
+  it('samples a three-color palette from the poster and reports it to the page', () => {
+    const palette = {
+      accent: 'oklch(0.610 0.130 28.0)',
+      colors: [
+        'oklch(0.610 0.130 28.0)',
+        'oklch(0.590 0.120 210.0)',
+        'oklch(0.630 0.110 145.0)',
+      ] as [string, string, string],
+    }
+    vi.mocked(sampleMediaPalette).mockReturnValue(palette)
+    const onPaletteChange = vi.fn()
+    const { container } = render(
+      <MediaHero
+        media={{ ...media, posterPath: posterURL, backdropPath: backdropURL }}
+        record={record}
+        linker={null}
+        onPaletteChange={onPaletteChange}
+      />,
+    )
+
+    const poster = screen.getByRole('img', { name: '潮汐档案 海报' })
+    fireEvent.load(poster)
+
+    expect(sampleMediaPalette).toHaveBeenCalledWith(poster)
+    expect(onPaletteChange).toHaveBeenLastCalledWith(palette)
+    expect(container.querySelector<HTMLElement>('.media-hero')!.style.getPropertyValue('--media-accent')).toBe('')
+  })
 
   it('keeps signed same-origin image proxy URLs unchanged', () => {
     const { container } = render(
@@ -38,7 +68,6 @@ describe('TMDB-backed media images', () => {
   })
 
   it('remounts a ready same-source backdrop when its title changes and ignores the old load event', () => {
-    vi.mocked(sampleMediaAccent).mockReturnValue('oklch(0.610 0.130 210.0)')
     const { container, rerender } = render(
       <MediaHero media={{ ...media, title: '标题 A', backdropPath: backdropURL }} record={record} linker={null} />,
     )
@@ -46,22 +75,18 @@ describe('TMDB-backed media images', () => {
     const firstBackdrop = container.querySelector<HTMLImageElement>('.media-hero-backdrop')!
     fireEvent.load(firstBackdrop)
     expect(hero).toHaveAttribute('data-backdrop-state', 'ready')
-    expect(hero.style.getPropertyValue('--media-accent')).toBe('oklch(0.610 0.130 210.0)')
 
     rerender(<MediaHero media={{ ...media, title: '标题 B', backdropPath: backdropURL }} record={record} linker={null} />)
     const secondBackdrop = container.querySelector<HTMLImageElement>('.media-hero-backdrop')!
     expect(secondBackdrop).not.toBe(firstBackdrop)
     expect(hero).toHaveAttribute('data-backdrop-state', 'loading')
     expect(screen.getByRole('heading', { level: 1, name: '标题 B' })).toBeVisible()
-    expect(hero.style.getPropertyValue('--media-accent')).toBe('var(--brand)')
 
     fireEvent.load(firstBackdrop)
     expect(hero).toHaveAttribute('data-backdrop-state', 'loading')
 
-    vi.mocked(sampleMediaAccent).mockReturnValue('oklch(0.580 0.120 28.0)')
     fireEvent.load(secondBackdrop)
     expect(hero).toHaveAttribute('data-backdrop-state', 'ready')
-    expect(hero.style.getPropertyValue('--media-accent')).toBe('oklch(0.580 0.120 28.0)')
   })
 
   it('uses existing placeholders for direct or raw TMDB paths', () => {
@@ -78,34 +103,45 @@ describe('TMDB-backed media images', () => {
     expect(container.querySelector('.media-hero-backdrop')).not.toBeInTheDocument()
   })
 
-  it('removes a failed backdrop and restores the brand accent without leaving a broken image', () => {
-    vi.mocked(sampleMediaAccent).mockReturnValue('oklch(0.620 0.140 210.0)')
+  it('removes a failed backdrop without changing page-owned palette state', () => {
+    const onPaletteChange = vi.fn()
     const { container } = render(
-      <MediaHero media={{ ...media, backdropPath: backdropURL }} record={record} linker={null} />,
+      <MediaHero
+        media={{ ...media, backdropPath: backdropURL }}
+        record={record}
+        linker={null}
+        onPaletteChange={onPaletteChange}
+      />,
     )
     const hero = container.querySelector<HTMLElement>('.media-hero')!
     const backdrop = container.querySelector<HTMLImageElement>('.media-hero-backdrop')!
 
     fireEvent.load(backdrop)
-    expect(hero.style.getPropertyValue('--media-accent')).toBe('oklch(0.620 0.140 210.0)')
     fireEvent.error(backdrop)
 
     expect(container.querySelector('.media-hero-backdrop')).not.toBeInTheDocument()
     expect(hero).not.toHaveClass('has-backdrop')
     expect(hero).toHaveAttribute('data-backdrop-state', 'failed')
-    expect(hero.style.getPropertyValue('--media-accent')).toBe('var(--brand)')
+    expect(onPaletteChange).toHaveBeenCalledTimes(1)
+    expect(onPaletteChange).toHaveBeenLastCalledWith(null)
   })
 
-  it('falls back to the brand accent when backdrop sampling is blocked', () => {
-    vi.mocked(sampleMediaAccent).mockReturnValue(null)
-    const { container } = render(
-      <MediaHero media={{ ...media, backdropPath: backdropURL }} record={record} linker={null} />,
+  it('reports a fallback when poster sampling is blocked', () => {
+    vi.mocked(sampleMediaPalette).mockReturnValue(null)
+    const onPaletteChange = vi.fn()
+    render(
+      <MediaHero
+        media={{ ...media, posterPath: posterURL, backdropPath: backdropURL }}
+        record={record}
+        linker={null}
+        onPaletteChange={onPaletteChange}
+      />,
     )
 
-    fireEvent.load(container.querySelector<HTMLImageElement>('.media-hero-backdrop')!)
+    fireEvent.load(screen.getByRole('img', { name: '潮汐档案 海报' }))
 
-    expect(sampleMediaAccent).toHaveBeenCalledOnce()
-    expect(container.querySelector<HTMLElement>('.media-hero')!.style.getPropertyValue('--media-accent')).toBe('var(--brand)')
+    expect(sampleMediaPalette).toHaveBeenCalledOnce()
+    expect(onPaletteChange).toHaveBeenLastCalledWith(null)
   })
 
   it('retries a failed backdrop when the same item image or title changes', () => {

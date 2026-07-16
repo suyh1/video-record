@@ -1,12 +1,26 @@
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 
 import { renderWithQueryClient } from '../../test/render'
 import { server } from '../../test/server'
+import { sampleMediaPalette } from '../../lib/mediaAccent'
 import { MediaDetailsPage } from './MediaDetailsPage'
+
+vi.mock('../../lib/mediaAccent', () => ({ sampleMediaAccent: vi.fn(), sampleMediaPalette: vi.fn() }))
+
+const signature = 'e'.repeat(64)
+const detailsPosterURL = `/api/v1/public/tmdb/images/w342/details-poster.jpg?expires=1784200000&signature=${signature}`
+const detailsPalette = {
+  accent: 'oklch(0.610 0.130 28.0)',
+  colors: [
+    'oklch(0.610 0.130 28.0)',
+    'oklch(0.590 0.120 210.0)',
+    'oklch(0.630 0.110 145.0)',
+  ] as [string, string, string],
+}
 
 function renderDetails(mediaID: string) {
   return renderWithQueryClient(
@@ -17,6 +31,7 @@ function renderDetails(mediaID: string) {
 }
 
 it('uses movie rounds, profile versions, and no flat watch-event history', async () => {
+  vi.mocked(sampleMediaPalette).mockReturnValue(detailsPalette)
   sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token')
   let eventRequests = 0
   let tagsVersion = ''
@@ -24,7 +39,7 @@ it('uses movie rounds, profile versions, and no flat watch-event history', async
     http.get('*/api/v1/media/movie-1', () => HttpResponse.json({
       id: 'movie-1', tmdbId: null, mediaType: 'movie', title: '花样年华', originalTitle: 'In the Mood for Love',
       releaseDate: '2000-09-29', overview: '两位邻居在克制与靠近之间建立起一段关系。',
-      externalTitle: '', externalOverview: '', posterPath: null, backdropPath: '', runtimeMinutes: 98, genres: ['剧情'],
+      externalTitle: '', externalOverview: '', posterPath: detailsPosterURL, backdropPath: '', runtimeMinutes: 98, genres: ['剧情'],
     })),
     http.get('*/api/v1/records/movie-1', () => HttpResponse.json({
       mediaId: 'movie-1', status: 'completed', rating: 9.4, note: null,
@@ -60,6 +75,15 @@ it('uses movie rounds, profile versions, and no flat watch-event history', async
   expect(screen.getByRole('heading', { name: '多刷' })).toBeVisible()
   expect(screen.queryByText('观看历史')).not.toBeInTheDocument()
   expect(eventRequests).toBe(0)
+
+  const poster = screen.getByRole('img', { name: '花样年华 海报' })
+  fireEvent.load(poster)
+  const atmosphere = document.querySelector<HTMLElement>('.media-atmosphere-page')
+  expect(atmosphere).not.toBeNull()
+  expect(atmosphere?.style.getPropertyValue('--media-accent')).toBe(detailsPalette.accent)
+  expect(atmosphere?.style.getPropertyValue('--media-atmosphere-1')).toBe(detailsPalette.colors[0])
+  expect(atmosphere?.style.getPropertyValue('--media-atmosphere-2')).toBe(detailsPalette.colors[1])
+  expect(atmosphere?.style.getPropertyValue('--media-atmosphere-3')).toBe(detailsPalette.colors[2])
 
   await user.click(screen.getByText('家庭与整理'))
   const tags = await screen.findByRole('textbox', { name: '私人标签' })

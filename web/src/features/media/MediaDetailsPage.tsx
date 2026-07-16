@@ -21,11 +21,13 @@ import { RewatchSection } from '../records/RewatchSection'
 import { RoundRecordForm } from '../records/RoundRecordForm'
 import { CastStrip } from './CastStrip'
 import { MediaHero } from './MediaHero'
+import { useMediaAtmosphere } from './mediaAtmosphere'
 import { TMDBLinker } from './TMDBLinker'
 
 export function MediaDetailsPage() {
   const { mediaId = '' } = useParams()
   const queryClient = useQueryClient()
+  const atmosphere = useMediaAtmosphere(mediaId)
   const [organizingOpen, setOrganizingOpen] = useState(false)
   const media = useQuery({
     queryKey: ['media', mediaId],
@@ -107,12 +109,13 @@ export function MediaDetailsPage() {
   }
 
   return (
-    <div className="page media-details-page">
+    <div className="page media-details-page media-atmosphere-page" style={atmosphere.style}>
       <MediaHero
         media={media.data}
         record={record.data}
         external={external.data}
         linker={<TMDBLinker media={media.data} />}
+        onPaletteChange={atmosphere.onPaletteChange}
       />
 
       <CastStrip

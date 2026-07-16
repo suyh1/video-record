@@ -619,3 +619,8 @@
 - Task 4 GREEN：复用 OKLab 色桶，按权重/色度稳定排序，以感知距离选取三簇；不足三簇时用固定色相偏移补足，输出三个确定性 OKLCH 色。
 - Task 4 兼容：`selectMediaAccent`/`sampleMediaAccent` 继续返回调色板第一色，首页无需改调用方。
 - Task 4 验证：mediaAccent + HomeHero 共 19 项测试通过，typecheck 通过。
+- Task 5 RED：MediaHero 不从海报调用三色采样，详情/预览均没有 `.media-atmosphere-page`，3 条新断言准确失败。
+- Task 5 GREEN：`MediaPoster` 上报真实海报 load/error，`MediaHero` 采样并通过 callback 上报；共享 hook 按媒体身份持有 palette，详情和预览根节点设置四个 CSS 变量。
+- 旧 backdrop 单色契约已迁移：backdrop 只负责 loading/ready/failed，失败不再清空海报调色板；Hero 本身不持有 `--media-accent`。
+- 整页 CSS 以三层线性颜色场扩展到沉浸式内容边缘和底部，light/dark 使用不同低强度混色；记录面板轻透底色但无 blur/glass，移动端覆盖底栏安全区。
+- Task 5 验证：媒体 7 文件 40 项测试、typecheck、lint 与 `git diff --check` 全部通过。
