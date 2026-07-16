@@ -70,7 +70,7 @@ jobs:
       - name: Smoke amd64 release candidate
         run: ./scripts/container-smoke.sh local/video-record:release-amd64
       - name: Scan amd64 vulnerabilities
-        uses: docker/scout-action@5dae9c7571dd0f3de81f5b501240c593c13c3eb6 # v1.9.3
+        uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b # v1.23.1
         with:
           command: cves
           image: local://local/video-record:release-amd64
@@ -93,7 +93,7 @@ jobs:
       - name: Smoke arm64 release candidate
         run: ./scripts/container-smoke.sh local/video-record:release-arm64
       - name: Scan arm64 vulnerabilities
-        uses: docker/scout-action@5dae9c7571dd0f3de81f5b501240c593c13c3eb6 # v1.9.3
+        uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b # v1.23.1
         with:
           command: cves
           image: local://local/video-record:release-arm64

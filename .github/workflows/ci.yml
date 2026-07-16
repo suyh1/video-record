@@ -119,7 +119,7 @@ jobs:
       - name: Scan image layers for secrets
         run: ./scripts/image-secret-scan.sh local/video-record:ci
       - name: Scan image vulnerabilities
-        uses: docker/scout-action@5dae9c7571dd0f3de81f5b501240c593c13c3eb6 # v1.9.3
+        uses: docker/scout-action@2688993af7bafd6ba8c6a74ec652442be91dd82b # v1.23.1
         with:
           command: cves
           image: local://local/video-record:ci
