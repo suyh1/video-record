@@ -78,7 +78,7 @@ describe('SearchDialog', () => {
     const localSection = await screen.findByRole('region', { name: '本地影库' })
     expect(await within(localSection).findByText('Dune')).toBeVisible()
     expect(within(localSection).getByText('2021')).toBeVisible()
-    expect(within(localSection).getByText('看过')).toBeVisible()
+    expect(within(localSection).getAllByText('看过').length).toBeGreaterThan(0)
     const remoteSection = screen.getByRole('region', { name: 'TMDB' })
     expect(within(remoteSection).queryByText('Dune: Part Two')).not.toBeInTheDocument()
 

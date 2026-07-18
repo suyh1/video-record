@@ -540,6 +540,25 @@ export async function createMediaFromTMDB(item: MediaSearchResult): Promise<Medi
   })
 }
 
+/** Materialize TMDB items when needed, then set movie/TV profile status for one-tap search recording. */
+export async function quickRecordMedia(
+  item: MediaSearchResult,
+  status: Extract<RecordStatus, 'wishlist' | 'completed'>,
+) {
+  let mediaID = item.id
+  if (item.source === 'tmdb') {
+    const imported = await createMediaFromTMDB(item)
+    mediaID = imported.id
+  }
+  const payload: UpdateCurrentRoundPayload = { status }
+  if (status === 'completed') payload.watchedAt = new Date().toISOString()
+  // Movies use media-scope current round; TV wishlist updates projected profile via seasonless path when applicable.
+  const seasonNumber = item.mediaType === 'tv' ? 1 : undefined
+  const current = await getCurrentRound(mediaID, seasonNumber)
+  await updateCurrentRound(mediaID, seasonNumber, current.version, payload)
+  return mediaID
+}
+
 export async function linkMediaToTMDB(mediaID: string, item: MediaSearchResult): Promise<MediaDetails> {
   if (item.source !== 'tmdb' || !item.externalId) throw new Error('TMDB identity required')
   const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''

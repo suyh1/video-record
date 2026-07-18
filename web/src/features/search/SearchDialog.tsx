@@ -3,8 +3,8 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Check, Plus, Search, Trash2, X } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from 'react'
 
-import { createCustomMedia, searchLocalMedia, searchTMDB } from '../../api/client'
-import type { MediaSearchResult, MediaType } from '../../api/types'
+import { createCustomMedia, quickRecordMedia, searchLocalMedia, searchTMDB } from '../../api/client'
+import type { MediaSearchResult, MediaType, RecordStatus } from '../../api/types'
 import { MediaPoster } from '../media/MediaPoster'
 
 type SearchDialogProps = {
@@ -32,6 +32,9 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
   const [customType, setCustomType] = useState<MediaType>('movie')
   const [customYear, setCustomYear] = useState('')
   const [recentSearches, setRecentSearches] = useState(readRecentSearches)
+  const [mediaTypeFilter, setMediaTypeFilter] = useState<'all' | MediaType>('all')
+  const [quickMessage, setQuickMessage] = useState('')
+  const [quickBusyID, setQuickBusyID] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
   const selectionEpoch = useRef(0)
@@ -53,6 +56,8 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
       setSelectingID(null)
       setSelectionError(false)
       setCustomOpen(false)
+      setQuickMessage('')
+      setQuickBusyID(null)
     }
     wasOpen.current = open
   }, [open])
@@ -76,8 +81,14 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
     queryFn: ({ signal }) => searchTMDB(debouncedQuery, signal),
     enabled,
   })
-  const localResults = local.data ?? []
-  const remoteResults = useMemo(() => deduplicateRemote(localResults, remote.data ?? []), [localResults, remote.data])
+  const localResults = useMemo(
+    () => filterByMediaType(local.data ?? [], mediaTypeFilter),
+    [local.data, mediaTypeFilter],
+  )
+  const remoteResults = useMemo(
+    () => filterByMediaType(deduplicateRemote(local.data ?? [], remote.data ?? []), mediaTypeFilter),
+    [local.data, mediaTypeFilter, remote.data],
+  )
   const canCreateCustom = enabled && local.isSuccess && remote.isSuccess
     && localResults.length === 0 && remoteResults.length === 0
 
@@ -123,7 +134,7 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
     && customMutation.variables?.epoch === customSubmissionEpoch.current
 
   const selectResult = async (item: MediaSearchResult, settledQuery: string) => {
-    if (selectingID !== null) return
+    if (selectingID !== null || quickBusyID !== null) return
     const epoch = selectionEpoch.current
     setSelectingID(resultKey(item))
     setSelectionError(false)
@@ -134,6 +145,28 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
       if (epoch === selectionEpoch.current) setSelectionError(true)
     } finally {
       if (epoch === selectionEpoch.current) setSelectingID(null)
+    }
+  }
+
+  const quickRecord = async (
+    item: MediaSearchResult,
+    status: Extract<RecordStatus, 'wishlist' | 'completed'>,
+    settledQuery: string,
+  ) => {
+    if (selectingID !== null || quickBusyID !== null) return
+    const key = resultKey(item)
+    setQuickBusyID(key)
+    setQuickMessage('')
+    setSelectionError(false)
+    try {
+      await quickRecordMedia(item, status)
+      rememberQuery(settledQuery)
+      setQuickMessage(status === 'wishlist' ? `已将「${item.title}」标为想看` : `已将「${item.title}」标为看过`)
+      void local.refetch()
+    } catch {
+      setQuickMessage('快捷记录失败，请稍后重试或打开详情。')
+    } finally {
+      setQuickBusyID(null)
     }
   }
 
@@ -188,6 +221,7 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
                 setQuery(event.target.value)
                 setSelectionError(false)
                 setCustomOpen(false)
+                setQuickMessage('')
                 customMutation.reset()
               }}
               onKeyDown={(event) => {
@@ -199,6 +233,23 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
               }}
             />
           </div>
+          <div className="search-type-filter" role="group" aria-label="媒体类型">
+            {([
+              { value: 'all', label: '全部' },
+              { value: 'movie', label: '电影' },
+              { value: 'tv', label: '剧集' },
+            ] as const).map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={mediaTypeFilter === option.value}
+                onClick={() => setMediaTypeFilter(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          {quickMessage ? <p className="search-quick-status" role="status">{quickMessage}</p> : null}
           <div ref={resultsRef} className="search-results" aria-live="polite">
             {!hasQuery && recentSearches.length > 0 ? (
               <section className="recent-searches" aria-labelledby={recentHeadingID}>
@@ -244,8 +295,10 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
                   error={local.isError}
                   emptyLabel="本地影库没有匹配结果"
                   selectingID={selectingID}
+                  quickBusyID={quickBusyID}
                   settledQuery={debouncedQuery}
                   onSelect={selectResult}
+                  onQuickRecord={quickRecord}
                   onMoveFocus={moveResultFocus}
                 />
                 <SearchSection
@@ -255,9 +308,14 @@ export function SearchDialog({ open, onClose, onSelect }: SearchDialogProps) {
                   pending={remote.isPending}
                   error={remote.isError}
                   emptyLabel="TMDB 没有匹配结果"
+                  errorHint={remote.isError
+                    ? '请到设置检查 TMDB 连通，或稍后重试。'
+                    : undefined}
                   selectingID={selectingID}
+                  quickBusyID={quickBusyID}
                   settledQuery={debouncedQuery}
                   onSelect={selectResult}
+                  onQuickRecord={quickRecord}
                   onMoveFocus={moveResultFocus}
                 />
               </>
@@ -306,9 +364,16 @@ type SearchSectionProps = {
   pending: boolean
   error: boolean
   emptyLabel: string
+  errorHint?: string | undefined
   selectingID: string | null
+  quickBusyID: string | null
   settledQuery: string
   onSelect: (item: MediaSearchResult, settledQuery: string) => Promise<void>
+  onQuickRecord: (
+    item: MediaSearchResult,
+    status: Extract<RecordStatus, 'wishlist' | 'completed'>,
+    settledQuery: string,
+  ) => Promise<void>
   onMoveFocus: (event: KeyboardEvent<HTMLButtonElement>, direction: -1 | 1) => void
 }
 
@@ -319,9 +384,12 @@ function SearchSection({
   pending,
   error,
   emptyLabel,
+  errorHint,
   selectingID,
+  quickBusyID,
   settledQuery,
   onSelect,
+  onQuickRecord,
   onMoveFocus,
 }: SearchSectionProps) {
   return (
@@ -332,23 +400,35 @@ function SearchSection({
       </div>
       {pending ? <SearchSkeleton /> : null}
       {error ? (
-        <p className="search-section-error" role="alert" aria-label={`${heading}搜索失败`}>
-          {heading === '本地影库' ? '无法搜索本地影库' : '无法搜索 TMDB'}
-        </p>
+        <div className="search-section-error" role="alert" aria-label={`${heading}搜索失败`}>
+          <p>{heading === '本地影库' ? '无法搜索本地影库' : '无法搜索 TMDB'}</p>
+          {errorHint ? (
+            <p>
+              {errorHint}
+              {heading === 'TMDB' ? (
+                <>
+                  {' '}
+                  <a href="/settings#settings-connections">打开设置</a>
+                </>
+              ) : null}
+            </p>
+          ) : null}
+        </div>
       ) : null}
       {!pending && !error && items.length === 0 ? <p className="search-section-empty">{emptyLabel}</p> : null}
       {items.length > 0 ? (
         <ul className="search-result-list" aria-label={`${heading}搜索结果`}>
           {items.map((item) => {
             const key = resultKey(item)
+            const busy = selectingID !== null || quickBusyID !== null
             return (
-              <li key={key}>
+              <li key={key} className="search-result-row">
                 <button
                   className="search-result"
                   data-search-result="true"
                   type="button"
-                  aria-disabled={selectingID !== null}
-                  aria-busy={selectingID === key}
+                  aria-disabled={busy}
+                  aria-busy={selectingID === key || quickBusyID === key}
                   onClick={() => void onSelect(item, settledQuery)}
                   onKeyDown={(event) => {
                     if (event.key === 'ArrowDown') onMoveFocus(event, 1)
@@ -358,6 +438,30 @@ function SearchSection({
                   <MediaPoster item={item} compact />
                   <span className="result-source">{item.source === 'local' ? '本地影库' : 'TMDB'}</span>
                 </button>
+                <div className="search-quick-actions">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void onQuickRecord(item, 'wishlist', settledQuery)
+                    }}
+                  >
+                    想看
+                  </button>
+                  {item.mediaType === 'movie' ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void onQuickRecord(item, 'completed', settledQuery)
+                      }}
+                    >
+                      看过
+                    </button>
+                  ) : null}
+                </div>
               </li>
             )
           })}
@@ -365,6 +469,11 @@ function SearchSection({
       ) : null}
     </section>
   )
+}
+
+function filterByMediaType(items: MediaSearchResult[], filter: 'all' | MediaType) {
+  if (filter === 'all') return items
+  return items.filter((item) => item.mediaType === filter)
 }
 
 function SearchSkeleton() {

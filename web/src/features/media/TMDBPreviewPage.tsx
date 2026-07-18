@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import {
   createMediaFromTMDB,
+  getCurrentRound,
   getTMDBCredits,
   getTMDBMovie,
   getTMDBTV,
@@ -73,6 +74,9 @@ export function TMDBPreviewPage() {
         const payload: UpdateCurrentRoundPayload = { status }
         if (status === 'completed') payload.watchedAt = new Date().toISOString()
         await updateCurrentRound(imported.id, undefined, 0, payload)
+      } else if (status === 'wishlist') {
+        const current = await getCurrentRound(imported.id, 1)
+        await updateCurrentRound(imported.id, 1, current.version, { status: 'wishlist' })
       }
       return imported
     },
@@ -162,15 +166,26 @@ export function TMDBPreviewPage() {
             </button>
           </div>
         ) : (
-          <button
-            className="primary-button"
-            type="button"
-            disabled={materialize.isPending}
-            onClick={() => materialize.mutate(null)}
-          >
-            {materialize.isPending ? <LoaderCircle className="loading-icon" aria-hidden="true" size={16} /> : <Play aria-hidden="true" size={16} />}
-            开始记录
-          </button>
+          <div className="tmdb-preview-tv-actions">
+            <button
+              className="primary-button"
+              type="button"
+              disabled={materialize.isPending}
+              onClick={() => materialize.mutate('wishlist')}
+            >
+              {materialize.isPending ? <LoaderCircle className="loading-icon" aria-hidden="true" size={16} /> : <Bookmark aria-hidden="true" size={16} />}
+              标为想看并入库
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={materialize.isPending}
+              onClick={() => materialize.mutate(null)}
+            >
+              {materialize.isPending ? <LoaderCircle className="loading-icon" aria-hidden="true" size={16} /> : <Play aria-hidden="true" size={16} />}
+              开始记录
+            </button>
+          </div>
         )}
         {materialize.isError ? (
           <p className="form-message error" role="alert">保存失败，请检查连接后重试。你的选择仍保留在此处。</p>
