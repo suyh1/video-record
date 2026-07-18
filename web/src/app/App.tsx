@@ -107,6 +107,24 @@ function ApplicationShell() {
     if (restoreFocusTimer.current !== null) window.clearTimeout(restoreFocusTimer.current)
   }, [])
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (searchOpen) return
+      const target = event.target
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return
+      }
+      const isModK = (event.key === 'k' || event.key === 'K') && (event.metaKey || event.ctrlKey)
+      const isSlash = event.key === '/' && !event.metaKey && !event.ctrlKey && !event.altKey
+      if (!isModK && !isSlash) return
+      event.preventDefault()
+      focusSearch()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [searchOpen])
+
   const focusSearch = (trigger?: HTMLElement) => {
     if (restoringSearchFocus.current) return
     const activeElement = document.activeElement
@@ -165,7 +183,7 @@ function ApplicationShell() {
             <input
               type="search"
               aria-label="搜索影视"
-              placeholder="搜索电影或剧集"
+              placeholder="搜索电影或剧集（⌘K）"
               readOnly
               onFocus={(event) => focusSearch(event.currentTarget)}
               onClick={(event) => focusSearch(event.currentTarget)}

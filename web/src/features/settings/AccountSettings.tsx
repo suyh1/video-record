@@ -3,10 +3,17 @@ import { Check, LoaderCircle, LogOut, ShieldCheck, UserRound } from 'lucide-reac
 import { type FormEvent, useState } from 'react'
 
 import { APIError, changePassword, getCurrentUser, logoutUser } from '../../api/client'
+import {
+  applyThemePreference,
+  readThemePreference,
+  type ThemePreference,
+  writeThemePreference,
+} from '../../lib/theme'
 
 export function AccountSettings() {
   const queryClient = useQueryClient()
   const currentUser = useQuery({ queryKey: ['current-user'], queryFn: ({ signal }) => getCurrentUser(signal) })
+  const [theme, setTheme] = useState<ThemePreference>(() => readThemePreference())
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -67,6 +74,29 @@ export function AccountSettings() {
         <div>
           <h2 id="account-settings-heading">{currentUser.data.username}</h2>
           <span><ShieldCheck aria-hidden="true" size={14} />{currentUser.data.role === 'admin' ? '管理员' : '家庭成员'}</span>
+        </div>
+      </div>
+      <div className="account-theme-control" role="group" aria-label="主题">
+        <h3>主题</h3>
+        <div className="account-theme-options">
+          {([
+            { value: 'system', label: '跟随系统' },
+            { value: 'light', label: '浅色' },
+            { value: 'dark', label: '深色' },
+          ] as const).map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={theme === option.value}
+              onClick={() => {
+                setTheme(option.value)
+                writeThemePreference(option.value)
+                applyThemePreference(option.value)
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
       </div>
       <form className="account-password-form" onSubmit={submitPassword}>
