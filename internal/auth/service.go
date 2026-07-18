@@ -81,6 +81,29 @@ func (service *Service) Initialize(ctx context.Context, username, password strin
 	return user, nil
 }
 
+func (service *Service) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {
+	userID = strings.TrimSpace(userID)
+	if userID == "" || currentPassword == "" || len(newPassword) < 12 {
+		return ErrInvalidInput
+	}
+	passwordHash, err := service.repository.FindUserPasswordHash(ctx, userID)
+	if errors.Is(err, errUserNotFound) {
+		return ErrInvalidCredentials
+	}
+	if err != nil {
+		return err
+	}
+	matches, verifyErr := VerifyPassword(passwordHash, currentPassword)
+	if verifyErr != nil || !matches {
+		return ErrInvalidCredentials
+	}
+	nextHash, err := HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	return service.repository.UpdateUserPasswordHash(ctx, userID, nextHash)
+}
+
 func (service *Service) Login(ctx context.Context, username, password, clientBucket string) (Session, error) {
 	now := service.now().UTC()
 	bucketKey := loginBucketKey(username, clientBucket)

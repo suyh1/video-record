@@ -320,6 +320,10 @@ export function logoutUser() {
   })
 }
 
+export function changePassword(currentPassword: string, newPassword: string) {
+  return protectedWrite<void>('/api/v1/auth/password', { currentPassword, newPassword })
+}
+
 export function getHouseholdMembers(signal?: AbortSignal) {
   return requestJSON<HouseholdMember[]>('/api/v1/household/members', signal ? { signal } : undefined)
 }

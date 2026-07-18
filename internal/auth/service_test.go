@@ -141,3 +141,21 @@ func sessionLastSeen(t *testing.T, db *storage.DB, sessionID string) time.Time {
 	).Scan(&milliseconds))
 	return time.UnixMilli(milliseconds).UTC()
 }
+
+func TestChangePasswordRequiresCurrentPasswordAndUpdatesHash(t *testing.T) {
+	service, _, _ := newTestService(t)
+	user, err := service.Initialize(context.Background(), "owner", "correct horse battery staple")
+	require.NoError(t, err)
+
+	require.ErrorIs(t, service.ChangePassword(context.Background(), user.ID, "wrong password", "brand new password 1"), ErrInvalidCredentials)
+	_, err = service.Login(context.Background(), "owner", "correct horse battery staple", "client-1")
+	require.NoError(t, err)
+
+	require.NoError(t, service.ChangePassword(context.Background(), user.ID, "correct horse battery staple", "brand new password 1"))
+	_, err = service.Login(context.Background(), "owner", "correct horse battery staple", "client-1")
+	require.ErrorIs(t, err, ErrInvalidCredentials)
+	_, err = service.Login(context.Background(), "owner", "brand new password 1", "client-1")
+	require.NoError(t, err)
+
+	require.ErrorIs(t, service.ChangePassword(context.Background(), user.ID, "brand new password 1", "short"), ErrInvalidInput)
+}

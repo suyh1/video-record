@@ -3780,6 +3780,34 @@ body:has(.media-details-page) .app-header.immersive-header .global-search {
   font-weight: 650;
 }
 
+.account-password-form {
+  display: grid;
+  gap: var(--space-3);
+  width: 100%;
+  margin: var(--space-4) 0;
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.account-password-form h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.account-password-form button[type="submit"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  width: fit-content;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink);
+}
+
 .account-settings-error {
   grid-column: 1 / -1;
   margin: 0;

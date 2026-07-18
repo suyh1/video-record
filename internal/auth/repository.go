@@ -15,6 +15,8 @@ type Repository interface {
 	IsInitialized(context.Context) (bool, error)
 	CreateInitialAdmin(context.Context, User, string) error
 	FindUserByUsername(context.Context, string) (User, string, error)
+	FindUserPasswordHash(context.Context, string) (string, error)
+	UpdateUserPasswordHash(context.Context, string, string) error
 	LoginAttempt(context.Context, string) (loginAttempt, error)
 	SaveLoginAttempt(context.Context, string, loginAttempt) error
 	ClearLoginAttempt(context.Context, string) error
@@ -97,6 +99,41 @@ func (repository *SQLiteRepository) FindUserByUsername(ctx context.Context, user
 	user.Active = active == 1
 	user.CreatedAt = time.UnixMilli(createdAt).UTC()
 	return user, passwordHash, nil
+}
+
+func (repository *SQLiteRepository) FindUserPasswordHash(ctx context.Context, userID string) (string, error) {
+	var passwordHash string
+	var active int
+	err := repository.db.Reader().QueryRowContext(ctx, `
+		SELECT password_hash, active FROM users WHERE id = ?
+	`, userID).Scan(&passwordHash, &active)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", errUserNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	if active != 1 {
+		return "", errUserNotFound
+	}
+	return passwordHash, nil
+}
+
+func (repository *SQLiteRepository) UpdateUserPasswordHash(ctx context.Context, userID, passwordHash string) error {
+	result, err := repository.db.Writer().ExecContext(ctx, `
+		UPDATE users SET password_hash = ? WHERE id = ? AND active = 1
+	`, passwordHash, userID)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return errUserNotFound
+	}
+	return nil
 }
 
 func (repository *SQLiteRepository) LoginAttempt(ctx context.Context, key string) (loginAttempt, error) {

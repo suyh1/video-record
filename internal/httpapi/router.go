@@ -83,6 +83,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protectedWriteMiddleware = append(protectedWriteMiddleware, idempotency.Handle)
 				}
 				protected.Get("/auth/me", handlers.me)
+				protected.With(protectedWriteMiddleware...).Post("/auth/password", handlers.changePassword)
 				if dependencies.IntegrationAccounts != nil {
 					integrationAPI := integrationHandlers{
 						accounts: dependencies.IntegrationAccounts,

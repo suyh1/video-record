@@ -74,6 +74,21 @@ paths:
       responses:
         '204': { description: Session revoked when present and cookie expired. }
         default: { $ref: '#/components/responses/Problem' }
+  /api/v1/auth/password:
+    post:
+      operationId: changePassword
+      summary: Change the current user's password
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordRequest' }
+      responses:
+        '204': { description: Password changed. }
+        default: { $ref: '#/components/responses/Problem' }
   /api/v1/backups:
     get:
       operationId: listBackups
@@ -1149,6 +1164,13 @@ components:
       properties:
         username: { type: string, minLength: 1 }
         password: { type: string, minLength: 1 }
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, minLength: 1 }
+        newPassword: { type: string, minLength: 12 }
     User:
       type: object
       additionalProperties: false

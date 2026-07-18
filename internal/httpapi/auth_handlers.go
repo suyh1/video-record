@@ -129,6 +129,37 @@ func (handlers authHandlers) me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, newUserResponse(identity.User))
 }
 
+type changePasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
+}
+
+func (handlers authHandlers) changePassword(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	var request changePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_request")
+		return
+	}
+	err := handlers.service.ChangePassword(r.Context(), identity.User.ID, request.CurrentPassword, request.NewPassword)
+	switch {
+	case errors.Is(err, auth.ErrInvalidInput):
+		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_input")
+		return
+	case errors.Is(err, auth.ErrInvalidCredentials):
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "invalid_credentials")
+		return
+	case err != nil:
+		writeProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "internal_error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (handlers authHandlers) sessionCookie(value string, expires time.Time) *http.Cookie {
 	return &http.Cookie{
 		Name:     SessionCookieName,
