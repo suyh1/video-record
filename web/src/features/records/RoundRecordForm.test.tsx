@@ -121,7 +121,7 @@ describe('RoundRecordForm', () => {
 
     await user.click(screen.getByRole('radio', { name: '看过' }))
     await user.click(screen.getByRole('button', { name: '更多记录选项' }))
-    await user.type(screen.getByLabelText('评分'), '8.5')
+    await user.click(screen.getByRole('button', { name: '评分 8.5' }))
     await user.type(screen.getByLabelText('观看方式'), '影院')
     await user.click(screen.getByRole('checkbox', { name: 'family' }))
     await user.type(screen.getByLabelText('私人笔记'), '银幕声音很好')
@@ -305,7 +305,7 @@ describe('RoundRecordForm', () => {
     }
 
     renderWithQueryClient(<ControlledForm />)
-    expect(screen.getByLabelText('评分')).toHaveValue(9)
+    expect(screen.getByRole('slider', { name: '评分' })).toHaveAttribute('aria-valuenow', '9')
     await user.clear(screen.getByLabelText('私人笔记'))
     await user.type(screen.getByLabelText('私人笔记'), '尚未提交的改动')
 
@@ -313,7 +313,7 @@ describe('RoundRecordForm', () => {
 
     expect(screen.getByRole('radio', { name: '在看' })).toBeChecked()
     expect(screen.queryByLabelText('完成观看时间')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('评分')).not.toBeInTheDocument()
+    expect(screen.queryByRole('slider', { name: '评分' })).not.toBeInTheDocument()
     expect(screen.queryByText('尚未提交的改动')).not.toBeInTheDocument()
   })
 })

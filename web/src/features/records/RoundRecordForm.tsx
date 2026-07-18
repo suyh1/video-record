@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { APIError, updateCurrentRound, type UpdateCurrentRoundPayload } from '../../api/client'
 import type { CurrentRound, HouseholdMember, RecordStatus } from '../../api/types'
 import { fromDateTimeLocalValue, isFutureDateTimeLocalValue, toDateTimeLocalValue } from '../../lib/dateTime'
+import { RatingPicker } from './RatingPicker'
 
 type RoundRecordFormProps = {
   round: CurrentRound
@@ -158,23 +159,13 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
 
         {expanded ? (
           <div className="optional-record-fields">
-            <label className="form-field compact-field">
-              <span>评分</span>
-              <span className="rating-input">
-                <input
-                  aria-label="评分"
-                  aria-invalid={Boolean(form.formState.errors.rating)}
-                  inputMode="decimal"
-                  type="number"
-                  min="0"
-                  max="10"
-                  step="0.1"
-                  {...form.register('rating')}
-                />
-                <span aria-hidden="true">/ 10</span>
-              </span>
-              {form.formState.errors.rating ? <small>{form.formState.errors.rating.message}</small> : null}
-            </label>
+            <div className="form-field rating-picker-field">
+              <RatingPicker
+                value={form.watch('rating')}
+                onChange={(next) => form.setValue('rating', next, { shouldDirty: true, shouldValidate: true })}
+                error={form.formState.errors.rating?.message}
+              />
+            </div>
             <label className="form-field compact-field">
               <span>观看方式</span>
               <input type="text" maxLength={80} placeholder="如：影院、家庭电视" {...form.register('viewingMethod')} />
@@ -271,8 +262,13 @@ function formSchema(movie: boolean, now: Date) {
       status: z.enum(['none', 'wishlist', 'watching', 'completed', 'dropped']),
       watchedAt: z.string(),
       rating: z.string().refine(
-        (value) => value === '' || (!Number.isNaN(Number(value)) && Number(value) >= 0 && Number(value) <= 10),
-        '评分必须在 0 到 10 之间',
+        (value) => {
+          if (value === '') return true
+          const number = Number(value)
+          if (Number.isNaN(number) || number < 0 || number > 10) return false
+          return Math.abs(number * 2 - Math.round(number * 2)) < 1e-9
+        },
+        '评分必须在 0 到 10 之间，步进 0.5',
       ),
       note: z.string().max(5000, '笔记不能超过 5000 字'),
       viewingMethod: z.string().max(80, '观看方式不能超过 80 字'),
