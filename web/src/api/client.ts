@@ -469,6 +469,10 @@ export function updateEpisodeProgress(
 export type GetLibraryOptions = {
   cursor?: string | null
   limit?: number
+  mediaType?: 'movie' | 'tv' | 'all'
+  sort?: 'updated' | 'title' | 'rating' | 'watched'
+  q?: string
+  tag?: string
   signal?: AbortSignal
 }
 
@@ -483,6 +487,10 @@ export function getLibrary(
   if (status !== 'all') params.set('status', status)
   if (options.cursor) params.set('cursor', options.cursor)
   if (options.limit !== undefined) params.set('limit', String(options.limit))
+  if (options.mediaType && options.mediaType !== 'all') params.set('mediaType', options.mediaType)
+  if (options.sort && options.sort !== 'updated') params.set('sort', options.sort)
+  if (options.q) params.set('q', options.q)
+  if (options.tag) params.set('tag', options.tag)
   const query = params.toString()
   return requestJSON<LibraryResponse>(
     `/api/v1/library${query ? `?${query}` : ''}`,
@@ -505,6 +513,43 @@ export function getCollectionItems(
     `/api/v1/collections/${encodeURIComponent(collectionID)}/items${query ? `?${query}` : ''}`,
     options?.signal ? { signal: options.signal } : undefined,
   )
+}
+
+export function getUserTags(signal?: AbortSignal) {
+  return requestJSON<{ tags: string[] }>('/api/v1/tags', signal ? { signal } : undefined)
+}
+
+export async function getViewingMethods(signal?: AbortSignal) {
+  const response = await requestJSON<{ methods: string[] }>(
+    '/api/v1/records/viewing-methods',
+    signal ? { signal } : undefined,
+  )
+  return response.methods
+
+}
+
+export function renameCollection(collectionID: string, name: string) {
+  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+  return requestJSON<Collection>(`/api/v1/collections/${encodeURIComponent(collectionID)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': createIdempotencyKey(),
+      'X-CSRF-Token': csrfToken,
+    },
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function deleteCollection(collectionID: string) {
+  const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+  return requestJSON<void>(`/api/v1/collections/${encodeURIComponent(collectionID)}`, {
+    method: 'DELETE',
+    headers: {
+      'Idempotency-Key': createIdempotencyKey(),
+      'X-CSRF-Token': csrfToken,
+    },
+  })
 }
 
 export function createCollection(name: string) {

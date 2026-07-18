@@ -164,6 +164,36 @@ func TestCurrentRoundHandlersRejectFutureTimeAndStaleVersion(t *testing.T) {
 	require.Equal(t, `"1"`, stale.Header().Get("ETag"))
 }
 
+func TestViewingMethodsHandlerReturnsTopMethods(t *testing.T) {
+	router, cookie, csrfToken, mediaID, _, db := newRecordsTestRouter(t)
+	mediaService := media.NewService(media.NewRepository(db))
+	second, err := mediaService.CreateCustom(context.Background(), media.CreateCustomInput{
+		MediaType: media.MediaTypeMovie, Title: "第二部电影",
+	})
+	require.NoError(t, err)
+
+	first := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+mediaID+"/rounds/current", map[string]any{
+		"status": "completed", "viewingMethod": "影院", "watchedAt": "2026-07-13T20:30:45Z",
+	}, map[string]string{
+		"Cookie": cookie.String(), "Origin": "http://example.test",
+		"X-CSRF-Token": csrfToken, "Idempotency-Key": "method-1", "If-Match": `"0"`,
+	})
+	require.Equal(t, http.StatusOK, first.Code)
+	secondSave := performJSONRequest(router, http.MethodPut, "http://example.test/api/v1/records/"+second.ID+"/rounds/current", map[string]any{
+		"status": "watching", "viewingMethod": "家庭电视",
+	}, map[string]string{
+		"Cookie": cookie.String(), "Origin": "http://example.test",
+		"X-CSRF-Token": csrfToken, "Idempotency-Key": "method-2", "If-Match": `"0"`,
+	})
+	require.Equal(t, http.StatusOK, secondSave.Code)
+
+	response := performJSONRequest(router, http.MethodGet, "http://example.test/api/v1/records/viewing-methods", nil, map[string]string{
+		"Cookie": cookie.String(),
+	})
+	require.Equal(t, http.StatusOK, response.Code)
+	require.JSONEq(t, `{"methods":["家庭电视","影院"]}`, response.Body.String())
+}
+
 func TestRewatchRoundAndRoundHistoryHandlers(t *testing.T) {
 	router, cookie, csrfToken, mediaID, _, _ := newRecordsTestRouter(t)
 	currentURL := "http://example.test/api/v1/records/" + mediaID + "/rounds/current"

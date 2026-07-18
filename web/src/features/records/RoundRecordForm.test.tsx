@@ -36,7 +36,10 @@ const seasonRound: CurrentRound = {
 }
 
 describe('RoundRecordForm', () => {
-  beforeEach(() => sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token'))
+  beforeEach(() => {
+    sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token')
+    server.use(http.get('*/api/v1/records/viewing-methods', () => HttpResponse.json({ methods: [] })))
+  })
 
   it('labels movie and season records in their actual scope without a rewatch action', () => {
     const { unmount } = renderWithQueryClient(
@@ -91,23 +94,26 @@ describe('RoundRecordForm', () => {
 
   it('saves private fields and participants to the current movie round with its own version', async () => {
     let requestBody: unknown
-    server.use(http.put('*/api/v1/records/media-1/rounds/current', async ({ request }) => {
-      expect(request.headers.get('If-Match')).toBe('"0"')
-      expect(request.headers.get('If-Match')).not.toBe('"7"')
-      expect(request.headers.get('X-CSRF-Token')).toBe('csrf-test-token')
-      expect(request.headers.get('Idempotency-Key')).toBeTruthy()
-      requestBody = await request.json()
-      return HttpResponse.json({
-        ...movieRound,
-        roundId: 'round-movie-1',
-        status: 'completed',
-        rating: 8.5,
-        note: '银幕声音很好',
-        viewingMethod: '影院',
-        watchedAt: now.toISOString(),
-        version: 1,
-      })
-    }))
+    server.use(
+      http.get('*/api/v1/records/viewing-methods', () => HttpResponse.json({ methods: ['影院', '家庭电视'] })),
+      http.put('*/api/v1/records/media-1/rounds/current', async ({ request }) => {
+        expect(request.headers.get('If-Match')).toBe('"0"')
+        expect(request.headers.get('If-Match')).not.toBe('"7"')
+        expect(request.headers.get('X-CSRF-Token')).toBe('csrf-test-token')
+        expect(request.headers.get('Idempotency-Key')).toBeTruthy()
+        requestBody = await request.json()
+        return HttpResponse.json({
+          ...movieRound,
+          roundId: 'round-movie-1',
+          status: 'completed',
+          rating: 8.5,
+          note: '银幕声音很好',
+          viewingMethod: '影院',
+          watchedAt: now.toISOString(),
+          version: 1,
+        })
+      }),
+    )
     const onSaved = vi.fn()
     const user = userEvent.setup()
     renderWithQueryClient(
@@ -122,7 +128,9 @@ describe('RoundRecordForm', () => {
     await user.click(screen.getByRole('radio', { name: '看过' }))
     await user.click(screen.getByRole('button', { name: '更多记录选项' }))
     await user.click(screen.getByRole('button', { name: '评分 8.5' }))
-    await user.type(screen.getByLabelText('观看方式'), '影院')
+    expect(await screen.findByRole('group', { name: '常用观看方式' })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '影院' }))
+    expect(screen.getByLabelText('观看方式')).toHaveValue('影院')
     await user.click(screen.getByRole('checkbox', { name: 'family' }))
     await user.type(screen.getByLabelText('私人笔记'), '银幕声音很好')
     await user.click(screen.getByRole('button', { name: '保存记录' }))
@@ -136,6 +144,17 @@ describe('RoundRecordForm', () => {
       note: '银幕声音很好',
       viewingMethod: '影院',
     })
+  })
+
+  it('hides viewing method chips when the user has no history', async () => {
+    server.use(http.get('*/api/v1/records/viewing-methods', () => HttpResponse.json({ methods: [] })))
+    const user = userEvent.setup()
+    renderWithQueryClient(
+      <RoundRecordForm round={movieRound} now={now} onSaved={() => undefined} />,
+    )
+    await user.click(screen.getByRole('button', { name: '更多记录选项' }))
+    await waitFor(() => expect(screen.getByLabelText('观看方式')).toBeVisible())
+    expect(screen.queryByRole('group', { name: '常用观看方式' })).not.toBeInTheDocument()
   })
 
   it('shows current movie participants and sends an explicit empty set when the last one is removed', async () => {

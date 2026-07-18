@@ -195,6 +195,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/collections/{collectionID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                collectionID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a private collection */
+        delete: operations["deleteCollection"];
+        options?: never;
+        head?: never;
+        /** Rename a private collection */
+        patch: operations["renameCollection"];
+        trace?: never;
+    };
     "/api/v1/collections/{collectionID}/items": {
         parameters: {
             query?: never;
@@ -282,6 +302,40 @@ export interface paths {
         post?: never;
         /** Disconnect an owned media server account */
         delete: operations["disconnectIntegrationAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List private tags for the current user */
+        get: operations["listUserTags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/records/viewing-methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List frequently used viewing methods for the current user */
+        get: operations["listViewingMethods"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1003,6 +1057,12 @@ export interface components {
         CredentialsRequest: {
             username: string;
             password: string;
+        };
+        TagList: {
+            tags: string[];
+        };
+        ViewingMethodList: {
+            methods: string[];
         };
         ChangePasswordRequest: {
             currentPassword: string;
@@ -1993,6 +2053,60 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    deleteCollection: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
+            path: {
+                collectionID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Collection deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    renameCollection: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
+            path: {
+                collectionID: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCollectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Collection renamed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Collection"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     listCollectionItems: {
         parameters: {
             query?: {
@@ -2199,6 +2313,48 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    listUserTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tag names. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listViewingMethods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Top viewing methods ordered by usage. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewingMethodList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     getLibrary: {
         parameters: {
             query?: {
@@ -2207,6 +2363,10 @@ export interface operations {
                 cursor?: string;
                 /** @description Page size. Defaults to 40. Maximum 100. */
                 limit?: number;
+                mediaType?: "movie" | "tv";
+                sort?: "updated" | "title" | "rating" | "watched";
+                q?: string;
+                tag?: string;
             };
             header?: never;
             path?: never;

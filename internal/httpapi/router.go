@@ -115,9 +115,17 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protected.Get("/calendar", recordAPI.calendar)
 					protected.Get("/collections", recordAPI.collections)
 					protected.Get("/collections/{collectionID}/items", recordAPI.collectionItems)
+					protected.Get("/tags", recordAPI.userTags)
+					protected.With(protectedWriteMiddleware...).Patch(
+						"/collections/{collectionID}", recordAPI.renameCollection,
+					)
+					protected.With(protectedWriteMiddleware...).Delete(
+						"/collections/{collectionID}", recordAPI.deleteCollection,
+					)
 					protected.Get("/data/export", recordAPI.exportData)
 					protected.Get("/library", recordAPI.library)
 					protected.Get("/media/search", recordAPI.localSearch)
+					protected.Get("/records/viewing-methods", recordAPI.viewingMethods)
 					protected.Get("/records/{mediaID}", recordAPI.getRecord)
 					protected.Get("/records/{mediaID}/rounds/current", recordAPI.currentRound)
 					protected.Get("/records/{mediaID}/rounds", recordAPI.roundHistory)

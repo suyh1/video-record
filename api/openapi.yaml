@@ -206,6 +206,39 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Collection' }
         default: { $ref: '#/components/responses/Problem' }
+  /api/v1/collections/{collectionID}:
+    parameters:
+      - name: collectionID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      operationId: renameCollection
+      summary: Rename a private collection
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCollectionRequest' }
+      responses:
+        '200':
+          description: Collection renamed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Collection' }
+        default: { $ref: '#/components/responses/Problem' }
+    delete:
+      operationId: deleteCollection
+      summary: Delete a private collection
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      responses:
+        '204': { description: Collection deleted. }
+        default: { $ref: '#/components/responses/Problem' }
   /api/v1/collections/{collectionID}/items:
     parameters:
       - name: collectionID
@@ -336,6 +369,28 @@ paths:
       responses:
         '204': { description: Integration account disconnected. }
         default: { $ref: '#/components/responses/Problem' }
+  /api/v1/tags:
+    get:
+      operationId: listUserTags
+      summary: List private tags for the current user
+      responses:
+        '200':
+          description: Tag names.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TagList' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/records/viewing-methods:
+    get:
+      operationId: listViewingMethods
+      summary: List frequently used viewing methods for the current user
+      responses:
+        '200':
+          description: Top viewing methods ordered by usage.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ViewingMethodList' }
+        default: { $ref: '#/components/responses/Problem' }
   /api/v1/library:
     get:
       operationId: getLibrary
@@ -355,6 +410,22 @@ paths:
           required: false
           description: Page size. Defaults to 40. Maximum 100.
           schema: { type: integer, minimum: 1, maximum: 100, default: 40 }
+        - name: mediaType
+          in: query
+          required: false
+          schema: { type: string, enum: [movie, tv] }
+        - name: sort
+          in: query
+          required: false
+          schema: { type: string, enum: [updated, title, rating, watched], default: updated }
+        - name: q
+          in: query
+          required: false
+          schema: { type: string }
+        - name: tag
+          in: query
+          required: false
+          schema: { type: string }
       responses:
         '200':
           description: Cursor-shaped library page.
@@ -1164,6 +1235,22 @@ components:
       properties:
         username: { type: string, minLength: 1 }
         password: { type: string, minLength: 1 }
+    TagList:
+      type: object
+      additionalProperties: false
+      required: [tags]
+      properties:
+        tags:
+          type: array
+          items: { type: string }
+    ViewingMethodList:
+      type: object
+      additionalProperties: false
+      required: [methods]
+      properties:
+        methods:
+          type: array
+          items: { type: string, maxLength: 80 }
     ChangePasswordRequest:
       type: object
       additionalProperties: false

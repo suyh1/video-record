@@ -5530,6 +5530,39 @@ textarea:disabled {
   width: 120px;
 }
 
+.viewing-method-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.viewing-method-field .compact-field {
+  max-width: 100%;
+}
+
+.viewing-method-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.viewing-method-chips button {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.viewing-method-chips button.selected,
+.viewing-method-chips button[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: color-mix(in oklch, var(--primary) 12%, var(--bg));
+  color: var(--primary);
+}
+
 .expand-record-fields {
   display: inline-flex;
   min-height: 40px;

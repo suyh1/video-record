@@ -40,6 +40,10 @@ type Repository interface {
 	ReplaceCollectionItems(context.Context, string, string, []string) error
 	Collections(context.Context, string) ([]Collection, error)
 	CollectionItems(context.Context, string, string, Status) ([]CatalogItem, error)
+	RenameCollection(context.Context, string, string, string) (Collection, error)
+	DeleteCollection(context.Context, string, string) error
+	UserTags(context.Context, string) ([]string, error)
+	ViewingMethods(context.Context, string, int) ([]string, error)
 	ExportDocument(context.Context, string) (exportDocument, error)
 	ImportDocument(context.Context, string, exportDocument) (ImportReport, error)
 }
@@ -211,33 +215,115 @@ func nullableString(value string) any {
 }
 
 func (repository *SQLiteRepository) Library(ctx context.Context, userID string, query LibraryQuery) (LibraryPage, error) {
-	sqlQuery := `
+	sortKey := query.Sort
+	if sortKey == "" {
+		sortKey = "updated"
+	}
+	titleExpr := "COALESCE(media.custom_title, media.external_title)"
+	sqlQuery := fmt.Sprintf(`
 		SELECT media.id, media.media_type,
-		       COALESCE(media.custom_title, media.external_title), media.original_title,
+		       %s, media.original_title,
 		       SUBSTR(COALESCE(NULLIF(media.release_date, ''), media.custom_year, ''), 1, 4),
-		       media.poster_path, profile.status, tmdb.source_id, profile.updated_at
+		       media.poster_path, profile.status, tmdb.source_id,
+		       profile.updated_at,
+		       COALESCE((
+		         SELECT round.rating FROM watch_rounds round
+		         WHERE round.user_id = profile.user_id AND round.media_id = profile.media_id
+		           AND round.archived_at IS NULL
+		         ORDER BY CASE WHEN round.status = 'watching' THEN 0 ELSE 1 END,
+		                  round.updated_at DESC, round.season_number DESC, round.id DESC
+		         LIMIT 1
+		       ), -1) AS sort_rating,
+		       COALESCE((
+		         SELECT MAX(round.completed_at) FROM watch_rounds round
+		         WHERE round.user_id = profile.user_id AND round.media_id = profile.media_id
+		           AND round.completed_at IS NOT NULL
+		       ), '') AS sort_watched
 		FROM user_media_profiles profile
 		JOIN media_items media ON media.id = profile.media_id
 		LEFT JOIN media_external_ids tmdb ON tmdb.media_id = media.id AND tmdb.source = 'tmdb'
-		WHERE profile.user_id = ?`
+		WHERE profile.user_id = ?`, titleExpr)
 	arguments := []any{userID}
 	if query.Status != "" && query.Status != StatusNone {
 		sqlQuery += " AND profile.status = ?"
 		arguments = append(arguments, query.Status)
 	}
+	if query.MediaType != "" {
+		sqlQuery += " AND media.media_type = ?"
+		arguments = append(arguments, query.MediaType)
+	}
+	if query.Query != "" {
+		pattern := "%" + escapeLike(query.Query) + "%"
+		sqlQuery += fmt.Sprintf(" AND (%s LIKE ? ESCAPE '\\' OR media.original_title LIKE ? ESCAPE '\\')", titleExpr)
+		arguments = append(arguments, pattern, pattern)
+	}
+	if query.Tag != "" {
+		sqlQuery += `
+			AND EXISTS (
+			  SELECT 1 FROM user_media_tags umt
+			  JOIN tags t ON t.id = umt.tag_id AND t.user_id = umt.user_id
+			  WHERE umt.user_id = profile.user_id AND umt.media_id = profile.media_id AND t.name = ?
+			)`
+		arguments = append(arguments, query.Tag)
+	}
 	if query.Cursor != "" {
-		updatedAt, mediaID, err := decodeLibraryCursor(query.Cursor)
-		if err != nil {
+		cursorSort, cursorKey, mediaID, err := decodeLibraryCursor(query.Cursor)
+		if err != nil || cursorSort != sortKey {
 			return LibraryPage{}, ErrInvalidRecord
 		}
-		sqlQuery += " AND (profile.updated_at < ? OR (profile.updated_at = ? AND media.id > ?))"
-		arguments = append(arguments, updatedAt, updatedAt, mediaID)
+		switch sortKey {
+		case "title":
+			sqlQuery += fmt.Sprintf(" AND (%s > ? OR (%s = ? AND media.id > ?))", titleExpr, titleExpr)
+			arguments = append(arguments, cursorKey, cursorKey, mediaID)
+		case "rating":
+			rating, err := strconv.Atoi(cursorKey)
+			if err != nil {
+				return LibraryPage{}, ErrInvalidRecord
+			}
+			sqlQuery += ` AND (
+				COALESCE((SELECT round.rating FROM watch_rounds round
+				  WHERE round.user_id = profile.user_id AND round.media_id = profile.media_id AND round.archived_at IS NULL
+				  ORDER BY CASE WHEN round.status = 'watching' THEN 0 ELSE 1 END, round.updated_at DESC, round.season_number DESC, round.id DESC LIMIT 1), -1) < ?
+				OR (
+				  COALESCE((SELECT round.rating FROM watch_rounds round
+				    WHERE round.user_id = profile.user_id AND round.media_id = profile.media_id AND round.archived_at IS NULL
+				    ORDER BY CASE WHEN round.status = 'watching' THEN 0 ELSE 1 END, round.updated_at DESC, round.season_number DESC, round.id DESC LIMIT 1), -1) = ?
+				  AND media.id > ?
+				))`
+			arguments = append(arguments, rating, rating, mediaID)
+		case "watched":
+			sqlQuery += ` AND (
+				COALESCE((SELECT MAX(round.completed_at) FROM watch_rounds round
+				  WHERE round.user_id = profile.user_id AND round.media_id = profile.media_id AND round.completed_at IS NOT NULL), '') < ?
+				OR (
+				  COALESCE((SELECT MAX(round.completed_at) FROM watch_rounds round
+				    WHERE round.user_id = profile.user_id AND round.media_id = profile.media_id AND round.completed_at IS NOT NULL), '') = ?
+				  AND media.id > ?
+				))`
+			arguments = append(arguments, cursorKey, cursorKey, mediaID)
+		default:
+			updatedAt, err := strconv.ParseInt(cursorKey, 10, 64)
+			if err != nil {
+				return LibraryPage{}, ErrInvalidRecord
+			}
+			sqlQuery += " AND (profile.updated_at < ? OR (profile.updated_at = ? AND media.id > ?))"
+			arguments = append(arguments, updatedAt, updatedAt, mediaID)
+		}
 	}
 	limit := query.Limit
 	if limit <= 0 {
 		limit = DefaultLibraryLimit
 	}
-	sqlQuery += " ORDER BY profile.updated_at DESC, media.id LIMIT ?"
+	switch sortKey {
+	case "title":
+		sqlQuery += fmt.Sprintf(" ORDER BY %s ASC, media.id ASC LIMIT ?", titleExpr)
+	case "rating":
+		sqlQuery += " ORDER BY sort_rating DESC, media.id ASC LIMIT ?"
+	case "watched":
+		sqlQuery += " ORDER BY sort_watched DESC, media.id ASC LIMIT ?"
+	default:
+		sqlQuery += " ORDER BY profile.updated_at DESC, media.id ASC LIMIT ?"
+	}
 	arguments = append(arguments, limit+1)
 
 	rows, err := repository.db.Reader().QueryContext(ctx, sqlQuery, arguments...)
@@ -249,15 +335,19 @@ func (repository *SQLiteRepository) Library(ctx context.Context, userID string, 
 	type rowItem struct {
 		item      CatalogItem
 		updatedAt int64
+		rating    int
+		watched   string
 	}
 	rowsItems := make([]rowItem, 0, limit+1)
 	for rows.Next() {
 		var item CatalogItem
 		var tmdbID sql.NullString
 		var updatedAt int64
+		var rating int
+		var watched string
 		if err := rows.Scan(
 			&item.ID, &item.MediaType, &item.Title, &item.OriginalTitle,
-			&item.Year, &item.PosterPath, &item.Status, &tmdbID, &updatedAt,
+			&item.Year, &item.PosterPath, &item.Status, &tmdbID, &updatedAt, &rating, &watched,
 		); err != nil {
 			return LibraryPage{}, err
 		}
@@ -268,7 +358,7 @@ func (repository *SQLiteRepository) Library(ctx context.Context, userID string, 
 			}
 			item.TMDBID = &value
 		}
-		rowsItems = append(rowsItems, rowItem{item: item, updatedAt: updatedAt})
+		rowsItems = append(rowsItems, rowItem{item: item, updatedAt: updatedAt, rating: rating, watched: watched})
 	}
 	if err := rows.Err(); err != nil {
 		return LibraryPage{}, err
@@ -278,7 +368,16 @@ func (repository *SQLiteRepository) Library(ctx context.Context, userID string, 
 	for index, row := range rowsItems {
 		if index >= limit {
 			last := rowsItems[limit-1]
-			page.NextCursor = encodeLibraryCursor(last.updatedAt, last.item.ID)
+			key := strconv.FormatInt(last.updatedAt, 10)
+			switch sortKey {
+			case "title":
+				key = last.item.Title
+			case "rating":
+				key = strconv.Itoa(last.rating)
+			case "watched":
+				key = last.watched
+			}
+			page.NextCursor = encodeLibraryCursor(sortKey, key, last.item.ID)
 			break
 		}
 		page.Items = append(page.Items, row.item)
@@ -286,25 +385,21 @@ func (repository *SQLiteRepository) Library(ctx context.Context, userID string, 
 	return page, nil
 }
 
-func encodeLibraryCursor(updatedAt int64, mediaID string) string {
-	payload := fmt.Sprintf("%d|%s", updatedAt, mediaID)
+func encodeLibraryCursor(sortKey, key, mediaID string) string {
+	payload := fmt.Sprintf("%s|%s|%s", sortKey, key, mediaID)
 	return base64.RawURLEncoding.EncodeToString([]byte(payload))
 }
 
-func decodeLibraryCursor(cursor string) (int64, string, error) {
+func decodeLibraryCursor(cursor string) (sortKey, key, mediaID string, err error) {
 	raw, err := base64.RawURLEncoding.DecodeString(cursor)
 	if err != nil {
-		return 0, "", err
+		return "", "", "", err
 	}
-	parts := strings.SplitN(string(raw), "|", 2)
-	if len(parts) != 2 || parts[1] == "" {
-		return 0, "", ErrInvalidRecord
+	parts := strings.SplitN(string(raw), "|", 3)
+	if len(parts) != 3 || parts[0] == "" || parts[2] == "" {
+		return "", "", "", ErrInvalidRecord
 	}
-	updatedAt, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
-		return 0, "", err
-	}
-	return updatedAt, parts[1], nil
+	return parts[0], parts[1], parts[2], nil
 }
 
 func (repository *SQLiteRepository) SearchMedia(ctx context.Context, userID, query string) ([]CatalogItem, error) {
@@ -620,6 +715,102 @@ func (repository *SQLiteRepository) Collections(ctx context.Context, userID stri
 		collections = append(collections, *byID[id])
 	}
 	return collections, nil
+}
+
+func (repository *SQLiteRepository) RenameCollection(ctx context.Context, userID, collectionID, name string) (Collection, error) {
+	result, err := repository.db.Writer().ExecContext(ctx, `
+		UPDATE collections SET name = ? WHERE id = ? AND user_id = ?
+	`, name, collectionID, userID)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return Collection{}, ErrInvalidRecord
+		}
+		return Collection{}, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return Collection{}, err
+	}
+	if affected == 0 {
+		return Collection{}, ErrCollectionNotFound
+	}
+	collections, err := repository.Collections(ctx, userID)
+	if err != nil {
+		return Collection{}, err
+	}
+	for _, collection := range collections {
+		if collection.ID == collectionID {
+			return collection, nil
+		}
+	}
+	return Collection{}, ErrCollectionNotFound
+}
+
+func (repository *SQLiteRepository) DeleteCollection(ctx context.Context, userID, collectionID string) error {
+	result, err := repository.db.Writer().ExecContext(ctx, `
+		DELETE FROM collections WHERE id = ? AND user_id = ?
+	`, collectionID, userID)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrCollectionNotFound
+	}
+	return nil
+}
+
+func (repository *SQLiteRepository) UserTags(ctx context.Context, userID string) ([]string, error) {
+	rows, err := repository.db.Reader().QueryContext(ctx, `
+		SELECT name FROM tags WHERE user_id = ? ORDER BY name COLLATE NOCASE
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	names := make([]string, 0)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
+}
+
+func (repository *SQLiteRepository) ViewingMethods(ctx context.Context, userID string, limit int) ([]string, error) {
+	if limit < 1 {
+		limit = 8
+	}
+	rows, err := repository.db.Reader().QueryContext(ctx, `
+		SELECT method FROM (
+			SELECT TRIM(viewing_method) AS method, COUNT(*) AS uses
+			FROM watch_rounds
+			WHERE user_id = ?
+			  AND viewing_method IS NOT NULL
+			  AND TRIM(viewing_method) != ''
+			GROUP BY TRIM(viewing_method)
+			ORDER BY uses DESC, method COLLATE NOCASE ASC
+			LIMIT ?
+		)
+	`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	methods := make([]string, 0, limit)
+	for rows.Next() {
+		var method string
+		if err := rows.Scan(&method); err != nil {
+			return nil, err
+		}
+		methods = append(methods, method)
+	}
+	return methods, rows.Err()
 }
 
 func (repository *SQLiteRepository) CollectionItems(

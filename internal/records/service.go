@@ -153,6 +153,37 @@ func (service *Service) CollectionItems(
 	return service.repository.CollectionItems(ctx, userID, collectionID, status)
 }
 
+func (service *Service) RenameCollection(ctx context.Context, userID, collectionID, name string) (Collection, error) {
+	name = strings.TrimSpace(name)
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(collectionID) == "" || name == "" {
+		return Collection{}, ErrInvalidRecord
+	}
+	return service.repository.RenameCollection(ctx, userID, collectionID, name)
+}
+
+func (service *Service) DeleteCollection(ctx context.Context, userID, collectionID string) error {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(collectionID) == "" {
+		return ErrInvalidRecord
+	}
+	return service.repository.DeleteCollection(ctx, userID, collectionID)
+}
+
+func (service *Service) UserTags(ctx context.Context, userID string) ([]string, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, ErrInvalidRecord
+	}
+	return service.repository.UserTags(ctx, userID)
+}
+
+const DefaultViewingMethodLimit = 8
+
+func (service *Service) ViewingMethods(ctx context.Context, userID string) ([]string, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, ErrInvalidRecord
+	}
+	return service.repository.ViewingMethods(ctx, userID, DefaultViewingMethodLimit)
+}
+
 func equalIntPointers(left, right *int) bool {
 	return left == nil && right == nil || left != nil && right != nil && *left == *right
 }

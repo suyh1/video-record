@@ -361,3 +361,53 @@ func integerPointer(value int) *int {
 func timePointer(value time.Time) *time.Time {
 	return &value
 }
+
+func TestViewingMethodsReturnsTopUsedMethodsForUser(t *testing.T) {
+	service, db, userID, mediaID := newTestRecordsService(t)
+	ctx := context.Background()
+	mediaService := media.NewService(media.NewRepository(db))
+	second, err := mediaService.CreateCustom(ctx, media.CreateCustomInput{
+		MediaType: media.MediaTypeMovie, Title: "第二部",
+	})
+	require.NoError(t, err)
+	third, err := mediaService.CreateCustom(ctx, media.CreateCustomInput{
+		MediaType: media.MediaTypeMovie, Title: "第三部",
+	})
+	require.NoError(t, err)
+	cinema := "影院"
+	tv := "家庭电视"
+	otherUser := insertTestUser(t, db, "methods-outsider")
+	completedAt := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+
+	_, err = service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: userID, MediaID: mediaID}, Status: StatusCompleted,
+		ViewingMethod: &cinema, ViewingMethodSet: true, CompletedAt: &completedAt,
+		Source: SourceManual, ExpectedVersion: 0,
+	})
+	require.NoError(t, err)
+	_, err = service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: userID, MediaID: second.ID}, Status: StatusCompleted,
+		ViewingMethod: &cinema, ViewingMethodSet: true, CompletedAt: &completedAt,
+		Source: SourceManual, ExpectedVersion: 0,
+	})
+	require.NoError(t, err)
+	_, err = service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: userID, MediaID: third.ID}, Status: StatusWatching,
+		ViewingMethod: &tv, ViewingMethodSet: true, Source: SourceManual, ExpectedVersion: 0,
+	})
+	require.NoError(t, err)
+	_, err = service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: otherUser, MediaID: mediaID}, Status: StatusCompleted,
+		ViewingMethod: stringPointer("不应出现"), ViewingMethodSet: true, CompletedAt: &completedAt,
+		Source: SourceManual, ExpectedVersion: 0,
+	})
+	require.NoError(t, err)
+
+	methods, err := service.ViewingMethods(ctx, userID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"影院", "家庭电视"}, methods)
+
+	empty, err := service.ViewingMethods(ctx, insertTestUser(t, db, "methods-empty"))
+	require.NoError(t, err)
+	require.Empty(t, empty)
+}

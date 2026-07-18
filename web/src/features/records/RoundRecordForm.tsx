@@ -1,10 +1,10 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Bookmark, Check, ChevronDown, ChevronUp, CircleStop, LoaderCircle, Play } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 
-import { APIError, updateCurrentRound, type UpdateCurrentRoundPayload } from '../../api/client'
+import { APIError, getViewingMethods, updateCurrentRound, type UpdateCurrentRoundPayload } from '../../api/client'
 import type { CurrentRound, HouseholdMember, RecordStatus } from '../../api/types'
 import { fromDateTimeLocalValue, isFutureDateTimeLocalValue, toDateTimeLocalValue } from '../../lib/dateTime'
 import { RatingPicker } from './RatingPicker'
@@ -24,6 +24,12 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
   const errorID = useId()
   const form = useForm<FormValues>({ defaultValues: formValuesFromRound(round) })
   const status = form.watch('status')
+  const viewingMethod = form.watch('viewingMethod')
+  const viewingMethods = useQuery({
+    queryKey: ['viewing-methods'],
+    queryFn: ({ signal }) => getViewingMethods(signal),
+    enabled: expanded,
+  })
   const roundIdentity = `${round.mediaId}:${round.seasonNumber ?? 'movie'}:${round.roundNumber}`
   const previousRoundIdentity = useRef(roundIdentity)
   const mutation = useMutation({
@@ -166,10 +172,27 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
                 error={form.formState.errors.rating?.message}
               />
             </div>
-            <label className="form-field compact-field">
-              <span>观看方式</span>
-              <input type="text" maxLength={80} placeholder="如：影院、家庭电视" {...form.register('viewingMethod')} />
-            </label>
+            <div className="form-field viewing-method-field">
+              <label className="compact-field">
+                <span>观看方式</span>
+                <input type="text" maxLength={80} placeholder="如：影院、家庭电视" {...form.register('viewingMethod')} />
+              </label>
+              {viewingMethods.data && viewingMethods.data.length > 0 ? (
+                <div className="viewing-method-chips" role="group" aria-label="常用观看方式">
+                  {viewingMethods.data.map((method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      className={viewingMethod.trim() === method ? 'selected' : ''}
+                      aria-pressed={viewingMethod.trim() === method}
+                      onClick={() => form.setValue('viewingMethod', method, { shouldDirty: true })}
+                    >
+                      {method}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             {round.seasonNumber === null && status === 'completed' && participants.length > 0 ? (
               <fieldset className="participant-fieldset">
                 <legend>共同观看者</legend>

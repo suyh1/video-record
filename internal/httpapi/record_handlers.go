@@ -77,8 +77,12 @@ func (handlers recordHandlers) library(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := records.LibraryQuery{
-		Status: records.Status(strings.TrimSpace(r.URL.Query().Get("status"))),
-		Cursor: strings.TrimSpace(r.URL.Query().Get("cursor")),
+		Status:    records.Status(strings.TrimSpace(r.URL.Query().Get("status"))),
+		Cursor:    strings.TrimSpace(r.URL.Query().Get("cursor")),
+		MediaType: strings.TrimSpace(r.URL.Query().Get("mediaType")),
+		Sort:      strings.TrimSpace(r.URL.Query().Get("sort")),
+		Query:     strings.TrimSpace(r.URL.Query().Get("q")),
+		Tag:       strings.TrimSpace(r.URL.Query().Get("tag")),
 	}
 	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
 		limit, err := strconv.Atoi(rawLimit)
@@ -262,6 +266,74 @@ func (handlers recordHandlers) collectionItems(w http.ResponseWriter, r *http.Re
 		"items":      handlers.newCatalogResponses(items),
 		"nextCursor": nil,
 	})
+}
+
+func (handlers recordHandlers) renameCollection(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	var request collectionRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_request")
+		return
+	}
+	collection, err := handlers.service.RenameCollection(
+		r.Context(), identity.User.ID, chi.URLParam(r, "collectionID"), request.Name,
+	)
+	if err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	writeJSON(w, http.StatusOK, newCollectionResponse(collection))
+}
+
+func (handlers recordHandlers) deleteCollection(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	if err := handlers.service.DeleteCollection(r.Context(), identity.User.ID, chi.URLParam(r, "collectionID")); err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (handlers recordHandlers) userTags(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	tags, err := handlers.service.UserTags(r.Context(), identity.User.ID)
+	if err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	if tags == nil {
+		tags = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tags": tags})
+}
+
+func (handlers recordHandlers) viewingMethods(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	methods, err := handlers.service.ViewingMethods(r.Context(), identity.User.ID)
+	if err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	if methods == nil {
+		methods = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"methods": methods})
 }
 
 func newRecordResponse(state records.State, event *records.WatchEvent) recordResponse {
