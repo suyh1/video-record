@@ -22,6 +22,8 @@ type Repository interface {
 	ArchiveCurrentRound(context.Context, RoundScope, int, time.Time) (RewatchResult, error)
 	ArchivedRounds(context.Context, RoundScope) ([]RoundSummary, error)
 	FindArchivedRoundDetail(context.Context, RoundScope, string) (RoundDetail, bool, error)
+	DeleteArchivedRound(context.Context, RoundScope, string) error
+	RemoveMediaFromLibrary(context.Context, string, string) error
 	FindProfile(context.Context, string, string) (MediaProfile, bool, error)
 	InsertRound(context.Context, WatchRound, []string) error
 	UpdateRound(context.Context, WatchRound, int, []string) (bool, error)
@@ -244,7 +246,11 @@ func (repository *SQLiteRepository) Library(ctx context.Context, userID string, 
 		LEFT JOIN media_external_ids tmdb ON tmdb.media_id = media.id AND tmdb.source = 'tmdb'
 		WHERE profile.user_id = ?`, titleExpr)
 	arguments := []any{userID}
-	if query.Status != "" && query.Status != StatusNone {
+	if query.Status == "" || query.Status == StatusNone {
+		// "all" excludes untracked/removed items so none profiles leave the library list.
+		sqlQuery += " AND profile.status != ?"
+		arguments = append(arguments, StatusNone)
+	} else {
 		sqlQuery += " AND profile.status = ?"
 		arguments = append(arguments, query.Status)
 	}

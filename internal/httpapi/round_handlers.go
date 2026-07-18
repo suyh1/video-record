@@ -190,6 +190,60 @@ func (handlers recordHandlers) archivedRoundDetail(w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusOK, response)
 }
 
+func (handlers recordHandlers) clearCurrentRoundFields(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	expectedVersion, ok := parseIfMatch(w, r)
+	if !ok {
+		return
+	}
+	scope, ok := roundScopeFromRequest(w, r, identity.User.ID)
+	if !ok {
+		return
+	}
+	round, err := handlers.service.ClearCurrentRoundFields(r.Context(), scope, expectedVersion)
+	if err != nil {
+		writeRecordError(w, r, err, round.Version)
+		return
+	}
+	w.Header().Set("ETag", quotedVersion(round.Version))
+	writeJSON(w, http.StatusOK, newCurrentRoundResponse(round))
+}
+
+func (handlers recordHandlers) removeFromLibrary(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	mediaID := chi.URLParam(r, "mediaID")
+	if err := handlers.service.RemoveFromLibrary(r.Context(), identity.User.ID, mediaID); err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (handlers recordHandlers) deleteArchivedRound(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	scope, ok := roundScopeFromRequest(w, r, identity.User.ID)
+	if !ok {
+		return
+	}
+	if err := handlers.service.DeleteArchivedRound(r.Context(), scope, chi.URLParam(r, "roundID")); err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (handlers recordHandlers) startRewatch(w http.ResponseWriter, r *http.Request) {
 	identity, ok := IdentityFromContext(r.Context())
 	if !ok {

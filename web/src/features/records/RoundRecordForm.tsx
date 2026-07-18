@@ -20,7 +20,7 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
   const [expanded, setExpanded] = useState(hasOptionalRecord(round))
   const [message, setMessage] = useState<{ kind: 'error' | 'conflict'; text: string } | null>(null)
   const [conflictVersion, setConflictVersion] = useState<number | null>(null)
-  const [saved, setSaved] = useState(false)
+  const [statusMessage, setStatusMessage] = useState('')
   const errorID = useId()
   const form = useForm<FormValues>({ defaultValues: formValuesFromRound(round) })
   const status = form.watch('status')
@@ -42,13 +42,13 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
     onSuccess: (nextRound) => {
       setMessage(null)
       setConflictVersion(null)
-      setSaved(true)
+      setStatusMessage(statusSaveMessage(nextRound.status))
       form.reset(formValuesFromRound(nextRound))
       setExpanded(hasOptionalRecord(nextRound))
       onSaved(nextRound)
     },
     onError: (error) => {
-      setSaved(false)
+      setStatusMessage('')
       if (error instanceof APIError && error.status === 409 && error.code === 'version_conflict') {
         setConflictVersion(parseETag(error.etag))
         setMessage({ kind: 'conflict', text: '记录已在其他位置更新。你的输入仍保留在此处。' })
@@ -65,7 +65,7 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
     setExpanded(hasOptionalRecord(round))
     setMessage(null)
     setConflictVersion(null)
-    setSaved(false)
+    setStatusMessage('')
   }, [form, round, roundIdentity])
 
   const submit = form.handleSubmit((values) => submitValues(values, round.version))
@@ -84,7 +84,7 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
       return
     }
     setMessage(null)
-    setSaved(false)
+    setStatusMessage('')
     mutation.mutate({
       payload: toPayload(parsed.data, expanded, round.seasonNumber === null, round.status),
       version,
@@ -245,7 +245,7 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
           </div>
         ) : null}
 
-        {saved ? <div className="save-toast" role="status"><span>记录已保存</span></div> : null}
+        {statusMessage ? <div className="save-toast" role="status"><span>{statusMessage}</span></div> : null}
 
         <div className="form-actions">
           <button
@@ -299,6 +299,21 @@ const statusLabels: Record<RecordStatus, string> = {
   watching: '在看',
   completed: '已看完',
   dropped: '已弃看',
+}
+
+function statusSaveMessage(status: RecordStatus) {
+  switch (status) {
+    case 'wishlist':
+      return '已标为想看'
+    case 'watching':
+      return '已标为在看'
+    case 'completed':
+      return '已标为看过'
+    case 'dropped':
+      return '已标为弃看'
+    default:
+      return '记录已保存'
+  }
 }
 
 function formSchema(movie: boolean, now: Date) {

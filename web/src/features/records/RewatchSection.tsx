@@ -1,9 +1,9 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Eye, LoaderCircle, Repeat2, X } from 'lucide-react'
-import { useId, useState } from 'react'
+import { Eye, LoaderCircle, Repeat2, Trash2, X } from 'lucide-react'
+import { useId, useRef, useState } from 'react'
 
-import { getRoundDetail, getRoundHistory, startRewatch } from '../../api/client'
+import { deleteArchivedRound, getRoundDetail, getRoundHistory, startRewatch } from '../../api/client'
 import type {
   ArchivedRound,
   CurrentRound,
@@ -24,7 +24,10 @@ type RewatchSectionProps = {
 export function RewatchSection({ round, episodeCatalog = [], onRewatched }: RewatchSectionProps) {
   const queryClient = useQueryClient()
   const [selected, setSelected] = useState<RoundSummary | null>(null)
+  const [deleting, setDeleting] = useState<RoundSummary | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
+  const [statusMessage, setStatusMessage] = useState('')
+  const confirmButton = useRef<HTMLButtonElement>(null)
   const headingID = useId()
   const disabledReasonID = useId()
   const seasonNumber = round.seasonNumber ?? undefined
@@ -72,6 +75,22 @@ export function RewatchSection({ round, episodeCatalog = [], onRewatched }: Rewa
     },
     onError: () => setErrorMessage('再刷失败，当前记录和多刷历史均未更改。'),
   })
+  const deleteMutation = useMutation({
+    mutationFn: (item: RoundSummary) => deleteArchivedRound(round.mediaId, item.roundId, seasonNumber),
+    onSuccess: (_data, item) => {
+      queryClient.setQueryData<RoundSummary[]>(historyKey, (current) => (
+        (current ?? []).filter((entry) => entry.roundId !== item.roundId)
+      ))
+      if (selected?.roundId === item.roundId) setSelected(null)
+      setDeleting(null)
+      setStatusMessage(`已删除第 ${item.roundNumber} 刷记录`)
+      setErrorMessage('')
+    },
+    onError: () => {
+      setErrorMessage('删除多刷记录失败，当前轮次未更改。')
+      setDeleting(null)
+    },
+  })
   const canRewatch = round.status === 'completed'
   const rounds = history.data ?? []
   const episodeTitles = new Map(episodeCatalog.map((episode) => [
@@ -101,6 +120,7 @@ export function RewatchSection({ round, episodeCatalog = [], onRewatched }: Rewa
       </div>
       {!canRewatch ? <p id={disabledReasonID} className="rewatch-availability">当前一刷完成后可再刷</p> : null}
       {errorMessage ? <p className="form-message error" role="alert">{errorMessage}</p> : null}
+      {statusMessage ? <p role="status">{statusMessage}</p> : null}
       {history.isPending ? <div className="skeleton rewatch-list-skeleton" aria-label="正在加载多刷记录" /> : null}
       {history.isError ? <p className="episode-progress-error" role="alert">无法读取多刷记录。</p> : null}
       {!history.isPending && !history.isError && rounds.length === 0 ? <p className="quiet-empty">暂无多刷记录</p> : null}
@@ -115,6 +135,13 @@ export function RewatchSection({ round, episodeCatalog = [], onRewatched }: Rewa
               <span className="rewatch-rating">{item.rating === null ? '未评分' : `${item.rating.toFixed(1)} / 10`}</span>
               <button type="button" aria-label={`查看第 ${item.roundNumber} 刷`} onClick={() => setSelected(item)}>
                 <Eye aria-hidden="true" size={16} />查看
+              </button>
+              <button
+                type="button"
+                aria-label={`删除第 ${item.roundNumber} 刷`}
+                onClick={() => { setStatusMessage(''); setDeleting(item) }}
+              >
+                <Trash2 aria-hidden="true" size={16} />删除
               </button>
             </li>
           ))}
@@ -157,6 +184,37 @@ export function RewatchSection({ round, episodeCatalog = [], onRewatched }: Rewa
                 ) : null}
               </div>
             ) : null}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root open={deleting !== null} onOpenChange={(open) => { if (!open) setDeleting(null) }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="dialog-backdrop" />
+          <Dialog.Content
+            className="member-dialog"
+            onOpenAutoFocus={(event) => { event.preventDefault(); confirmButton.current?.focus() }}
+          >
+            <Dialog.Title>删除第 {deleting?.roundNumber ?? ''} 刷</Dialog.Title>
+            <Dialog.Description>
+              删除后不可恢复。当前进行中的轮次不会受影响。
+            </Dialog.Description>
+            <div className="dialog-actions">
+              <Dialog.Close asChild>
+                <button type="button"><X aria-hidden="true" size={16} />取消</button>
+              </Dialog.Close>
+              <button
+                ref={confirmButton}
+                type="button"
+                disabled={!deleting || deleteMutation.isPending}
+                onClick={() => { if (deleting) deleteMutation.mutate(deleting) }}
+              >
+                {deleteMutation.isPending
+                  ? <LoaderCircle className="loading-icon" aria-hidden="true" size={16} />
+                  : <Trash2 aria-hidden="true" size={16} />}
+                {deleteMutation.isPending ? '正在删除' : '确认删除'}
+              </button>
+            </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>

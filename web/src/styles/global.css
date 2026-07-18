@@ -3515,6 +3515,13 @@ body:has(.media-details-page) .app-header.immersive-header .global-search {
   color: var(--error);
 }
 
+.home-continue-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
 .home-continue-action-skeleton {
   height: 40px;
 }
@@ -6078,6 +6085,47 @@ textarea:disabled {
 .personal-record-panel .primary-button {
   min-width: 144px;
   min-height: var(--control-lg);
+}
+
+.record-danger-zone {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.record-danger-heading h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.record-danger-heading p {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+}
+
+.record-danger-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.record-danger-actions button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid color-mix(in oklch, var(--error) 35%, var(--border));
+  border-radius: var(--radius-control);
+  background: color-mix(in oklch, var(--error) 8%, var(--bg));
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.record-danger-zone p[role="status"] {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
 }
 
 .record-organizing {

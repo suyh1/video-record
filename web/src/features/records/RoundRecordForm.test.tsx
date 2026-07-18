@@ -165,6 +165,7 @@ describe('RoundRecordForm', () => {
       note: '银幕声音很好',
       viewingMethod: '影院',
     })
+    expect(screen.getByRole('status')).toHaveTextContent('已标为看过')
   })
 
   it('hides viewing method chips when the user has no history', async () => {

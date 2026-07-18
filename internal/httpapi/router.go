@@ -135,6 +135,15 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					protected.With(protectedWriteMiddleware...).Put(
 						"/records/{mediaID}/rounds/current", recordAPI.updateCurrentRound,
 					)
+					protected.With(protectedWriteMiddleware...).Post(
+						"/records/{mediaID}/rounds/current/clear-fields", recordAPI.clearCurrentRoundFields,
+					)
+					protected.With(protectedWriteMiddleware...).Post(
+						"/records/{mediaID}/remove-from-library", recordAPI.removeFromLibrary,
+					)
+					protected.With(protectedWriteMiddleware...).Delete(
+						"/records/{mediaID}/rounds/{roundID}", recordAPI.deleteArchivedRound,
+					)
 					protected.With(protectedWriteMiddleware...).Put(
 						"/records/{mediaID}/tags", recordAPI.setTags,
 					)

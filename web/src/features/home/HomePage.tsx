@@ -245,7 +245,7 @@ function HomeContinueMovie({ item }: { item: MediaSearchResult }) {
           {mutation.isPending ? <LoaderCircle className="loading-icon" aria-hidden="true" size={16} /> : <Check aria-hidden="true" size={16} />}
           标为看过
         </button>
-        {statusMessage ? <span className="sr-only" role="status">{statusMessage}</span> : null}
+        {statusMessage ? <p className="home-continue-status" role="status">{statusMessage}</p> : null}
         {mutation.isError ? <span role="alert">标为看过失败</span> : null}
       </div>
     </article>
@@ -433,7 +433,7 @@ function HomeContinueItem({ item }: { item: MediaSearchResult }) {
           <span><Check aria-hidden="true" size={15} />已全部看完</span>
         ) : null}
         {mutation.isError ? <span role="alert">进度保存失败</span> : null}
-        {savedEpisode ? <span className="sr-only" role="status">已推进至 {episodeLabel(savedEpisode)}</span> : null}
+        {savedEpisode ? <p className="home-continue-status" role="status">已推进至 {episodeLabel(savedEpisode)}</p> : null}
       </div>
     </article>
   )

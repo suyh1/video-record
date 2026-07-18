@@ -133,3 +133,29 @@ it('does not render episode details for a movie archive', async () => {
   await waitFor(() => expect(screen.getByRole('dialog', { name: '第 1 刷记录' })).toBeVisible())
   expect(screen.queryByText(/S\d{2}E\d{2}/)).not.toBeInTheDocument()
 })
+
+it('deletes an archived round after confirmation and keeps cancel free of side effects', async () => {
+  let deleteCalls = 0
+  server.use(
+    http.get('*/api/v1/records/movie-1/rounds', () => HttpResponse.json({ rounds: [{
+      roundId: 'movie-round-1', mediaId: 'movie-1', seasonNumber: null,
+      roundNumber: 1, watchedAt: completedMovie.watchedAt, rating: 9.2,
+    }] })),
+    http.delete('*/api/v1/records/movie-1/rounds/movie-round-1', () => {
+      deleteCalls += 1
+      return new HttpResponse(null, { status: 204 })
+    }),
+  )
+  const user = userEvent.setup()
+  renderWithQueryClient(<RewatchSection round={completedMovie} />)
+
+  await user.click(await screen.findByRole('button', { name: '删除第 1 刷' }))
+  await user.click(screen.getByRole('button', { name: '取消' }))
+  expect(deleteCalls).toBe(0)
+
+  await user.click(screen.getByRole('button', { name: '删除第 1 刷' }))
+  await user.click(screen.getByRole('button', { name: '确认删除' }))
+  await waitFor(() => expect(deleteCalls).toBe(1))
+  expect(await screen.findByRole('status')).toHaveTextContent('已删除第 1 刷记录')
+  expect(screen.queryByText('第 1 刷')).not.toBeInTheDocument()
+})

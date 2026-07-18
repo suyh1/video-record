@@ -3,6 +3,7 @@ package records
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -255,6 +256,45 @@ func (service *Service) RoundDetail(ctx context.Context, scope RoundScope, round
 		return RoundDetail{}, ErrRoundNotFound
 	}
 	return detail, nil
+}
+
+// ClearCurrentRoundFields clears rating/note/viewingMethod on the current round without changing status.
+func (service *Service) ClearCurrentRoundFields(ctx context.Context, scope RoundScope, expectedVersion int) (WatchRound, error) {
+	if err := service.repository.ValidateRoundScope(ctx, scope); err != nil {
+		return WatchRound{}, err
+	}
+	current, exists, err := service.repository.FindCurrentRound(ctx, scope)
+	if err != nil {
+		return WatchRound{}, err
+	}
+	if !exists {
+		return emptyRound(scope), nil
+	}
+	return service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: scope, Status: current.Status,
+		RatingSet: true, Rating: nil,
+		NoteSet: true, Note: nil,
+		ViewingMethodSet: true, ViewingMethod: nil,
+		CompletedAt: current.CompletedAt,
+		Source: SourceManual, ExpectedVersion: expectedVersion,
+	})
+}
+
+func (service *Service) RemoveFromLibrary(ctx context.Context, userID, mediaID string) error {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(mediaID) == "" {
+		return ErrInvalidRecord
+	}
+	return service.repository.RemoveMediaFromLibrary(ctx, userID, mediaID)
+}
+
+func (service *Service) DeleteArchivedRound(ctx context.Context, scope RoundScope, roundID string) error {
+	if roundID == "" {
+		return ErrRoundNotFound
+	}
+	if err := service.repository.ValidateRoundScope(ctx, scope); err != nil {
+		return err
+	}
+	return service.repository.DeleteArchivedRound(ctx, scope, roundID)
 }
 
 func (service *Service) attachProfileVersion(ctx context.Context, round WatchRound) (WatchRound, error) {

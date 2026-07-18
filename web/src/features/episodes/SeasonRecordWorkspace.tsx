@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { useState } from 'react'
 
 import { getCurrentRound, getTMDBSeason, getTMDBTV } from '../../api/client'
-import type { HouseholdMember } from '../../api/types'
+import type { CurrentRound, HouseholdMember } from '../../api/types'
 import { RewatchSection } from '../records/RewatchSection'
 import { RoundRecordForm } from '../records/RoundRecordForm'
 import { EpisodeProgress } from './EpisodeProgress'
@@ -14,7 +14,7 @@ type SeasonRecordWorkspaceProps = {
   tmdbId: number | null
   participants: HouseholdMember[]
   now?: () => Date
-  organizing?: (profileVersion: number) => ReactNode
+  organizing?: (profileVersion: number, activeRound: CurrentRound) => ReactNode
 }
 
 export function SeasonRecordWorkspace({
@@ -123,7 +123,7 @@ export function SeasonRecordWorkspace({
                   saved,
                 )}
               />
-              {organizing?.(activeRound.data.profileVersion)}
+              {organizing?.(activeRound.data.profileVersion, activeRound.data)}
             </>
           ) : null}
         </aside>

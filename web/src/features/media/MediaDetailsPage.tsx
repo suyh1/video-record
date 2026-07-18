@@ -15,6 +15,7 @@ import type { CurrentRound, RecordState, TMDBMovieDetails, TMDBTVDetails } from 
 import { CollectionPicker } from '../collections/CollectionPicker'
 import { SeasonRecordWorkspace } from '../episodes/SeasonRecordWorkspace'
 import { HouseholdSharedRecords } from '../records/HouseholdSharedRecords'
+import { RecordDangerZone } from '../records/RecordDangerZone'
 import { RecordSharingEditor } from '../records/RecordSharingEditor'
 import { RecordTagsEditor } from '../records/RecordTagsEditor'
 import { RewatchSection } from '../records/RewatchSection'
@@ -83,19 +84,6 @@ export function MediaDetailsPage() {
       return { ...current, profileVersion: version }
     })
   }
-  const organizing = (profileVersion: number) => (
-    <details className="record-organizing" onToggle={(event) => setOrganizingOpen(event.currentTarget.open)}>
-      <summary>家庭与整理</summary>
-      {organizingOpen ? (
-        <div className="record-organizing-content">
-          <RecordTagsEditor mediaID={mediaId} version={profileVersion} onVersionChange={updateProfileVersion} />
-          <CollectionPicker mediaID={mediaId} />
-          <RecordSharingEditor mediaID={mediaId} version={profileVersion} onVersionChange={updateProfileVersion} />
-          <HouseholdSharedRecords mediaID={mediaId} members={participants.data ?? []} />
-        </div>
-      ) : null}
-    </details>
-  )
   const savedMovieRound = (saved: CurrentRound) => {
     queryClient.setQueryData(['current-round', mediaId, 'movie'], saved)
     queryClient.setQueryData<RecordState>(['record', mediaId], (current) => current ? {
@@ -107,6 +95,31 @@ export function MediaDetailsPage() {
       viewingMethod: saved.viewingMethod,
     } : current)
   }
+  const organizing = (profileVersion: number, activeRound?: CurrentRound) => (
+    <details className="record-organizing" onToggle={(event) => setOrganizingOpen(event.currentTarget.open)}>
+      <summary>家庭与整理</summary>
+      {organizingOpen ? (
+        <div className="record-organizing-content">
+          <RecordTagsEditor mediaID={mediaId} version={profileVersion} onVersionChange={updateProfileVersion} />
+          <CollectionPicker mediaID={mediaId} />
+          <RecordSharingEditor mediaID={mediaId} version={profileVersion} onVersionChange={updateProfileVersion} />
+          <HouseholdSharedRecords mediaID={mediaId} members={participants.data ?? []} />
+          {activeRound ? (
+            <RecordDangerZone
+              mediaID={mediaId}
+              round={activeRound}
+              onRoundChange={(next) => {
+                if (next.seasonNumber === null) savedMovieRound(next)
+                else {
+                  queryClient.setQueryData(['current-round', mediaId, next.seasonNumber], next)
+                }
+              }}
+            />
+          ) : null}
+        </div>
+      ) : null}
+    </details>
+  )
 
   return (
     <div className="page media-details-page media-atmosphere-page" style={atmosphere.style}>
@@ -142,7 +155,7 @@ export function MediaDetailsPage() {
               participants={participants.data ?? []}
               onSaved={savedMovieRound}
             />
-            {organizing(movieRound.data.profileVersion)}
+            {organizing(movieRound.data.profileVersion, movieRound.data)}
           </aside>
           <RewatchSection round={movieRound.data} onRewatched={savedMovieRound} />
         </section>

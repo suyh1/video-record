@@ -377,6 +377,54 @@ func (repository *SQLiteRepository) FindArchivedRoundDetail(
 	return detail, true, nil
 }
 
+func (repository *SQLiteRepository) DeleteArchivedRound(ctx context.Context, scope RoundScope, roundID string) error {
+	tx, err := repository.db.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, `
+		DELETE FROM watch_rounds
+		WHERE id = ? AND user_id = ? AND media_id = ? AND season_number IS ?
+		  AND archived_at IS NOT NULL
+	`, roundID, scope.UserID, scope.MediaID, nullableInt(scope.SeasonNumber))
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return ErrRoundNotFound
+	}
+	return tx.Commit()
+}
+
+func (repository *SQLiteRepository) RemoveMediaFromLibrary(ctx context.Context, userID, mediaID string) error {
+	tx, err := repository.db.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Delete current rounds and their cascaded events/progress; keep archived history.
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM watch_rounds
+		WHERE user_id = ? AND media_id = ? AND archived_at IS NULL
+	`, userID, mediaID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE user_media_profiles
+		SET status = 'none', updated_at = strftime('%s', 'now') * 1000
+		WHERE user_id = ? AND media_id = ?
+	`, userID, mediaID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 type roundScanner interface {
 	Scan(...any) error
 }

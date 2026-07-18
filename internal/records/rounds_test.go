@@ -362,6 +362,61 @@ func timePointer(value time.Time) *time.Time {
 	return &value
 }
 
+func TestClearCurrentRoundFieldsAndRemoveFromLibraryAndDeleteArchived(t *testing.T) {
+	service, db, userID, mediaID := newTestRecordsService(t)
+	ctx := context.Background()
+	completedAt := time.Date(2026, 7, 13, 21, 0, 0, 0, time.UTC)
+	rating := 90
+	note := "要清空"
+	method := "影院"
+	completed, err := service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: userID, MediaID: mediaID}, Status: StatusCompleted,
+		Rating: &rating, RatingSet: true, Note: &note, NoteSet: true,
+		ViewingMethod: &method, ViewingMethodSet: true, CompletedAt: &completedAt,
+		Source: SourceManual, ExpectedVersion: 0,
+	})
+	require.NoError(t, err)
+
+	cleared, err := service.ClearCurrentRoundFields(ctx, RoundScope{UserID: userID, MediaID: mediaID}, completed.Version)
+	require.NoError(t, err)
+	require.Equal(t, StatusCompleted, cleared.Status)
+	require.Nil(t, cleared.Rating)
+	require.Nil(t, cleared.Note)
+	require.Nil(t, cleared.ViewingMethod)
+	require.Equal(t, completedAt, *cleared.CompletedAt)
+
+	rewatch, err := service.StartRewatch(ctx, RewatchInput{
+		Scope: RoundScope{UserID: userID, MediaID: mediaID}, ExpectedVersion: cleared.Version,
+	})
+	require.NoError(t, err)
+	require.NoError(t, service.DeleteArchivedRound(ctx, RoundScope{UserID: userID, MediaID: mediaID}, rewatch.Archived.ID))
+	history, err := service.RoundHistory(ctx, RoundScope{UserID: userID, MediaID: mediaID})
+	require.NoError(t, err)
+	require.Empty(t, history)
+	// current watching round still exists
+	current, err := service.CurrentRound(ctx, RoundScope{UserID: userID, MediaID: mediaID})
+	require.NoError(t, err)
+	require.Equal(t, rewatch.Current.ID, current.ID)
+	require.Equal(t, StatusWatching, current.Status)
+
+	// finish and remove from library
+	finished, err := service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: userID, MediaID: mediaID}, Status: StatusCompleted,
+		CompletedAt: &completedAt, Source: SourceManual, ExpectedVersion: current.Version,
+	})
+	require.NoError(t, err)
+	require.NoError(t, service.RemoveFromLibrary(ctx, userID, mediaID))
+	library, err := service.Library(ctx, userID, "")
+	require.NoError(t, err)
+	require.Empty(t, library)
+	afterRemove, err := service.CurrentRound(ctx, RoundScope{UserID: userID, MediaID: mediaID})
+	require.NoError(t, err)
+	require.Equal(t, StatusNone, afterRemove.Status)
+	require.Empty(t, afterRemove.ID)
+	_ = finished
+	_ = db
+}
+
 func TestUpdateRoundAcceptsStartedAtForWatchingAndRejectsFuture(t *testing.T) {
 	_, db, userID, mediaID := newTestRecordsService(t)
 	now := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
