@@ -4567,6 +4567,32 @@ body:has(.media-details-page) .app-header.immersive-header .global-search {
   font-weight: 700;
 }
 
+.library-load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-8);
+}
+
+.library-load-more button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.library-load-more button:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.library-load-more button:disabled {
+  opacity: 0.7;
+}
+
 .poster-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(168px, 208px));

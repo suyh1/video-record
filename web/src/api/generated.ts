@@ -2130,6 +2130,10 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["RecordStatus"];
+                /** @description Opaque cursor from a previous page's nextCursor. */
+                cursor?: string;
+                /** @description Page size. Defaults to 40. Maximum 100. */
+                limit?: number;
             };
             header?: never;
             path?: never;

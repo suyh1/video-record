@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { Search } from 'lucide-react'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { LoaderCircle, Search } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -18,18 +18,27 @@ const filters: Array<{ value: LibraryFilter; label: string }> = [
   { value: 'dropped', label: '弃看' },
 ]
 
+const libraryPageSize = 40
+
 export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
   const [filter, setFilter] = useState<LibraryFilter>('all')
   const [selectedCollectionID, setSelectedCollectionID] = useState('')
-  const library = useQuery({
+  const library = useInfiniteQuery({
     queryKey: ['library', filter],
-    queryFn: ({ signal }) => getLibrary(filter, signal),
+    queryFn: ({ pageParam, signal }) => getLibrary(filter, {
+      ...(pageParam ? { cursor: pageParam } : {}),
+      limit: libraryPageSize,
+      signal,
+    }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   })
   const collections = useQuery({ queryKey: ['collections'], queryFn: ({ signal }) => getCollections(signal) })
+  const libraryItems = library.data?.pages.flatMap((page) => page.items) ?? []
   const selectedCollection = collections.data?.find((collection) => collection.id === selectedCollectionID)
   const displayedItems = selectedCollection
-    ? selectedCollection.items.flatMap((mediaID) => library.data?.items.find((item) => item.id === mediaID) ?? [])
-    : library.data?.items ?? []
+    ? selectedCollection.items.flatMap((mediaID) => libraryItems.find((item) => item.id === mediaID) ?? [])
+    : libraryItems
 
   return (
     <div className="page library-page">
@@ -41,7 +50,7 @@ export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
         <p>{displayedItems.length} 部影视</p>
       </header>
       <CollectionManager
-        mediaItems={library.data?.items ?? []}
+        mediaItems={libraryItems}
         selectedCollectionID={selectedCollectionID}
         onSelect={(collectionID) => {
           setSelectedCollectionID(collectionID)
@@ -72,13 +81,31 @@ export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
         </div>
       ) : null}
       {library.data && displayedItems.length > 0 ? (
-        <div className="poster-grid">
-          {displayedItems.map((item) => (
-            <Link key={item.id} className="poster-link" to={`/media/${item.id}`}>
-              <MediaPoster item={item} />
-            </Link>
-          ))}
-        </div>
+        <>
+          <div className="poster-grid">
+            {displayedItems.map((item) => (
+              <Link key={item.id} className="poster-link" to={`/media/${item.id}`}>
+                <MediaPoster item={item} />
+              </Link>
+            ))}
+          </div>
+          {!selectedCollectionID && library.hasNextPage ? (
+            <div className="library-load-more">
+              <button
+                type="button"
+                disabled={library.isFetchingNextPage}
+                onClick={() => void library.fetchNextPage()}
+              >
+                {library.isFetchingNextPage ? (
+                  <>
+                    <LoaderCircle className="loading-icon" aria-hidden="true" size={16} />
+                    正在加载
+                  </>
+                ) : '加载更多'}
+              </button>
+            </div>
+          ) : null}
+        </>
       ) : null}
       {library.data && displayedItems.length === 0 ? (
         <div className="library-message empty-state">

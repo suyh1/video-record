@@ -188,3 +188,66 @@ func TestCatalogValidatesCurrentUserStatusAndQuery(t *testing.T) {
 	_, err = service.SearchMedia(ctx, userID, "  ")
 	require.ErrorIs(t, err, ErrInvalidRecord)
 }
+
+func TestLibraryPageCursorPagination(t *testing.T) {
+	service, db, userID, firstMediaID := newTestRecordsService(t)
+	ctx := context.Background()
+	mediaService := media.NewService(media.NewRepository(db))
+
+	ids := []string{firstMediaID}
+	for i := 0; i < 4; i++ {
+		item, err := mediaService.CreateCustom(ctx, media.CreateCustomInput{
+			MediaType: media.MediaTypeMovie, Title: "分页电影" + string(rune('A'+i)), Year: "2026",
+		})
+		require.NoError(t, err)
+		ids = append(ids, item.ID)
+	}
+	// Ensure distinct updated_at ordering: mark newest last.
+	for index, mediaID := range ids {
+		_, err := service.UpdateRound(ctx, UpdateRoundInput{
+			Scope: RoundScope{UserID: userID, MediaID: mediaID}, Status: StatusWishlist,
+			Source: SourceManual, ExpectedVersion: 0,
+		})
+		require.NoError(t, err)
+		// Bump profile timestamps in order via sequential updates.
+		if index < len(ids)-1 {
+			time.Sleep(2 * time.Millisecond)
+		}
+	}
+
+	firstPage, err := service.LibraryPage(ctx, userID, LibraryQuery{Limit: 2})
+	require.NoError(t, err)
+	require.Len(t, firstPage.Items, 2)
+	require.NotEmpty(t, firstPage.NextCursor)
+
+	secondPage, err := service.LibraryPage(ctx, userID, LibraryQuery{Limit: 2, Cursor: firstPage.NextCursor})
+	require.NoError(t, err)
+	require.Len(t, secondPage.Items, 2)
+	require.NotEmpty(t, secondPage.NextCursor)
+
+	thirdPage, err := service.LibraryPage(ctx, userID, LibraryQuery{Limit: 2, Cursor: secondPage.NextCursor})
+	require.NoError(t, err)
+	require.Len(t, thirdPage.Items, 1)
+	require.Empty(t, thirdPage.NextCursor)
+
+	seen := map[string]struct{}{}
+	for _, page := range []LibraryPage{firstPage, secondPage, thirdPage} {
+		for _, item := range page.Items {
+			_, exists := seen[item.ID]
+			require.False(t, exists, "duplicate media %s across pages", item.ID)
+			seen[item.ID] = struct{}{}
+		}
+	}
+	require.Len(t, seen, 5)
+
+	_, err = service.LibraryPage(ctx, userID, LibraryQuery{Cursor: "not-a-cursor", Limit: 2})
+	require.ErrorIs(t, err, ErrInvalidRecord)
+
+	_, err = service.LibraryPage(ctx, userID, LibraryQuery{Limit: 101})
+	require.ErrorIs(t, err, ErrInvalidRecord)
+
+	// Backward-compatible Library still returns a page worth of items.
+	all, err := service.Library(ctx, userID, "")
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(all), 5)
+}

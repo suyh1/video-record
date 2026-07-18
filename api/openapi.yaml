@@ -315,6 +315,16 @@ paths:
           in: query
           required: false
           schema: { $ref: '#/components/schemas/RecordStatus' }
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque cursor from a previous page's nextCursor.
+          schema: { type: string, minLength: 1 }
+        - name: limit
+          in: query
+          required: false
+          description: Page size. Defaults to 40. Maximum 100.
+          schema: { type: integer, minimum: 1, maximum: 100, default: 40 }
       responses:
         '200':
           description: Cursor-shaped library page.

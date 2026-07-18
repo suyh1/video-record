@@ -3,7 +3,9 @@ package records
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -25,7 +27,7 @@ type Repository interface {
 	UpdateRound(context.Context, WatchRound, int, []string) (bool, error)
 	FindState(context.Context, string, string) (State, bool, error)
 	WatchEvents(context.Context, string, string) ([]WatchEvent, error)
-	Library(context.Context, string, Status) ([]CatalogItem, error)
+	Library(context.Context, string, LibraryQuery) (LibraryPage, error)
 	SearchMedia(context.Context, string, string) ([]CatalogItem, error)
 	CalendarEvents(context.Context, string, time.Time, time.Time, CalendarFilter) ([]CalendarEvent, error)
 	SeasonEpisodes(context.Context, string, string, int) (SeriesProgress, error)
@@ -207,23 +209,101 @@ func nullableString(value string) any {
 	return value
 }
 
-func (repository *SQLiteRepository) Library(ctx context.Context, userID string, status Status) ([]CatalogItem, error) {
-	query := `
+func (repository *SQLiteRepository) Library(ctx context.Context, userID string, query LibraryQuery) (LibraryPage, error) {
+	sqlQuery := `
 		SELECT media.id, media.media_type,
 		       COALESCE(media.custom_title, media.external_title), media.original_title,
 		       SUBSTR(COALESCE(NULLIF(media.release_date, ''), media.custom_year, ''), 1, 4),
-		       media.poster_path, profile.status, tmdb.source_id
+		       media.poster_path, profile.status, tmdb.source_id, profile.updated_at
 		FROM user_media_profiles profile
 		JOIN media_items media ON media.id = profile.media_id
 		LEFT JOIN media_external_ids tmdb ON tmdb.media_id = media.id AND tmdb.source = 'tmdb'
 		WHERE profile.user_id = ?`
 	arguments := []any{userID}
-	if status != "" && status != StatusNone {
-		query += " AND profile.status = ?"
-		arguments = append(arguments, status)
+	if query.Status != "" && query.Status != StatusNone {
+		sqlQuery += " AND profile.status = ?"
+		arguments = append(arguments, query.Status)
 	}
-	query += " ORDER BY profile.updated_at DESC, media.id LIMIT 100"
-	return repository.catalogItems(ctx, query, arguments...)
+	if query.Cursor != "" {
+		updatedAt, mediaID, err := decodeLibraryCursor(query.Cursor)
+		if err != nil {
+			return LibraryPage{}, ErrInvalidRecord
+		}
+		sqlQuery += " AND (profile.updated_at < ? OR (profile.updated_at = ? AND media.id > ?))"
+		arguments = append(arguments, updatedAt, updatedAt, mediaID)
+	}
+	limit := query.Limit
+	if limit <= 0 {
+		limit = DefaultLibraryLimit
+	}
+	sqlQuery += " ORDER BY profile.updated_at DESC, media.id LIMIT ?"
+	arguments = append(arguments, limit+1)
+
+	rows, err := repository.db.Reader().QueryContext(ctx, sqlQuery, arguments...)
+	if err != nil {
+		return LibraryPage{}, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	type rowItem struct {
+		item      CatalogItem
+		updatedAt int64
+	}
+	rowsItems := make([]rowItem, 0, limit+1)
+	for rows.Next() {
+		var item CatalogItem
+		var tmdbID sql.NullString
+		var updatedAt int64
+		if err := rows.Scan(
+			&item.ID, &item.MediaType, &item.Title, &item.OriginalTitle,
+			&item.Year, &item.PosterPath, &item.Status, &tmdbID, &updatedAt,
+		); err != nil {
+			return LibraryPage{}, err
+		}
+		if tmdbID.Valid {
+			value, err := strconv.Atoi(tmdbID.String)
+			if err != nil || value < 1 {
+				return LibraryPage{}, ErrInvalidRecord
+			}
+			item.TMDBID = &value
+		}
+		rowsItems = append(rowsItems, rowItem{item: item, updatedAt: updatedAt})
+	}
+	if err := rows.Err(); err != nil {
+		return LibraryPage{}, err
+	}
+
+	page := LibraryPage{Items: make([]CatalogItem, 0, min(len(rowsItems), limit))}
+	for index, row := range rowsItems {
+		if index >= limit {
+			last := rowsItems[limit-1]
+			page.NextCursor = encodeLibraryCursor(last.updatedAt, last.item.ID)
+			break
+		}
+		page.Items = append(page.Items, row.item)
+	}
+	return page, nil
+}
+
+func encodeLibraryCursor(updatedAt int64, mediaID string) string {
+	payload := fmt.Sprintf("%d|%s", updatedAt, mediaID)
+	return base64.RawURLEncoding.EncodeToString([]byte(payload))
+}
+
+func decodeLibraryCursor(cursor string) (int64, string, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return 0, "", err
+	}
+	parts := strings.SplitN(string(raw), "|", 2)
+	if len(parts) != 2 || parts[1] == "" {
+		return 0, "", ErrInvalidRecord
+	}
+	updatedAt, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, "", err
+	}
+	return updatedAt, parts[1], nil
 }
 
 func (repository *SQLiteRepository) SearchMedia(ctx context.Context, userID, query string) ([]CatalogItem, error) {

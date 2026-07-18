@@ -462,9 +462,28 @@ export function updateEpisodeProgress(
   })
 }
 
-export function getLibrary(status: RecordStatus | 'all', signal?: AbortSignal) {
-  const query = status === 'all' ? '' : `?status=${status}`
-  return requestJSON<LibraryResponse>(`/api/v1/library${query}`, signal ? { signal } : undefined)
+export type GetLibraryOptions = {
+  cursor?: string | null
+  limit?: number
+  signal?: AbortSignal
+}
+
+export function getLibrary(
+  status: RecordStatus | 'all' = 'all',
+  signalOrOptions?: AbortSignal | GetLibraryOptions,
+) {
+  const options: GetLibraryOptions = signalOrOptions instanceof AbortSignal || signalOrOptions === undefined
+    ? { ...(signalOrOptions ? { signal: signalOrOptions } : {}) }
+    : signalOrOptions
+  const params = new URLSearchParams()
+  if (status !== 'all') params.set('status', status)
+  if (options.cursor) params.set('cursor', options.cursor)
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  const query = params.toString()
+  return requestJSON<LibraryResponse>(
+    `/api/v1/library${query ? `?${query}` : ''}`,
+    options.signal ? { signal: options.signal } : undefined,
+  )
 }
 
 export function getCollections(signal?: AbortSignal) {

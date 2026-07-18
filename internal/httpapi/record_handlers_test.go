@@ -377,3 +377,62 @@ func cloneHeaders(headers map[string]string) map[string]string {
 	}
 	return cloned
 }
+
+func TestLibraryHandlerCursorPagination(t *testing.T) {
+	router, cookie, _, firstMediaID, recordService, db := newRecordsTestRouter(t)
+	userID := currentUserID(t, router, cookie)
+	ctx := context.Background()
+	mediaService := media.NewService(media.NewRepository(db))
+
+	ids := []string{firstMediaID}
+	for i := 0; i < 4; i++ {
+		item, err := mediaService.CreateCustom(ctx, media.CreateCustomInput{
+			MediaType: media.MediaTypeMovie, Title: "HTTP分页" + string(rune('A'+i)),
+		})
+		require.NoError(t, err)
+		ids = append(ids, item.ID)
+	}
+	for _, mediaID := range ids {
+		_, err := recordService.UpdateRound(ctx, records.UpdateRoundInput{
+			Scope:  records.RoundScope{UserID: userID, MediaID: mediaID},
+			Status: records.StatusWishlist, Source: records.SourceManual, ExpectedVersion: 0,
+		})
+		require.NoError(t, err)
+	}
+
+	first := performJSONRequest(router, http.MethodGet,
+		"http://example.test/api/v1/library?limit=2", nil, map[string]string{"Cookie": cookie.String()})
+	require.Equal(t, http.StatusOK, first.Code)
+	var firstBody struct {
+		Items      []catalogItemResponse `json:"items"`
+		NextCursor *string               `json:"nextCursor"`
+	}
+	require.NoError(t, json.Unmarshal(first.Body.Bytes(), &firstBody))
+	require.Len(t, firstBody.Items, 2)
+	require.NotNil(t, firstBody.NextCursor)
+	require.NotEmpty(t, *firstBody.NextCursor)
+
+	second := performJSONRequest(router, http.MethodGet,
+		"http://example.test/api/v1/library?limit=2&cursor="+*firstBody.NextCursor,
+		nil, map[string]string{"Cookie": cookie.String()})
+	require.Equal(t, http.StatusOK, second.Code)
+	var secondBody struct {
+		Items      []catalogItemResponse `json:"items"`
+		NextCursor *string               `json:"nextCursor"`
+	}
+	require.NoError(t, json.Unmarshal(second.Body.Bytes(), &secondBody))
+	require.Len(t, secondBody.Items, 2)
+	require.NotEqual(t, firstBody.Items[0].ID, secondBody.Items[0].ID)
+
+	invalid := performJSONRequest(router, http.MethodGet,
+		"http://example.test/api/v1/library?cursor=not-a-valid-cursor",
+		nil, map[string]string{"Cookie": cookie.String()})
+	require.Equal(t, http.StatusBadRequest, invalid.Code)
+	require.Contains(t, invalid.Body.String(), `"code":"invalid_record"`)
+
+	tooLarge := performJSONRequest(router, http.MethodGet,
+		"http://example.test/api/v1/library?limit=101",
+		nil, map[string]string{"Cookie": cookie.String()})
+	require.Equal(t, http.StatusBadRequest, tooLarge.Code)
+	require.Contains(t, tooLarge.Body.String(), `"code":"invalid_record"`)
+}

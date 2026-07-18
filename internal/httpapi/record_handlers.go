@@ -76,13 +76,33 @@ func (handlers recordHandlers) library(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
 		return
 	}
-	status := records.Status(strings.TrimSpace(r.URL.Query().Get("status")))
-	items, err := handlers.service.Library(r.Context(), identity.User.ID, status)
+	query := records.LibraryQuery{
+		Status: records.Status(strings.TrimSpace(r.URL.Query().Get("status"))),
+		Cursor: strings.TrimSpace(r.URL.Query().Get("cursor")),
+	}
+	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
+		limit, err := strconv.Atoi(rawLimit)
+		if err != nil {
+			writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_request")
+			return
+		}
+		query.Limit = limit
+	}
+	page, err := handlers.service.LibraryPage(r.Context(), identity.User.ID, query)
 	if err != nil {
 		writeRecordError(w, r, err, 0)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": handlers.newCatalogResponses(items), "nextCursor": nil})
+	var nextCursor any
+	if page.NextCursor != "" {
+		nextCursor = page.NextCursor
+	} else {
+		nextCursor = nil
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":      handlers.newCatalogResponses(page.Items),
+		"nextCursor": nextCursor,
+	})
 }
 
 func (handlers recordHandlers) localSearch(w http.ResponseWriter, r *http.Request) {
