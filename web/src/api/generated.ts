@@ -187,7 +187,8 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /** List media in a private collection in stored order */
+        get: operations["listCollectionItems"];
         /** Replace and order items in a private collection */
         put: operations["replaceCollectionItems"];
         /** Add media to a private collection */
@@ -1940,6 +1941,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Collection"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listCollectionItems: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["RecordStatus"];
+            };
+            header?: never;
+            path: {
+                collectionID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Collection items ordered by position. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CursorPage"];
                 };
             };
             default: components["responses"]["Problem"];

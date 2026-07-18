@@ -113,6 +113,7 @@ func NewRouter(dependencies Dependencies) http.Handler {
 					}
 					protected.Get("/calendar", recordAPI.calendar)
 					protected.Get("/collections", recordAPI.collections)
+					protected.Get("/collections/{collectionID}/items", recordAPI.collectionItems)
 					protected.Get("/data/export", recordAPI.exportData)
 					protected.Get("/library", recordAPI.library)
 					protected.Get("/media/search", recordAPI.localSearch)

@@ -39,6 +39,7 @@ type Repository interface {
 	AddCollectionItem(context.Context, string, string, string) error
 	ReplaceCollectionItems(context.Context, string, string, []string) error
 	Collections(context.Context, string) ([]Collection, error)
+	CollectionItems(context.Context, string, string, Status) ([]CatalogItem, error)
 	ExportDocument(context.Context, string) (exportDocument, error)
 	ImportDocument(context.Context, string, exportDocument) (ImportReport, error)
 }
@@ -619,6 +620,45 @@ func (repository *SQLiteRepository) Collections(ctx context.Context, userID stri
 		collections = append(collections, *byID[id])
 	}
 	return collections, nil
+}
+
+func (repository *SQLiteRepository) CollectionItems(
+	ctx context.Context,
+	userID, collectionID string,
+	status Status,
+) ([]CatalogItem, error) {
+	var owner string
+	err := repository.db.Reader().QueryRowContext(ctx, `
+		SELECT user_id FROM collections WHERE id = ?
+	`, collectionID).Scan(&owner)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrCollectionNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if owner != userID {
+		return nil, ErrCollectionNotFound
+	}
+
+	query := `
+		SELECT media.id, media.media_type,
+		       COALESCE(media.custom_title, media.external_title), media.original_title,
+		       SUBSTR(COALESCE(NULLIF(media.release_date, ''), media.custom_year, ''), 1, 4),
+		       media.poster_path, COALESCE(profile.status, 'none'), tmdb.source_id
+		FROM collection_items ci
+		JOIN media_items media ON media.id = ci.media_id
+		LEFT JOIN user_media_profiles profile
+		  ON profile.user_id = ? AND profile.media_id = media.id
+		LEFT JOIN media_external_ids tmdb ON tmdb.media_id = media.id AND tmdb.source = 'tmdb'
+		WHERE ci.collection_id = ?`
+	arguments := []any{userID, collectionID}
+	if status != "" && status != StatusNone {
+		query += " AND profile.status = ?"
+		arguments = append(arguments, status)
+	}
+	query += " ORDER BY ci.position ASC, media.id"
+	return repository.catalogItems(ctx, query, arguments...)
 }
 
 func nullableInt(value *int) any {

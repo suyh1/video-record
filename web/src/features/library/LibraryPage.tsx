@@ -3,7 +3,7 @@ import { LoaderCircle, Search } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { getCollections, getLibrary } from '../../api/client'
+import { getCollectionItems, getCollections, getLibrary } from '../../api/client'
 import type { RecordStatus } from '../../api/types'
 import { MediaPoster } from '../media/MediaPoster'
 import { CollectionManager } from '../collections/CollectionManager'
@@ -32,13 +32,25 @@ export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
     }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: !selectedCollectionID,
+  })
+  const collectionItems = useQuery({
+    queryKey: ['collection-items', selectedCollectionID],
+    queryFn: ({ signal }) => getCollectionItems(selectedCollectionID, { signal }),
+    enabled: Boolean(selectedCollectionID),
   })
   const collections = useQuery({ queryKey: ['collections'], queryFn: ({ signal }) => getCollections(signal) })
   const libraryItems = library.data?.pages.flatMap((page) => page.items) ?? []
-  const selectedCollection = collections.data?.find((collection) => collection.id === selectedCollectionID)
-  const displayedItems = selectedCollection
-    ? selectedCollection.items.flatMap((mediaID) => libraryItems.find((item) => item.id === mediaID) ?? [])
+  const displayedItems = selectedCollectionID
+    ? collectionItems.data?.items ?? []
     : libraryItems
+  const listPending = selectedCollectionID ? collectionItems.isPending : library.isPending
+  const listError = selectedCollectionID ? collectionItems.isError : library.isError
+  const listReady = selectedCollectionID ? Boolean(collectionItems.data) : Boolean(library.data)
+  const reload = () => {
+    if (selectedCollectionID) void collectionItems.refetch()
+    else void library.refetch()
+  }
 
   return (
     <div className="page library-page">
@@ -50,7 +62,7 @@ export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
         <p>{displayedItems.length} 部影视</p>
       </header>
       <CollectionManager
-        mediaItems={libraryItems}
+        mediaItems={selectedCollectionID ? displayedItems : libraryItems}
         selectedCollectionID={selectedCollectionID}
         onSelect={(collectionID) => {
           setSelectedCollectionID(collectionID)
@@ -73,14 +85,14 @@ export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
         ))}
       </div>
 
-      {library.isPending ? <LibrarySkeleton /> : null}
-      {library.isError ? (
+      {listPending ? <LibrarySkeleton /> : null}
+      {listError ? (
         <div className="library-message" role="alert">
           <p>无法读取影库，请稍后重试。</p>
-          <button type="button" onClick={() => void library.refetch()}>重新加载</button>
+          <button type="button" onClick={reload}>重新加载</button>
         </div>
       ) : null}
-      {library.data && displayedItems.length > 0 ? (
+      {listReady && displayedItems.length > 0 ? (
         <>
           <div className="poster-grid">
             {displayedItems.map((item) => (
@@ -107,7 +119,7 @@ export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
           ) : null}
         </>
       ) : null}
-      {library.data && displayedItems.length === 0 ? (
+      {listReady && displayedItems.length === 0 ? (
         <div className="library-message empty-state">
           <Search aria-hidden="true" size={22} />
           <p>这个分类还没有记录</p>

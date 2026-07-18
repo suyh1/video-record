@@ -176,6 +176,58 @@ func catalogIDs(items []CatalogItem) []string {
 	return ids
 }
 
+func TestCollectionItemsReturnInPositionOrderIndependentOfLibraryPage(t *testing.T) {
+	service, db, userID, firstMediaID := newTestRecordsService(t)
+	ctx := context.Background()
+	mediaService := media.NewService(media.NewRepository(db))
+
+	// Create many library items so firstMediaID would fall off a small library page.
+	for i := 0; i < 5; i++ {
+		item, err := mediaService.CreateCustom(ctx, media.CreateCustomInput{
+			MediaType: media.MediaTypeMovie, Title: "填充" + string(rune('A'+i)),
+		})
+		require.NoError(t, err)
+		_, err = service.UpdateRound(ctx, UpdateRoundInput{
+			Scope: RoundScope{UserID: userID, MediaID: item.ID}, Status: StatusWishlist,
+			Source: SourceManual, ExpectedVersion: 0,
+		})
+		require.NoError(t, err)
+	}
+	// firstMediaID is older; mark it completed and put it only in a collection.
+	_, err := service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: userID, MediaID: firstMediaID}, Status: StatusCompleted,
+		Source: SourceManual, ExpectedVersion: 0,
+		CompletedAt: timePointer(time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)),
+	})
+	require.NoError(t, err)
+	second, err := mediaService.CreateCustom(ctx, media.CreateCustomInput{
+		MediaType: media.MediaTypeMovie, Title: "片单第二部",
+	})
+	require.NoError(t, err)
+	_, err = service.UpdateRound(ctx, UpdateRoundInput{
+		Scope: RoundScope{UserID: userID, MediaID: second.ID}, Status: StatusWishlist,
+		Source: SourceManual, ExpectedVersion: 0,
+	})
+	require.NoError(t, err)
+
+	collection, err := service.CreateCollection(ctx, userID, "周末")
+	require.NoError(t, err)
+	require.NoError(t, service.AddCollectionItem(ctx, userID, collection.ID, second.ID))
+	require.NoError(t, service.AddCollectionItem(ctx, userID, collection.ID, firstMediaID))
+	// Reorder: firstMediaID then second.
+	require.NoError(t, service.ReplaceCollectionItems(ctx, userID, collection.ID, []string{firstMediaID, second.ID}))
+
+	items, err := service.CollectionItems(ctx, userID, collection.ID, "")
+	require.NoError(t, err)
+	require.Equal(t, []string{firstMediaID, second.ID}, catalogIDs(items))
+	require.Equal(t, StatusCompleted, items[0].Status)
+	require.Equal(t, StatusWishlist, items[1].Status)
+
+	// Status filter reserved for Task 10 — empty status returns full collection.
+	_, err = service.CollectionItems(ctx, userID, "missing", "")
+	require.ErrorIs(t, err, ErrCollectionNotFound)
+}
+
 func TestCatalogValidatesCurrentUserStatusAndQuery(t *testing.T) {
 	service, _, userID, _ := newTestRecordsService(t)
 	ctx := context.Background()

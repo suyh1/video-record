@@ -490,6 +490,19 @@ export function getCollections(signal?: AbortSignal) {
   return requestJSON<Collection[]>('/api/v1/collections', signal ? { signal } : undefined)
 }
 
+export function getCollectionItems(
+  collectionID: string,
+  options?: { status?: RecordStatus | 'all'; signal?: AbortSignal },
+) {
+  const params = new URLSearchParams()
+  if (options?.status && options.status !== 'all') params.set('status', options.status)
+  const query = params.toString()
+  return requestJSON<LibraryResponse>(
+    `/api/v1/collections/${encodeURIComponent(collectionID)}/items${query ? `?${query}` : ''}`,
+    options?.signal ? { signal: options.signal } : undefined,
+  )
+}
+
 export function createCollection(name: string) {
   return protectedWrite<Collection>('/api/v1/collections', { name })
 }

@@ -244,6 +244,26 @@ func (handlers recordHandlers) collections(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, response)
 }
 
+func (handlers recordHandlers) collectionItems(w http.ResponseWriter, r *http.Request) {
+	identity, ok := IdentityFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "Unauthorized", "unauthenticated")
+		return
+	}
+	status := records.Status(strings.TrimSpace(r.URL.Query().Get("status")))
+	items, err := handlers.service.CollectionItems(
+		r.Context(), identity.User.ID, chi.URLParam(r, "collectionID"), status,
+	)
+	if err != nil {
+		writeRecordError(w, r, err, 0)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":      handlers.newCatalogResponses(items),
+		"nextCursor": nil,
+	})
+}
+
 func newRecordResponse(state records.State, event *records.WatchEvent) recordResponse {
 	response := recordResponse{
 		MediaID: state.MediaID, Status: state.Status, Note: state.Note, Version: state.Version,

@@ -139,6 +139,20 @@ func (service *Service) Collections(ctx context.Context, userID string) ([]Colle
 	return service.repository.Collections(ctx, userID)
 }
 
+func (service *Service) CollectionItems(
+	ctx context.Context,
+	userID, collectionID string,
+	status Status,
+) ([]CatalogItem, error) {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(collectionID) == "" {
+		return nil, ErrInvalidRecord
+	}
+	if status != "" && ValidateStatus(status) != nil {
+		return nil, ErrInvalidRecord
+	}
+	return service.repository.CollectionItems(ctx, userID, collectionID, status)
+}
+
 func equalIntPointers(left, right *int) bool {
 	return left == nil && right == nil || left != nil && right != nil && *left == *right
 }

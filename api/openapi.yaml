@@ -197,6 +197,21 @@ paths:
         in: path
         required: true
         schema: { type: string, format: uuid }
+    get:
+      operationId: listCollectionItems
+      summary: List media in a private collection in stored order
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/RecordStatus' }
+      responses:
+        '200':
+          description: Collection items ordered by position.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CursorPage' }
+        default: { $ref: '#/components/responses/Problem' }
     post:
       operationId: addCollectionItem
       summary: Add media to a private collection
