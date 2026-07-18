@@ -105,7 +105,7 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
   const startedAtError = form.formState.errors.startedAt
 
   return (
-    <section className="round-record" aria-labelledby={`${errorID}-heading`}>
+    <section className="round-record" id="personal-record" aria-labelledby={`${errorID}-heading`}>
       <div className="details-section-heading round-record-heading">
         <div>
           <h2 id={`${errorID}-heading`}>
@@ -214,7 +214,7 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
                 </div>
               ) : null}
             </div>
-            {round.seasonNumber === null && status === 'completed' && participants.length > 0 ? (
+            {status === 'completed' && participants.length > 0 ? (
               <fieldset className="participant-fieldset">
                 <legend>共同观看者</legend>
                 <div className="participant-options">

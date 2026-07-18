@@ -58,6 +58,16 @@ export function CalendarPage({
           <button type="button" aria-label="上个月" onClick={() => moveMonth(-1)}><ArrowLeft aria-hidden="true" size={18} /></button>
           <button type="button" onClick={() => displayMonth(monthInTimezone(now, timezone))}>今天</button>
           <button type="button" aria-label="下个月" onClick={() => moveMonth(1)}><ArrowRight aria-hidden="true" size={18} /></button>
+          <label className="calendar-year-month">
+            <span className="visually-hidden">选择年月</span>
+            <input
+              type="month"
+              value={month}
+              onChange={(event) => {
+                if (event.target.value) displayMonth(event.target.value)
+              }}
+            />
+          </label>
         </div>
       </header>
 

@@ -83,21 +83,31 @@ export function SeasonRecordWorkspace({
       <div className="season-workspace-toolbar">
         <div>
           <h2 id="season-workspace-heading">按季记录</h2>
+          <p className="season-workspace-summary">
+            全剧进度 {rounds.flatMap((round) => round.data?.status === 'completed' ? [1] : []).length === seasons.length
+              ? '已全部完成'
+              : `进行中 · 共 ${seasons.length} 季`}
+          </p>
         </div>
-        <label className="episode-season-select">
-          <span>选择季</span>
-          <select
-            aria-label="选择季"
-            value={activeSeason}
-            onChange={(event) => setSelectedSeason(Number(event.target.value))}
-          >
-            {seasons.map((season) => (
-              <option key={season.id} value={season.seasonNumber}>
-                {season.name || `第 ${season.seasonNumber} 季`} · {season.episodeCount} 集
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="season-chip-list" role="tablist" aria-label="选择季">
+          {seasons.map((season, index) => {
+            const round = rounds[index]?.data
+            const selected = season.seasonNumber === activeSeason
+            return (
+              <button
+                key={season.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                className={selected ? 'is-selected' : ''}
+                onClick={() => setSelectedSeason(season.seasonNumber)}
+              >
+                {season.name || `第 ${season.seasonNumber} 季`}
+                <small>{round?.status === 'completed' ? '已看完' : `${season.episodeCount} 集`}</small>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       <div className="season-workspace-layout">

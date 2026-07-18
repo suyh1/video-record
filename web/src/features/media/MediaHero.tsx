@@ -88,6 +88,9 @@ export function MediaHero({ media, record, external, linker, onPaletteChange }: 
             <span className="media-hero-rating"><Star aria-hidden="true" size={17} />{record.rating.toFixed(1)} / 10</span>
           ) : null}
           <p className="media-hero-overview">{overview}</p>
+          <a className="media-hero-record-anchor" href="#personal-record">
+            {record.status === 'none' ? '开始记录' : '更新记录'}
+          </a>
           {linker}
         </div>
       </div>

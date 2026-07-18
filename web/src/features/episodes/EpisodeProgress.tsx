@@ -222,6 +222,12 @@ export function EpisodeProgress({ mediaId, tmdbId, seasonNumber, now = () => new
                 <span className="episode-code">{label}</span>
                 <span className="episode-absolute">全剧第 {episode.absoluteNumber} 集</span>
                 <strong>{episode.name || '未命名'}</strong>
+                {episode.airDate ? (
+                  <span className="episode-air-date">
+                    {episode.airDate}
+                    {isFutureAirDate(episode.airDate, now()) ? ' · 尚未到播出日' : ''}
+                  </span>
+                ) : null}
                 <button
                   className="episode-time-button"
                   type="button"
@@ -316,4 +322,12 @@ function latestWatchedAt(progress: SeriesProgress) {
 
 function episodeLabel(episode: Pick<MergedEpisode, 'seasonNumber' | 'episodeNumber'> | EpisodeReference) {
   return `S${String(episode.seasonNumber).padStart(2, '0')}E${String(episode.episodeNumber).padStart(2, '0')}`
+}
+
+function isFutureAirDate(airDate: string, now: Date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(airDate)) return false
+  const [year, month, day] = airDate.split('-').map(Number)
+  const air = new Date(year!, month! - 1, day!)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return air.getTime() > today.getTime()
 }

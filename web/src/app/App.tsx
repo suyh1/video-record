@@ -12,7 +12,7 @@ import {
 import { type FormEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 
-import { getCurrentUser, getSetupStatus } from '../api/client'
+import { getCurrentUser, getSetupStatus, getSyncStatus } from '../api/client'
 import type { MediaSearchResult } from '../api/types'
 import { BrandMark } from './BrandMark'
 import { NotFoundPage } from './NotFoundPage'
@@ -236,12 +236,21 @@ function Brand() {
 }
 
 function PrimaryNavigation({ className }: { className: string }) {
+  const sync = useQuery({
+    queryKey: ['sync-status'],
+    queryFn: ({ signal }) => getSyncStatus(signal),
+    staleTime: 60_000,
+  })
+  const pending = sync.data?.pendingTotal ?? 0
   return (
     <nav className={className} aria-label="主导航">
       {navigationItems.map(({ label, path, icon: Icon }) => (
         <NavLink key={path} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`} to={path} end={path === '/'} title={label}>
           <Icon aria-hidden="true" size={20} strokeWidth={1.8} />
           <span>{label}</span>
+          {path === '/settings' && pending > 0 ? (
+            <span className="nav-badge" aria-label={`${pending} 条同步待核对`}>{pending > 99 ? '99+' : pending}</span>
+          ) : null}
         </NavLink>
       ))}
     </nav>

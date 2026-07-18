@@ -1,7 +1,7 @@
-import { CalendarDays, Users } from 'lucide-react'
+import { Bookmark, CalendarDays, Check, CircleStop, Play, Users } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
-import type { CalendarEvent } from '../../api/types'
+import type { CalendarEvent, RecordStatus } from '../../api/types'
 
 type AgendaListProps = {
   events: CalendarEvent[]
@@ -25,6 +25,10 @@ export function AgendaList({ events, timezone }: AgendaListProps) {
                 <time dateTime={event.watchedAt}>{formatTime(event.watchedAt, timezone)}</time>
                 <div>
                   <NavLink to={`/media/${event.mediaId}`}>{event.title}</NavLink>
+                  <span className={`record-status ${event.status}`}>
+                    <StatusIcon status={event.status} />
+                    {statusLabel(event.status)}
+                  </span>
                   {event.seasonNumber !== null && event.episodeNumber !== null && event.absoluteNumber !== null ? (
                     <span>{episodeLabel(event)}</span>
                   ) : null}
@@ -67,4 +71,24 @@ function formatTime(value: string, timezone: string) {
 function episodeLabel(event: CalendarEvent) {
   const code = `S${String(event.seasonNumber).padStart(2, '0')}E${String(event.episodeNumber).padStart(2, '0')}`
   return `${code} · 全剧第 ${event.absoluteNumber} 集`
+}
+
+const statusLabels: Record<RecordStatus, string> = {
+  none: '未记录',
+  wishlist: '想看',
+  watching: '在看',
+  completed: '看过',
+  dropped: '弃看',
+}
+
+function statusLabel(status: RecordStatus) {
+  return statusLabels[status]
+}
+
+function StatusIcon({ status }: { status: RecordStatus }) {
+  if (status === 'wishlist') return <Bookmark aria-hidden="true" size={14} />
+  if (status === 'watching') return <Play aria-hidden="true" size={14} />
+  if (status === 'completed') return <Check aria-hidden="true" size={14} />
+  if (status === 'dropped') return <CircleStop aria-hidden="true" size={14} />
+  return null
 }

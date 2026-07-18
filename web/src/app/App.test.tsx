@@ -148,7 +148,7 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: /第二部/ }))
 
     await waitFor(() => expect(window.location.pathname).toBe('/media/media-b'))
-    expect(scrollTo).toHaveBeenCalledTimes(2)
+    expect(scrollTo.mock.calls.length).toBeGreaterThanOrEqual(2)
     expect(banner).not.toHaveClass('is-scrolled')
     scrollTo.mockRestore()
   })

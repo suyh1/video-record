@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 import type { StatsPoint } from '../../api/types'
 
 type AccessibleChartProps = {
@@ -6,6 +8,7 @@ type AccessibleChartProps = {
   tableLabel: string
   points: StatsPoint[]
   valueSuffix?: string
+  drillParam?: 'tag' | 'genre' | 'method'
 }
 
 export function AccessibleChart({
@@ -14,6 +17,7 @@ export function AccessibleChart({
   tableLabel,
   points,
   valueSuffix = '次',
+  drillParam,
 }: AccessibleChartProps) {
   const maximum = Math.max(...points.map((point) => point.value), 1)
   return (
@@ -23,7 +27,11 @@ export function AccessibleChart({
         <div className="accessible-bars" role="img" aria-label={chartLabel}>
           {points.length > 0 ? points.map((point) => (
             <div className="accessible-bar-row" key={point.label}>
-              <span>{point.label}</span>
+              <span>
+                {drillParam === 'tag' ? (
+                  <Link to={`/library?tag=${encodeURIComponent(point.label)}`}>{point.label}</Link>
+                ) : point.label}
+              </span>
               <div aria-hidden="true"><i style={{ width: `${Math.max(2, (point.value / maximum) * 100)}%` }} /></div>
               <strong>{point.value} {valueSuffix}</strong>
             </div>
