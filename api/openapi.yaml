@@ -2008,11 +2008,22 @@ components:
     TMDBCredits:
       type: object
       additionalProperties: false
-      required: [cast]
+      required: [cast, crew]
       properties:
         cast:
           type: array
           items: { $ref: '#/components/schemas/TMDBCastMember' }
+        crew:
+          type: array
+          items: { $ref: '#/components/schemas/TMDBCrewMember' }
+    TMDBCrewMember:
+      type: object
+      additionalProperties: false
+      required: [id, name, job]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        job: { type: string }
     MediaItem:
       type: object
       additionalProperties: false

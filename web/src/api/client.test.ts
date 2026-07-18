@@ -165,7 +165,7 @@ describe('API client protected writes', () => {
 
     expect(tv.seasons[0]?.episodeCount).toBe(10)
     expect(season.episodes[0]?.stillPath).toBe('/winter.jpg')
-    expect(credits[0]?.character).toBe('艾德·史塔克')
+    expect(credits.cast[0]?.character).toBe('艾德·史塔克')
   })
 
   it('scopes movie and season round reads without ambiguous URLs', async () => {

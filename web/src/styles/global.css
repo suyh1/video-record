@@ -6784,3 +6784,24 @@ textarea:disabled {
   color: var(--muted);
   font-size: 0.85rem;
 }
+
+.media-crew-line {
+  margin: 0 0 var(--space-4);
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.household-recent-events ul {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.household-recent-events li {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+.sync-bulk-actions {
+  margin-bottom: var(--space-4);
+}

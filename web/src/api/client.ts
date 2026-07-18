@@ -128,11 +128,11 @@ export function getTMDBSeason(id: number, seasonNumber: number, signal?: AbortSi
 }
 
 export async function getTMDBCredits(mediaType: MediaType, id: number, signal?: AbortSignal) {
-  const response = await requestJSON<{ cast: TMDBCastMember[] }>(
+  const response = await requestJSON<{ cast: TMDBCastMember[]; crew?: Array<{ id: number; name: string; job: string }> }>(
     `/api/v1/tmdb/${mediaType}/${id}/credits`,
     signal ? { signal } : undefined,
   )
-  return response.cast
+  return response
 }
 
 export type UpdateCurrentRoundPayload = {
@@ -371,6 +371,18 @@ export function getHouseholdMembers(signal?: AbortSignal) {
 
 export function getHouseholdParticipants(signal?: AbortSignal) {
   return requestJSON<HouseholdMember[]>('/api/v1/household/participants', signal ? { signal } : undefined)
+}
+
+export type HouseholdSharedEvent = {
+  id: string
+  mediaId: string
+  title: string
+  watchedAt: string
+  participants: string[]
+}
+
+export function getHouseholdEvents(signal?: AbortSignal) {
+  return requestJSON<HouseholdSharedEvent[]>('/api/v1/household/events', signal ? { signal } : undefined)
 }
 
 export function createHouseholdMember(username: string, password: string) {

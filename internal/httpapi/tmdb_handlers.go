@@ -97,6 +97,13 @@ type tmdbEpisodeResponse struct {
 
 type tmdbCreditsResponse struct {
 	Cast []tmdbCastResponse `json:"cast"`
+	Crew []tmdbCrewResponse `json:"crew"`
+}
+
+type tmdbCrewResponse struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	Job  string `json:"job"`
 }
 
 type tmdbCastResponse struct {
@@ -287,7 +294,17 @@ func (handlers tmdbHandlers) credits(w http.ResponseWriter, r *http.Request) {
 			Order:       member.Order,
 		})
 	}
-	writeJSON(w, http.StatusOK, tmdbCreditsResponse{Cast: cast})
+	crew := make([]tmdbCrewResponse, 0)
+	for _, member := range credits.Crew {
+		if member.Job != "Director" && member.Job != "Writer" && member.Job != "Screenplay" && member.Job != "Creator" {
+			continue
+		}
+		crew = append(crew, tmdbCrewResponse{ID: member.ID, Name: member.Name, Job: member.Job})
+		if len(crew) >= 8 {
+			break
+		}
+	}
+	writeJSON(w, http.StatusOK, tmdbCreditsResponse{Cast: cast, Crew: crew})
 }
 
 func signedTMDBImageURL(client *tmdb.Client, size, imagePath string, now time.Time) string {

@@ -1607,6 +1607,12 @@ export interface components {
         };
         TMDBCredits: {
             cast: components["schemas"]["TMDBCastMember"][];
+            crew: components["schemas"]["TMDBCrewMember"][];
+        };
+        TMDBCrewMember: {
+            id: number;
+            name: string;
+            job: string;
         };
         MediaItem: {
             /** Format: uuid */

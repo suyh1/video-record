@@ -117,8 +117,13 @@ export function TMDBPreviewPage() {
         linker={<span className="tmdb-preview-label">TMDB 预览</span>}
         onPaletteChange={atmosphere.onPaletteChange}
       />
+      {credits.data?.crew && credits.data.crew.length > 0 ? (
+        <p className="media-crew-line" aria-label="主创">
+          {credits.data.crew.map((member) => `${member.job} ${member.name}`).join(' · ')}
+        </p>
+      ) : null}
       <CastStrip
-        cast={credits.data ?? []}
+        cast={credits.data?.cast ?? []}
         pending={credits.isPending}
         error={credits.isError}
         linked

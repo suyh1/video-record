@@ -149,7 +149,7 @@ it('orders a TV season workspace as selector, episodes, private record, and rewa
   )
   renderDetails('series-1')
 
-  const selector = await screen.findByRole('combobox', { name: '选择季' })
+  const selector = await screen.findByRole('tablist', { name: '选择季' })
   const episodes = await screen.findByRole('heading', { name: '剧集进度' })
   const privateRecord = await screen.findByRole('heading', { name: '第 1 季个人记录' })
   const rewatch = await screen.findByRole('heading', { name: '多刷' })

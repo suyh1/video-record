@@ -64,9 +64,14 @@ export function CandidateReviewPage() {
           <span>新的冲突或无法匹配事件会显示在这里。</span>
         </div>
       ) : (
-        <ol className="sync-candidate-list" aria-label="待核对同步候选">
-          {pendingCandidates.map((candidate) => <CandidateItem key={candidate.id} candidate={candidate} />)}
-        </ol>
+        <>
+          <div className="sync-bulk-actions">
+            <BulkIgnoreExact candidates={pendingCandidates} onDone={() => void candidates.refetch()} />
+          </div>
+          <ol className="sync-candidate-list" aria-label="待核对同步候选">
+            {pendingCandidates.map((candidate) => <CandidateItem key={candidate.id} candidate={candidate} />)}
+          </ol>
+        </>
       )}
     </div>
   )
@@ -259,4 +264,38 @@ function pad(value?: number) {
 
 function formatCandidateDate(value: string) {
   return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+}
+
+
+function BulkIgnoreExact({ candidates, onDone }: { candidates: SyncCandidate[]; onDone: () => void }) {
+  const [pending, setPending] = useState(false)
+  const [message, setMessage] = useState('')
+  const exact = candidates.filter((candidate) => candidate.status === 'exact' || candidate.status === 'possible')
+  if (exact.length === 0) return null
+  return (
+    <div>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={async () => {
+          setPending(true)
+          setMessage('')
+          try {
+            for (const candidate of exact) {
+              await ignoreSyncCandidate(candidate.id)
+            }
+            setMessage(`已忽略 ${exact.length} 条候选`)
+            onDone()
+          } catch {
+            setMessage('批量忽略失败，请稍后重试')
+          } finally {
+            setPending(false)
+          }
+        }}
+      >
+        {pending ? '正在忽略' : `批量忽略 ${exact.length} 条精确/可能匹配`}
+      </button>
+      {message ? <p role="status">{message}</p> : null}
+    </div>
+  )
 }

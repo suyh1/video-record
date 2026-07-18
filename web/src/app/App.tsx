@@ -20,6 +20,7 @@ import { CalendarPage } from '../features/calendar/CalendarPage'
 import { AuthGate } from '../features/auth/AuthGate'
 import { HomePage } from '../features/home/HomePage'
 import type { HomeHeroBackdropState } from '../features/home/HomeHero'
+import { HouseholdRecentEvents } from '../features/household/HouseholdRecentEvents'
 import { MemberSettings } from '../features/household/MemberSettings'
 import { LibraryPage } from '../features/library/LibraryPage'
 import { MediaDetailsPage } from '../features/media/MediaDetailsPage'
@@ -324,6 +325,7 @@ function SettingsPage() {
         {currentUser.data?.role === 'member' ? (
           <SettingsPermissionNotice title="家庭成员">仅管理员可管理家庭成员。</SettingsPermissionNotice>
         ) : <MemberSettings />}
+        <HouseholdRecentEvents />
       </div>
       <div className="settings-section-group" id="settings-data">
         <DataTransfer />
