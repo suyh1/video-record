@@ -1216,6 +1216,8 @@ export interface components {
             viewingMethod: string | null;
             /** Format: date-time */
             watchedAt: string | null;
+            /** Format: date-time */
+            startedAt: string | null;
             version: number;
             profileVersion: number;
             participantIds: string[];
@@ -1227,6 +1229,8 @@ export interface components {
             viewingMethod?: string | null;
             /** Format: date-time */
             watchedAt?: string;
+            /** Format: date-time */
+            startedAt?: string | null;
             participantIds?: string[];
         };
         ArchivedRound: {

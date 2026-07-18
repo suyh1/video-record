@@ -351,7 +351,7 @@ describe('HomePage', () => {
     const user = userEvent.setup()
 
     expect(await screen.findByRole('heading', { name: '继续观看' })).toBeVisible()
-    expect(await screen.findByText('1 部剧集')).toBeVisible()
+    expect(await screen.findByText('1 部在看')).toBeVisible()
     expect(screen.getAllByText('The Long Season')).toHaveLength(2)
     expect(screen.getByRole('heading', { name: '最近记录' })).toBeVisible()
     expect(screen.getByText('In the Mood for Love')).toBeVisible()
@@ -451,7 +451,7 @@ describe('HomePage', () => {
 
     view.rerender(renderHome(true))
 
-    expect(await screen.findByText('0 部剧集')).toBeVisible()
+    expect(await screen.findByText('0 部在看')).toBeVisible()
     expect(scenario.watchingLibraryRequests()).toBe(2)
   })
 
@@ -473,14 +473,14 @@ describe('HomePage', () => {
 
     expect(scenario.watchingLibraryRequests()).toBe(1)
     expect(screen.getByRole('button', { name: '撤销 收官剧集 S01E02' })).toBeDisabled()
-    expect(screen.getByText('1 部剧集')).toBeVisible()
+    expect(screen.getByText('1 部在看')).toBeVisible()
 
     await act(async () => vi.advanceTimersByTimeAsync(1_000))
 
     await waitFor(() => expect(scenario.backendVersion()).toBe(3))
     await waitFor(() => expect(scenario.watchingLibraryRequests()).toBe(2))
     expect(scenario.allLibraryRequests()).toBe(3)
-    expect(screen.getByText('1 部剧集')).toBeVisible()
+    expect(screen.getByText('1 部在看')).toBeVisible()
     expect(await screen.findByRole('button', { name: '推进 收官剧集 下一集 S01E02' })).toBeVisible()
   })
 
@@ -507,8 +507,44 @@ describe('HomePage', () => {
     await waitFor(() => expect(scenario.watchingLibraryRequests()).toBe(2))
     expect(scenario.backendVersion()).toBe(2)
     expect(scenario.allLibraryRequests()).toBe(2)
-    expect(await screen.findByText('0 部剧集')).toBeVisible()
+    expect(await screen.findByText('0 部在看')).toBeVisible()
     expect(screen.queryByRole('button', { name: '撤销 收官剧集 S01E02' })).not.toBeInTheDocument()
+  })
+
+  it('shows watching movies in continue and marks them completed with status feedback', async () => {
+    sessionStorage.setItem('video-record.csrf-token', 'csrf-test-token')
+    let requestBody: unknown
+    const movie = libraryMovie('movie-watching', 777, '进行中的电影', 'watching')
+    server.use(
+      http.get('*/api/v1/library', ({ request }) => HttpResponse.json({
+        items: new URL(request.url).searchParams.get('status') === 'watching' ? [movie] : [],
+        nextCursor: null,
+      })),
+      http.get('*/api/v1/records/movie-watching/rounds/current', () => HttpResponse.json({
+        roundId: 'round-movie', mediaId: 'movie-watching', seasonNumber: null, roundNumber: 1,
+        status: 'watching', rating: null, note: null, viewingMethod: null, watchedAt: null,
+        startedAt: '2026-07-10T12:00:00Z', participantIds: [], version: 2, profileVersion: 1,
+      })),
+      http.put('*/api/v1/records/movie-watching/rounds/current', async ({ request }) => {
+        requestBody = await request.json()
+        return HttpResponse.json({
+          roundId: 'round-movie', mediaId: 'movie-watching', seasonNumber: null, roundNumber: 1,
+          status: 'completed', rating: null, note: null, viewingMethod: null,
+          watchedAt: '2026-07-14T12:00:00Z', startedAt: '2026-07-10T12:00:00Z',
+          participantIds: [], version: 3, profileVersion: 1,
+        })
+      }),
+      http.get('*/api/v1/public/tmdb/highlights', () => HttpResponse.json({ items: [] })),
+      http.get('*/api/v1/tmdb/movie/777', () => HttpResponse.json(movieDetails(movie))),
+    )
+    const user = userEvent.setup()
+    renderWithQueryClient(<MemoryRouter><HomePage /></MemoryRouter>)
+
+    expect(await screen.findByText('1 部在看')).toBeVisible()
+    await user.click(await screen.findByRole('button', { name: '将 进行中的电影 标为看过' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('已将「进行中的电影」标为看过')
+    expect(requestBody).toMatchObject({ status: 'completed' })
+    expect((requestBody as { watchedAt?: string }).watchedAt).toBeTruthy()
   })
 
   it('keeps the title usable without claiming completion when TMDB is unavailable', async () => {
@@ -656,7 +692,7 @@ function installLastEpisodeScenario({ nextDelayMs = 0, undoDelayMs = 0, undoFail
     http.get('*/api/v1/records/series-final/rounds/current', () => HttpResponse.json({
       roundId: 'round-final', mediaId: item.id, seasonNumber: 1, roundNumber: 1,
       status: progressVersion === 2 ? 'completed' : 'watching', rating: null, note: null,
-      viewingMethod: null, watchedAt: null, participantIds: [], version: progressVersion, profileVersion: 1,
+      viewingMethod: null, startedAt: null, watchedAt: null, participantIds: [], version: progressVersion, profileVersion: 1,
     })),
     http.get('*/api/v1/records/series-final/progress', () => HttpResponse.json({
       roundId: 'round-final', mediaId: item.id, seasonNumber: 1,

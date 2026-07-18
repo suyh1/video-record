@@ -141,6 +141,7 @@ export type UpdateCurrentRoundPayload = {
 	note?: string | null
 	viewingMethod?: string | null
 	watchedAt?: string
+	startedAt?: string | null
 	participantIds?: string[]
 }
 

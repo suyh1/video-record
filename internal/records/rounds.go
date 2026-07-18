@@ -53,6 +53,8 @@ type UpdateRoundInput struct {
 	ViewingMethod    *string
 	ViewingMethodSet bool
 	CompletedAt      *time.Time
+	StartedAt        *time.Time
+	StartedAtSet     bool
 	Source           Source
 	ExpectedVersion  int
 	ParticipantIDs   []string
@@ -110,6 +112,9 @@ func (service *Service) UpdateRound(ctx context.Context, input UpdateRoundInput)
 	if input.CompletedAt != nil && input.CompletedAt.After(now) {
 		return WatchRound{}, ErrInvalidWatchedAt
 	}
+	if input.StartedAtSet && input.StartedAt != nil && input.StartedAt.After(now) {
+		return WatchRound{}, ErrInvalidWatchedAt
+	}
 
 	current, exists, err := service.repository.FindCurrentRound(ctx, input.Scope)
 	if err != nil {
@@ -158,6 +163,18 @@ func (service *Service) UpdateRound(ctx context.Context, input UpdateRoundInput)
 	if input.ParticipantIDs != nil {
 		changed = true
 		next.ParticipantIDs = roundParticipantIDsWithoutOwner(input.Scope.UserID, input.ParticipantIDs)
+	}
+	if input.StartedAtSet {
+		if input.StartedAt == nil {
+			if next.StartedAt != nil {
+				next.StartedAt = nil
+				changed = true
+			}
+		} else {
+			started := input.StartedAt.UTC()
+			changed = changed || next.StartedAt == nil || !next.StartedAt.Equal(started)
+			next.StartedAt = &started
+		}
 	}
 	if next.Status == StatusWatching && next.StartedAt == nil {
 		next.StartedAt = timePointerCopy(now)

@@ -21,7 +21,7 @@ const tvDetails = {
 function round(seasonNumber: number, status: CurrentRound['status'], note: string): CurrentRound {
   return {
     roundId: `round-${seasonNumber}`, mediaId: 'series-1', seasonNumber, roundNumber: 1,
-    status, rating: null, note, viewingMethod: null, watchedAt: null, participantIds: [],
+    status, rating: null, note, viewingMethod: null, startedAt: null, watchedAt: null, participantIds: [],
     version: 2, profileVersion: 9,
   }
 }
@@ -97,19 +97,19 @@ it('reuses the active season catalog title in archived round details', async () 
       round: {
         roundId: 'archived-1', mediaId: 'series-1', seasonNumber: 1, roundNumber: 1,
         status: 'completed', rating: 9, note: '上一轮笔记', viewingMethod: null,
-        watchedAt: '2026-07-13T12:30:45Z', archivedAt: '2026-07-14T12:00:00Z',
+        startedAt: null, watchedAt: '2026-07-13T12:30:45Z', archivedAt: '2026-07-14T12:00:00Z',
       },
       episodes: [{
         id: 'episode-101', sourceId: '101', seasonId: 'season-1', seasonNumber: 1,
         episodeNumber: 1, absoluteNumber: 1, name: '', watched: true,
-        watchedAt: '2026-07-12T11:10:12Z',
+        startedAt: null, watchedAt: '2026-07-12T11:10:12Z',
       }],
     })),
     http.get('*/api/v1/records/series-1/rounds', ({ request }) => {
       const seasonNumber = Number(new URL(request.url).searchParams.get('seasonNumber'))
       return HttpResponse.json({ rounds: seasonNumber === 1 ? [{
         roundId: 'archived-1', mediaId: 'series-1', seasonNumber: 1,
-        roundNumber: 1, watchedAt: '2026-07-13T12:30:45Z', rating: 9,
+        roundNumber: 1, startedAt: null, watchedAt: '2026-07-13T12:30:45Z', rating: 9,
       }] : [] })
     }),
   )

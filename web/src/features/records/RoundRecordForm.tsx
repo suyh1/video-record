@@ -96,9 +96,13 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
     if (nextStatus === 'completed' && !form.getValues('watchedAt')) {
       form.setValue('watchedAt', toDateTimeLocalValue(now), { shouldDirty: true })
     }
+    if (nextStatus === 'watching' && !form.getValues('startedAt')) {
+      form.setValue('startedAt', toDateTimeLocalValue(now), { shouldDirty: true })
+    }
   }
 
   const watchedAtError = form.formState.errors.watchedAt
+  const startedAtError = form.formState.errors.startedAt
 
   return (
     <section className="round-record" aria-labelledby={`${errorID}-heading`}>
@@ -138,6 +142,21 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
           </div>
         )}
 
+        {round.seasonNumber === null && status === 'watching' ? (
+          <label className="form-field watched-at-field">
+            <span>开始观看时间</span>
+            <input
+              type="datetime-local"
+              step="1"
+              max={toDateTimeLocalValue(now)}
+              aria-invalid={Boolean(startedAtError)}
+              aria-describedby={startedAtError ? `${errorID}-started-at-error` : undefined}
+              {...form.register('startedAt')}
+            />
+            {startedAtError ? <small id={`${errorID}-started-at-error`}>{startedAtError.message}</small> : null}
+          </label>
+        ) : null}
+
         {round.seasonNumber === null && status === 'completed' ? (
           <label className="form-field watched-at-field">
             <span>完成观看时间</span>
@@ -169,7 +188,9 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
               <RatingPicker
                 value={form.watch('rating')}
                 onChange={(next) => form.setValue('rating', next, { shouldDirty: true, shouldValidate: true })}
-                error={form.formState.errors.rating?.message}
+                {...(form.formState.errors.rating?.message
+                  ? { error: form.formState.errors.rating.message }
+                  : {})}
               />
             </div>
             <div className="form-field viewing-method-field">
@@ -253,6 +274,7 @@ export function RoundRecordForm({ round, now, participants = [], onSaved }: Roun
 type FormValues = {
   status: RecordStatus
   watchedAt: string
+  startedAt: string
   rating: string
   note: string
   viewingMethod: string
@@ -284,6 +306,7 @@ function formSchema(movie: boolean, now: Date) {
     .object({
       status: z.enum(['none', 'wishlist', 'watching', 'completed', 'dropped']),
       watchedAt: z.string(),
+      startedAt: z.string(),
       rating: z.string().refine(
         (value) => {
           if (value === '') return true
@@ -298,7 +321,15 @@ function formSchema(movie: boolean, now: Date) {
       participantIds: z.array(z.string().min(1)),
     })
     .superRefine((value, context) => {
-      if (!movie || value.status !== 'completed') return
+      if (!movie) return
+      if (value.status === 'watching' && value.startedAt) {
+        if (fromDateTimeLocalValue(value.startedAt) === null) {
+          context.addIssue({ code: 'custom', path: ['startedAt'], message: '请输入有效的开始观看时间' })
+        } else if (isFutureDateTimeLocalValue(value.startedAt, now)) {
+          context.addIssue({ code: 'custom', path: ['startedAt'], message: '开始观看时间不能晚于当前时间' })
+        }
+      }
+      if (value.status !== 'completed') return
       if (!value.watchedAt) {
         context.addIssue({ code: 'custom', path: ['watchedAt'], message: '请选择完成观看时间' })
         return
@@ -320,6 +351,10 @@ function toPayload(
   projectedStatus: RecordStatus,
 ): UpdateCurrentRoundPayload {
   const payload: UpdateCurrentRoundPayload = { status: movie ? values.status : projectedStatus }
+  if (movie && values.status === 'watching' && values.startedAt) {
+    const startedAt = fromDateTimeLocalValue(values.startedAt)
+    if (startedAt) payload.startedAt = startedAt.toISOString()
+  }
   if (movie && values.status === 'completed') {
     const watchedAt = fromDateTimeLocalValue(values.watchedAt)
     if (watchedAt) payload.watchedAt = watchedAt.toISOString()
@@ -337,6 +372,7 @@ function formValuesFromRound(round: CurrentRound): FormValues {
   return {
     status: round.status,
     watchedAt: round.watchedAt ? toDateTimeLocalValue(new Date(round.watchedAt)) : '',
+    startedAt: round.startedAt ? toDateTimeLocalValue(new Date(round.startedAt)) : '',
     rating: round.rating === null ? '' : String(round.rating),
     note: round.note ?? '',
     viewingMethod: round.viewingMethod ?? '',

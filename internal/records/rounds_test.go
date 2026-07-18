@@ -362,6 +362,30 @@ func timePointer(value time.Time) *time.Time {
 	return &value
 }
 
+func TestUpdateRoundAcceptsStartedAtForWatchingAndRejectsFuture(t *testing.T) {
+	_, db, userID, mediaID := newTestRecordsService(t)
+	now := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	service := NewService(NewRepository(db), ServiceOptions{Now: func() time.Time { return now }})
+	scope := RoundScope{UserID: userID, MediaID: mediaID}
+	started := time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC)
+
+	saved, err := service.UpdateRound(context.Background(), UpdateRoundInput{
+		Scope: scope, Status: StatusWatching,
+		StartedAt: &started, StartedAtSet: true,
+		Source: SourceManual, ExpectedVersion: 0,
+	})
+	require.NoError(t, err)
+	require.Equal(t, started, *saved.StartedAt)
+
+	future := now.Add(time.Minute)
+	_, err = service.UpdateRound(context.Background(), UpdateRoundInput{
+		Scope: scope, Status: StatusWatching,
+		StartedAt: &future, StartedAtSet: true,
+		Source: SourceManual, ExpectedVersion: saved.Version,
+	})
+	require.ErrorIs(t, err, ErrInvalidWatchedAt)
+}
+
 func TestViewingMethodsReturnsTopUsedMethodsForUser(t *testing.T) {
 	service, db, userID, mediaID := newTestRecordsService(t)
 	ctx := context.Background()

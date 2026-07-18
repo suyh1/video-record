@@ -238,7 +238,7 @@ describe('HomeHero', () => {
         episodes: [1, 2, 3].map((episodeNumber) => ({
           id: `episode-${episodeNumber}`, sourceId: String(200 + episodeNumber), seasonId: 'season-2',
           seasonNumber: 2, episodeNumber, absoluteNumber: episodeNumber + 4, name: `第${episodeNumber}集`,
-          watched: true, watchedAt: '2026-07-12T12:00:00Z',
+          watched: true, startedAt: null, watchedAt: '2026-07-12T12:00:00Z',
         })),
       })),
       http.get('*/api/v1/tmdb/tv/1399/season/2', () => HttpResponse.json({

@@ -1452,7 +1452,7 @@ components:
     CurrentRound:
       type: object
       additionalProperties: false
-      required: [roundId, mediaId, seasonNumber, roundNumber, status, rating, note, viewingMethod, watchedAt, version, profileVersion, participantIds]
+      required: [roundId, mediaId, seasonNumber, roundNumber, status, rating, note, viewingMethod, watchedAt, startedAt, version, profileVersion, participantIds]
       properties:
         roundId: { type: string }
         mediaId: { type: string, format: uuid }
@@ -1463,6 +1463,7 @@ components:
         note: { type: [string, 'null'] }
         viewingMethod: { type: [string, 'null'] }
         watchedAt: { type: [string, 'null'], format: date-time }
+        startedAt: { type: [string, 'null'], format: date-time }
         version: { type: integer, minimum: 0 }
         profileVersion: { type: integer, minimum: 0 }
         participantIds:
@@ -1479,6 +1480,7 @@ components:
         note: { type: [string, 'null'] }
         viewingMethod: { type: [string, 'null'], maxLength: 80 }
         watchedAt: { type: string, format: date-time }
+        startedAt: { type: [string, 'null'], format: date-time }
         participantIds:
           type: array
           uniqueItems: true

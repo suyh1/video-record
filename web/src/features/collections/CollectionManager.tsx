@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Check, Folder, LoaderCircle, Plus, RefreshCw, X } from 'lucide-react'
 import { type FormEvent, useId, useRef, useState } from 'react'
 
-import { createCollection, getCollections, replaceCollectionItems } from '../../api/client'
+import { createCollection, deleteCollection, getCollections, renameCollection, replaceCollectionItems } from '../../api/client'
 import type { Collection, MediaSearchResult } from '../../api/types'
 
 type CollectionManagerProps = {
@@ -41,6 +41,29 @@ export function CollectionManager({ mediaItems, selectedCollectionID, onSelect }
       setMessage('片单顺序已保存')
     },
     onError: () => setMessage('片单更新失败，请稍后重试。'),
+  })
+  const renameMutation = useMutation({
+    mutationFn: ({ collectionID, nextName }: { collectionID: string; nextName: string }) => (
+      renameCollection(collectionID, nextName)
+    ),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<Collection[]>(['collections'], (current = []) => current.map((collection) => (
+        collection.id === updated.id ? { ...collection, name: updated.name } : collection
+      )))
+      setMessage(`已重命名为${updated.name}`)
+    },
+    onError: () => setMessage('重命名失败，请检查名称是否重复。'),
+  })
+  const deleteMutation = useMutation({
+    mutationFn: (collectionID: string) => deleteCollection(collectionID),
+    onSuccess: (_, collectionID) => {
+      queryClient.setQueryData<Collection[]>(['collections'], (current = []) => (
+        current.filter((collection) => collection.id !== collectionID)
+      ))
+      if (selectedCollectionID === collectionID) onSelect('')
+      setMessage('片单已删除')
+    },
+    onError: () => setMessage('删除片单失败，请稍后重试。'),
   })
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -170,8 +193,33 @@ export function CollectionManager({ mediaItems, selectedCollectionID, onSelect }
           })}
         </ol>
       ) : null}
+      {selected ? (
+        <div className="collection-manage-actions">
+          <button
+            type="button"
+            disabled={renameMutation.isPending || deleteMutation.isPending}
+            onClick={() => {
+              const nextName = window.prompt('新的片单名称', selected.name)?.trim()
+              if (!nextName || nextName === selected.name) return
+              renameMutation.mutate({ collectionID: selected.id, nextName })
+            }}
+          >
+            重命名
+          </button>
+          <button
+            type="button"
+            disabled={renameMutation.isPending || deleteMutation.isPending}
+            onClick={() => {
+              if (!window.confirm(`确定删除片单「${selected.name}」？影视记录不会被删除。`)) return
+              deleteMutation.mutate(selected.id)
+            }}
+          >
+            删除片单
+          </button>
+        </div>
+      ) : null}
       {selected && selected.items.length === 0 ? <p className="collection-manager-empty">这个片单还没有影视</p> : null}
-      {message ? <p className={createMutation.isError || replaceMutation.isError ? 'collection-manager-error-text' : 'collection-manager-message'} role={createMutation.isError || replaceMutation.isError ? 'alert' : 'status'}>{message}</p> : null}
+      {message ? <p className={createMutation.isError || replaceMutation.isError || renameMutation.isError || deleteMutation.isError ? 'collection-manager-error-text' : 'collection-manager-message'} role={createMutation.isError || replaceMutation.isError || renameMutation.isError || deleteMutation.isError ? 'alert' : 'status'}>{message}</p> : null}
     </section>
   )
 }

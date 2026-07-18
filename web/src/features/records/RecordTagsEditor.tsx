@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, LoaderCircle, Tags } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { getRecordTags, setRecordTags } from '../../api/client'
+import { getRecordTags, getUserTags, setRecordTags } from '../../api/client'
 
 type RecordTagsEditorProps = {
   mediaID: string
@@ -16,12 +16,17 @@ export function RecordTagsEditor({ mediaID, version, onVersionChange }: RecordTa
     queryKey: ['record-tags', mediaID],
     queryFn: ({ signal }) => getRecordTags(mediaID, signal),
   })
+  const suggestions = useQuery({
+    queryKey: ['user-tags'],
+    queryFn: ({ signal }) => getUserTags(signal),
+  })
   const [draft, setDraft] = useState('')
   const [saved, setSaved] = useState(false)
   const mutation = useMutation({
     mutationFn: (tags: string[]) => setRecordTags(mediaID, version, tags),
     onSuccess: (nextVersion, tags) => {
       queryClient.setQueryData(['record-tags', mediaID], { tags })
+      void queryClient.invalidateQueries({ queryKey: ['user-tags'] })
       onVersionChange(nextVersion)
       setSaved(true)
     },
@@ -35,10 +40,15 @@ export function RecordTagsEditor({ mediaID, version, onVersionChange }: RecordTa
   if (query.isPending) return <div className="record-tags-skeleton skeleton" aria-label="正在加载私人标签" />
   if (query.isError) return <p className="record-tags-error" role="alert">无法读取私人标签</p>
 
+  const currentTags = normalizeTags(draft)
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
     setSaved(false)
-    mutation.mutate(normalizeTags(draft))
+    mutation.mutate(currentTags)
+  }
+  const appendTag = (name: string) => {
+    if (currentTags.includes(name)) return
+    setDraft([...currentTags, name].join('，'))
   }
 
   return (
@@ -52,6 +62,13 @@ export function RecordTagsEditor({ mediaID, version, onVersionChange }: RecordTa
           placeholder="用逗号分隔，如：家庭、科幻"
         />
       </label>
+      {suggestions.data?.tags.length ? (
+        <div className="record-tag-suggestions" role="group" aria-label="已有标签">
+          {suggestions.data.tags.map((name) => (
+            <button key={name} type="button" onClick={() => appendTag(name)}>{name}</button>
+          ))}
+        </div>
+      ) : null}
       <button type="submit" disabled={mutation.isPending}>
         {mutation.isPending ? <LoaderCircle className="loading-icon" aria-hidden="true" size={16} /> : <Check aria-hidden="true" size={16} />}
         {mutation.isPending ? '正在保存' : '保存标签'}

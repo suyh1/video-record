@@ -11,6 +11,7 @@ import { LibraryPage } from './LibraryPage'
 describe('LibraryPage', () => {
   it('filters the private library by status and keeps poster information explicit', async () => {
     server.use(
+      http.get('*/api/v1/tags', () => HttpResponse.json({ tags: [] })),
       http.get('*/api/v1/library', ({ request }) => {
         const status = new URL(request.url).searchParams.get('status')
         const items = [
@@ -35,8 +36,8 @@ describe('LibraryPage', () => {
 
     expect(await screen.findByText('In the Mood for Love')).toBeVisible()
     expect(screen.getByText('The Long Season')).toBeVisible()
-    expect(screen.getByText('电影')).toBeVisible()
-    expect(screen.getByText('剧集')).toBeVisible()
+    expect(screen.getAllByText('电影').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('剧集').length).toBeGreaterThan(0)
     expect(screen.getByLabelText('花样年华 暂无海报')).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: '看过' }))
@@ -46,7 +47,8 @@ describe('LibraryPage', () => {
   })
 
   it('opens search from the empty state primary action', async () => {
-    server.use(http.get('*/api/v1/library', () => HttpResponse.json({ items: [], nextCursor: null })))
+    server.use(http.get('*/api/v1/tags', () => HttpResponse.json({ tags: [] })),
+      http.get('*/api/v1/library', () => HttpResponse.json({ items: [], nextCursor: null })))
     const onSearch = vi.fn()
     const user = userEvent.setup()
     renderWithQueryClient(
@@ -82,6 +84,7 @@ describe('LibraryPage', () => {
       status: 'wishlist' as const,
     }]
     server.use(
+      http.get('*/api/v1/tags', () => HttpResponse.json({ tags: [] })),
       http.get('*/api/v1/library', ({ request }) => {
         const cursor = new URL(request.url).searchParams.get('cursor')
         if (!cursor) {
@@ -119,14 +122,16 @@ describe('LibraryPage', () => {
       originalTitle: 'Only In Collection', year: '2010', posterPath: null, status: 'wishlist' as const,
     }
     server.use(
+      http.get('*/api/v1/tags', () => HttpResponse.json({ tags: [] })),
       http.get('*/api/v1/library', () => HttpResponse.json({ items: [libraryOnly], nextCursor: null })),
       http.get('*/api/v1/collections', () => HttpResponse.json([
         { id: 'collection-1', name: '周末电影', items: ['media-old'] },
       ])),
-      http.get('*/api/v1/collections/collection-1/items', () => HttpResponse.json({
-        items: [collectionOnly],
-        nextCursor: null,
-      })),
+      http.get('*/api/v1/collections/collection-1/items', ({ request }) => {
+        const status = new URL(request.url).searchParams.get('status')
+        const items = status && status !== collectionOnly.status ? [] : [collectionOnly]
+        return HttpResponse.json({ items, nextCursor: null })
+      }),
     )
     const user = userEvent.setup()
     renderWithQueryClient(
@@ -138,11 +143,17 @@ describe('LibraryPage', () => {
     expect(await screen.findByText('In the Mood for Love')).toBeVisible()
     await user.click(screen.getByRole('button', { name: '周末电影，1 部影视' }))
     expect(await screen.findByText('Only In Collection')).toBeVisible()
-    expect(screen.getByText('1 部影视')).toBeVisible()
+    expect(screen.getByText(/1 部影视/)).toBeVisible()
     expect(screen.queryByText('In the Mood for Love')).not.toBeInTheDocument()
 
+    // Status filter stacks with the selected collection (Task 10).
     await user.click(screen.getByRole('button', { name: '看过' }))
-    expect(await screen.findByText('In the Mood for Love')).toBeVisible()
+    expect(await screen.findByRole('button', { name: '看过', pressed: true })).toBeVisible()
+    expect(screen.getByRole('button', { name: '周末电影，1 部影视', pressed: true })).toBeVisible()
     expect(screen.queryByText('Only In Collection')).not.toBeInTheDocument()
+    expect(screen.queryByText('In the Mood for Love')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '全部记录' }))
+    expect(await screen.findByText('In the Mood for Love')).toBeVisible()
   })
 })

@@ -11,6 +11,7 @@ import {
   getTMDBMovie,
   getTMDBSeason,
   getTMDBTV,
+  updateCurrentRound,
   updateEpisodeProgress,
   type UpdateEpisodeProgressPayload,
 } from '../../api/client'
@@ -99,7 +100,7 @@ export function HomePage({ onHeroBackdropStateChange, onSearch }: {
     })
     if (highlights.isError) void highlights.refetch()
   }
-  const continuingItems = continuing.data?.items.filter((item) => item.mediaType === 'tv') ?? []
+  const continuingItems = continuing.data?.items ?? []
 
   return (
     <div className="page home-page">
@@ -117,7 +118,7 @@ export function HomePage({ onHeroBackdropStateChange, onSearch }: {
         <div className="section-heading">
           <div>
             <h2 id="continue-heading">继续观看</h2>
-            <p>{continuingItems.length} 部剧集</p>
+            <p>{continuingItems.length} 部在看</p>
           </div>
         </div>
         {continuing.isPending ? <HomePosterSkeleton /> : null}
@@ -126,14 +127,18 @@ export function HomePage({ onHeroBackdropStateChange, onSearch }: {
         ) : null}
         {!continuing.isError && continuingItems.length ? (
           <div className="home-poster-strip">
-            {continuingItems.slice(0, 8).map((item) => <HomeContinueItem key={item.id} item={item} />)}
+            {continuingItems.slice(0, 8).map((item) => (
+              item.mediaType === 'movie'
+                ? <HomeContinueMovie key={item.id} item={item} />
+                : <HomeContinueItem key={item.id} item={item} />
+            ))}
           </div>
         ) : null}
         {!continuing.isPending && !continuing.isError && continuingItems.length === 0 ? (
           <HomeEmpty
             icon={Clapperboard}
-            message="还没有正在观看的剧集"
-            actionLabel="搜索剧集"
+            message="还没有正在观看的影视"
+            actionLabel="搜索影视"
             {...(onSearch ? { onSearch } : {})}
           />
         ) : null}
@@ -202,6 +207,49 @@ function collectPrivateHeroCandidates(watching: MediaSearchResult[], recent: Med
     if (candidates.length === 6) break
   }
   return candidates
+}
+
+function HomeContinueMovie({ item }: { item: MediaSearchResult }) {
+  const queryClient = useQueryClient()
+  const [statusMessage, setStatusMessage] = useState('')
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const current = await getCurrentRound(item.id)
+      return updateCurrentRound(item.id, undefined, current.version, {
+        status: 'completed',
+        watchedAt: new Date().toISOString(),
+      })
+    },
+    onSuccess: (saved) => {
+      queryClient.setQueryData(['current-round', item.id, 'movie'], saved)
+      setStatusMessage(`已将「${item.title}」标为看过`)
+      void queryClient.invalidateQueries({ exact: true, queryKey: ['library', 'watching'] })
+      void queryClient.invalidateQueries({ exact: true, queryKey: ['library', 'all'] })
+    },
+    onError: () => setStatusMessage('标为看过失败，请稍后重试'),
+  })
+
+  return (
+    <article className="home-continue-item">
+      <Link className="poster-link" to={`/media/${item.id}`}><MediaPoster item={item} /></Link>
+      <div className="home-continue-action">
+        <button
+          type="button"
+          disabled={mutation.isPending}
+          aria-label={`将 ${item.title} 标为看过`}
+          onClick={() => {
+            setStatusMessage('')
+            mutation.mutate()
+          }}
+        >
+          {mutation.isPending ? <LoaderCircle className="loading-icon" aria-hidden="true" size={16} /> : <Check aria-hidden="true" size={16} />}
+          标为看过
+        </button>
+        {statusMessage ? <span className="sr-only" role="status">{statusMessage}</span> : null}
+        {mutation.isError ? <span role="alert">标为看过失败</span> : null}
+      </div>
+    </article>
+  )
 }
 
 function HomeContinueItem({ item }: { item: MediaSearchResult }) {

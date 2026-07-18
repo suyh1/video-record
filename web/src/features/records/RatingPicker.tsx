@@ -11,8 +11,8 @@ const steps = Array.from({ length: Math.round((MAX - MIN) / STEP) + 1 }, (_, ind
 type RatingPickerProps = {
   value: string
   onChange: (value: string) => void
-  error?: string
-  disabled?: boolean
+  error?: string | undefined
+  disabled?: boolean | undefined
 }
 
 export function RatingPicker({ value, onChange, error, disabled = false }: RatingPickerProps) {

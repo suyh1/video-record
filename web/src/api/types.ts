@@ -38,6 +38,7 @@ export type CurrentRound = {
 	note: string | null
 	viewingMethod: string | null
 	watchedAt: string | null
+	startedAt: string | null
 	participantIds: string[]
 	version: number
 	profileVersion: number

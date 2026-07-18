@@ -23,7 +23,7 @@ func TestCurrentRoundHandlersReadAndWriteMovie(t *testing.T) {
 	require.JSONEq(t, `{
 		"roundId":"", "mediaId":"`+mediaID+`", "seasonNumber":null,
 		"roundNumber":1, "status":"none", "rating":null, "note":null,
-		"viewingMethod":null, "watchedAt":null, "version":0, "profileVersion":0,
+		"viewingMethod":null, "watchedAt":null, "startedAt":null, "version":0, "profileVersion":0,
 		"participantIds":[]
 	}`, read.Body.String())
 

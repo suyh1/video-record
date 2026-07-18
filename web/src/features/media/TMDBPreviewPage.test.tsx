@@ -148,7 +148,7 @@ describe('TMDBPreviewPage', () => {
         expect(await request.json()).toEqual({ status: 'wishlist' })
         return HttpResponse.json({
           roundId: 'round-arrival', mediaId: 'local-arrival', seasonNumber: null, roundNumber: 1,
-          status: 'wishlist', rating: null, note: null, viewingMethod: null, watchedAt: null,
+          status: 'wishlist', rating: null, note: null, viewingMethod: null, startedAt: null, watchedAt: null,
           participantIds: [], version: 1, profileVersion: 1,
         })
       }),

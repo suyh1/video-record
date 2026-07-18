@@ -22,6 +22,7 @@ type currentRoundResponse struct {
 	Note           *string        `json:"note"`
 	ViewingMethod  *string        `json:"viewingMethod"`
 	WatchedAt      *time.Time     `json:"watchedAt"`
+	StartedAt      *time.Time     `json:"startedAt"`
 	Version        int            `json:"version"`
 	ProfileVersion int            `json:"profileVersion"`
 	ParticipantIDs []string       `json:"participantIds"`
@@ -36,6 +37,8 @@ type updateCurrentRoundRequest struct {
 	ViewingMethod    *string
 	ViewingMethodSet bool
 	WatchedAt        *time.Time
+	StartedAt        *time.Time
+	StartedAtSet     bool
 	ParticipantIDs   []string
 }
 
@@ -118,7 +121,9 @@ func (handlers recordHandlers) updateCurrentRound(w http.ResponseWriter, r *http
 		Rating: request.Rating, RatingSet: request.RatingSet,
 		Note: request.Note, NoteSet: request.NoteSet,
 		ViewingMethod: request.ViewingMethod, ViewingMethodSet: request.ViewingMethodSet,
-		CompletedAt: request.WatchedAt, Source: records.SourceManual,
+		CompletedAt: request.WatchedAt,
+		StartedAt: request.StartedAt, StartedAtSet: request.StartedAtSet,
+		Source: records.SourceManual,
 		ExpectedVersion: expectedVersion,
 		ParticipantIDs:  request.ParticipantIDs,
 	})
@@ -239,6 +244,7 @@ func decodeUpdateCurrentRoundRequest(r *http.Request) (updateCurrentRoundRequest
 		Note           json.RawMessage `json:"note"`
 		ViewingMethod  json.RawMessage `json:"viewingMethod"`
 		WatchedAt      *time.Time      `json:"watchedAt"`
+		StartedAt      json.RawMessage `json:"startedAt"`
 		ParticipantIDs []string        `json:"participantIds"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
@@ -275,6 +281,17 @@ func decodeUpdateCurrentRoundRequest(r *http.Request) (updateCurrentRoundRequest
 		watchedAt := request.WatchedAt.UTC()
 		request.WatchedAt = &watchedAt
 	}
+	if raw.StartedAt != nil {
+		request.StartedAtSet = true
+		if string(raw.StartedAt) != "null" {
+			var startedAt time.Time
+			if err := json.Unmarshal(raw.StartedAt, &startedAt); err != nil {
+				return updateCurrentRoundRequest{}, err
+			}
+			startedAt = startedAt.UTC()
+			request.StartedAt = &startedAt
+		}
+	}
 	return request, nil
 }
 
@@ -298,7 +315,7 @@ func newCurrentRoundResponse(round records.WatchRound) currentRoundResponse {
 	response := currentRoundResponse{
 		RoundID: round.ID, MediaID: round.MediaID, SeasonNumber: round.SeasonNumber,
 		RoundNumber: round.RoundNumber, Status: round.Status, Note: round.Note,
-		ViewingMethod: round.ViewingMethod, WatchedAt: round.CompletedAt,
+		ViewingMethod: round.ViewingMethod, WatchedAt: round.CompletedAt, StartedAt: round.StartedAt,
 		Version: round.Version, ProfileVersion: round.ProfileVersion,
 		ParticipantIDs: append([]string{}, round.ParticipantIDs...),
 	}

@@ -22,6 +22,7 @@ const movieRound: CurrentRound = {
   note: null,
   viewingMethod: null,
   watchedAt: null,
+  startedAt: null,
   participantIds: [],
   version: 0,
   profileVersion: 7,
@@ -72,6 +73,26 @@ describe('RoundRecordForm', () => {
     await user.clear(watchedAt)
     await user.click(screen.getByRole('button', { name: '保存记录' }))
     expect(await screen.findByText('请选择完成观看时间')).toBeVisible()
+  })
+
+  it('defaults watching start time and rejects a future start', async () => {
+    const request = vi.fn()
+    server.use(http.put('*/api/v1/records/media-1/rounds/current', request))
+    const user = userEvent.setup()
+    renderWithQueryClient(
+      <RoundRecordForm round={movieRound} now={now} onSaved={() => undefined} />,
+    )
+
+    await user.click(screen.getByRole('radio', { name: '在看' }))
+    const startedAt = screen.getByLabelText('开始观看时间')
+    expect(startedAt).toHaveAttribute('type', 'datetime-local')
+    expect(startedAt).toHaveAttribute('max', toDateTimeLocalValue(now))
+    expect(startedAt).toHaveValue(`${toDateTimeLocalValue(now)}.000`)
+
+    fireEvent.change(startedAt, { target: { value: '2026-07-14T17:08:10' } })
+    await user.click(screen.getByRole('button', { name: '保存记录' }))
+    expect(await screen.findByText('开始观看时间不能晚于当前时间')).toBeVisible()
+    expect(request).not.toHaveBeenCalled()
   })
 
   it('rejects a future movie completion time without sending or clearing the input', async () => {
@@ -238,7 +259,7 @@ describe('RoundRecordForm', () => {
         ...seasonRound,
         status: 'completed',
         note: '完成后补充的季笔记',
-        watchedAt: '2026-07-14T12:00:00Z',
+        startedAt: null, watchedAt: '2026-07-14T12:00:00Z',
         version: 5,
       })
     }))
@@ -251,7 +272,7 @@ describe('RoundRecordForm', () => {
           <button type="button" onClick={() => setRound({
             ...round,
             status: 'completed',
-            watchedAt: '2026-07-14T12:00:00Z',
+            startedAt: null, watchedAt: '2026-07-14T12:00:00Z',
             version: 4,
           })}>
             模拟整季完成
@@ -304,7 +325,7 @@ describe('RoundRecordForm', () => {
         rating: 9,
         note: '上一刷',
         viewingMethod: '影院',
-        watchedAt: '2026-07-13T12:00:01Z',
+        startedAt: null, watchedAt: '2026-07-13T12:00:01Z',
         version: 4,
       })
       return (
