@@ -192,6 +192,22 @@ func (client *Client) Credits(ctx context.Context, mediaType string, id int, lan
 	return response, err
 }
 
+func (client *Client) Images(ctx context.Context, mediaType string, id int) (MediaImages, error) {
+	if (mediaType != "movie" && mediaType != "tv") || id < 1 {
+		return MediaImages{}, &ClientError{Kind: ErrUpstreamUnavailable}
+	}
+	var response MediaImages
+	// Image metadata is language-agnostic; cache like other live metadata.
+	err := client.get(
+		ctx,
+		fmt.Sprintf("/%s/%d/images", mediaType, id),
+		url.Values{},
+		liveMetadataTTL,
+		&response,
+	)
+	return response, err
+}
+
 func (client *Client) get(
 	ctx context.Context,
 	path string,

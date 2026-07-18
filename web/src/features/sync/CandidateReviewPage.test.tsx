@@ -52,7 +52,7 @@ it('reviews evidence and supports confirm, rematch, ignore, and retained custom 
 
   const rematchCandidate = screen.getByRole('article', { name: 'Ambiguous Film' })
   await user.click(within(rematchCandidate).getByRole('radio', {
-    name: '候选 2：Ambiguous Film（原名 Second Original，2024，电影）',
+    name: /候选 2[\s\S]*Ambiguous Film[\s\S]*Second Original[\s\S]*2024/,
   }))
   await user.click(within(rematchCandidate).getByRole('button', { name: '使用所选匹配' }))
 

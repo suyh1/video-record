@@ -426,6 +426,14 @@ paths:
           in: query
           required: false
           schema: { type: string }
+        - name: genre
+          in: query
+          required: false
+          schema: { type: string }
+        - name: method
+          in: query
+          required: false
+          schema: { type: string }
       responses:
         '200':
           description: Cursor-shaped library page.
@@ -1140,6 +1148,21 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TMDBCredits' }
         default: { $ref: '#/components/responses/Problem' }
+  /api/v1/tmdb/{mediaType}/{id}/images:
+    parameters:
+      - $ref: '#/components/parameters/MediaType'
+      - $ref: '#/components/parameters/TMDBID'
+    get:
+      operationId: getTMDBImages
+      summary: Read TMDB stills/backdrops for a movie or series
+      responses:
+        '200':
+          description: Signed still image URLs.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TMDBImages' }
+        default: { $ref: '#/components/responses/Problem' }
+
   /api/v1/media/{id}:
     parameters:
       - name: id
@@ -1707,6 +1730,7 @@ components:
         pendingCandidates: { type: integer, minimum: 0 }
         lastRunStatus: { type: string, enum: [running, succeeded, failed] }
         lastRunAt: { type: string, format: date-time }
+        lastRunSummary: { type: string }
     SyncStatus:
       type: object
       additionalProperties: false
@@ -2005,6 +2029,20 @@ components:
         character: { type: string }
         profilePath: { type: string }
         order: { type: integer, minimum: 0 }
+    TMDBImages:
+      type: object
+      additionalProperties: false
+      required: [backdrops]
+      properties:
+        backdrops:
+          type: array
+          items: { $ref: '#/components/schemas/TMDBImageItem' }
+    TMDBImageItem:
+      type: object
+      additionalProperties: false
+      required: [url]
+      properties:
+        url: { type: string }
     TMDBCredits:
       type: object
       additionalProperties: false

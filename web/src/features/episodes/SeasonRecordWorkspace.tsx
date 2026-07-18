@@ -1,13 +1,13 @@
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
-import { getCurrentRound, getTMDBSeason, getTMDBTV } from '../../api/client'
+import { getCurrentRound, getEpisodeProgress, getTMDBSeason, getTMDBTV } from '../../api/client'
 import type { CurrentRound, HouseholdMember } from '../../api/types'
 import { RewatchSection } from '../records/RewatchSection'
 import { RoundRecordForm } from '../records/RoundRecordForm'
 import { EpisodeProgress } from './EpisodeProgress'
-import { regularSeasons, selectActiveSeason } from './episodeCatalog'
+import { regularSeasons, selectActiveSeason, totalEpisodeCount } from './episodeCatalog'
 
 type SeasonRecordWorkspaceProps = {
   mediaId: string
@@ -38,6 +38,13 @@ export function SeasonRecordWorkspace({
       queryFn: ({ signal }: { signal: AbortSignal }) => getCurrentRound(mediaId, season.seasonNumber, signal),
     })),
   })
+  const progressQueries = useQueries({
+    queries: seasons.map((season) => ({
+      queryKey: ['episode-progress', mediaId, season.seasonNumber],
+      queryFn: ({ signal }: { signal: AbortSignal }) => getEpisodeProgress(mediaId, season.seasonNumber, signal),
+      staleTime: 30_000,
+    })),
+  })
   const roundsPending = rounds.some((round) => round.isPending)
   const defaultSeason = roundsPending
     ? null
@@ -50,6 +57,33 @@ export function SeasonRecordWorkspace({
     enabled: tmdbId !== null && activeSeason !== null,
     staleTime: 30_000,
   })
+
+  const seriesProgress = useMemo(() => {
+    const total = totalEpisodeCount(seasons)
+    const watched = seasons.reduce((sum, seasonSummary, index) => {
+      const progress = progressQueries[index]?.data
+      if (!progress) return sum
+      const listed = progress.episodes.filter((episode) => episode.watched).length
+      const reported = progress.watchedEpisodes ?? 0
+      const seasonWatched = Math.max(listed, reported)
+      return sum + Math.min(seasonWatched, seasonSummary.episodeCount || seasonWatched)
+    }, 0)
+    return { watched, total }
+  }, [progressQueries, seasons])
+
+  const firstIncompleteSeason = useMemo(() => {
+    for (let index = 0; index < seasons.length; index += 1) {
+      const seasonSummary = seasons[index]!
+      const progress = progressQueries[index]?.data
+      const listed = progress?.episodes.filter((episode) => episode.watched).length ?? 0
+      const reported = progress?.watchedEpisodes ?? 0
+      const watched = Math.max(listed, reported)
+      if (watched < (seasonSummary.episodeCount || Number.MAX_SAFE_INTEGER)) {
+        return seasonSummary.seasonNumber
+      }
+    }
+    return null
+  }, [progressQueries, seasons])
 
   if (tmdbId === null) {
     return (
@@ -84,26 +118,42 @@ export function SeasonRecordWorkspace({
         <div>
           <h2 id="season-workspace-heading">按季记录</h2>
           <p className="season-workspace-summary">
-            全剧进度 {rounds.flatMap((round) => round.data?.status === 'completed' ? [1] : []).length === seasons.length
-              ? '已全部完成'
-              : `进行中 · 共 ${seasons.length} 季`}
+            全剧进度 {seriesProgress.total > 0
+              ? `${seriesProgress.watched} / ${seriesProgress.total} 集`
+              : `共 ${seasons.length} 季`}
+            {firstIncompleteSeason !== null && firstIncompleteSeason !== activeSeason ? (
+              <>
+                {' · '}
+                <button
+                  type="button"
+                  className="text-link-button"
+                  onClick={() => setSelectedSeason(firstIncompleteSeason)}
+                >
+                  跳到未完成季
+                </button>
+              </>
+            ) : null}
           </p>
         </div>
         <div className="season-chip-list" role="tablist" aria-label="选择季">
-          {seasons.map((season, index) => {
-            const round = rounds[index]?.data
-            const selected = season.seasonNumber === activeSeason
+          {seasons.map((seasonSummary, index) => {
+            const progress = progressQueries[index]?.data
+            const listed = progress?.episodes.filter((episode) => episode.watched).length ?? 0
+            const reported = progress?.watchedEpisodes ?? 0
+            const watched = Math.min(Math.max(listed, reported), seasonSummary.episodeCount || Number.MAX_SAFE_INTEGER)
+            const total = seasonSummary.episodeCount || progress?.totalEpisodes || 0
+            const selected = seasonSummary.seasonNumber === activeSeason
             return (
               <button
-                key={season.id}
+                key={seasonSummary.id}
                 type="button"
                 role="tab"
                 aria-selected={selected}
                 className={selected ? 'is-selected' : ''}
-                onClick={() => setSelectedSeason(season.seasonNumber)}
+                onClick={() => setSelectedSeason(seasonSummary.seasonNumber)}
               >
-                {season.name || `第 ${season.seasonNumber} 季`}
-                <small>{round?.status === 'completed' ? '已看完' : `${season.episodeCount} 集`}</small>
+                {seasonSummary.name || `第 ${seasonSummary.seasonNumber} 季`}
+                <small>{total > 0 ? `${watched}/${total}` : `${seasonSummary.episodeCount} 集`}</small>
               </button>
             )
           })}

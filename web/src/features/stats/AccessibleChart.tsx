@@ -28,8 +28,8 @@ export function AccessibleChart({
           {points.length > 0 ? points.map((point) => (
             <div className="accessible-bar-row" key={point.label}>
               <span>
-                {drillParam === 'tag' ? (
-                  <Link to={`/library?tag=${encodeURIComponent(point.label)}`}>{point.label}</Link>
+                {drillParam ? (
+                  <Link to={`/library?${drillParam}=${encodeURIComponent(point.label)}`}>{point.label}</Link>
                 ) : point.label}
               </span>
               <div aria-hidden="true"><i style={{ width: `${Math.max(2, (point.value / maximum) * 100)}%` }} /></div>

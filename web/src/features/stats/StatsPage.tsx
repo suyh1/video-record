@@ -78,10 +78,10 @@ export function StatsPage({
           </dl>
           <AccessibleChart title="月度观看" chartLabel="月度观看图" tableLabel="月度观看数据" points={summary.monthly} />
           <AccessibleChart title="年度观看" chartLabel="年度观看图" tableLabel="年度观看数据" points={summary.yearly} />
-          <AccessibleChart title="类型分布" chartLabel="类型分布图" tableLabel="类型分布数据" points={summary.genres} />
+          <AccessibleChart title="类型分布" chartLabel="类型分布图" tableLabel="类型分布数据" points={summary.genres} drillParam="genre" />
           <AccessibleChart title="评分分布" chartLabel="评分分布图" tableLabel="评分分布数据" points={summary.ratings} valueSuffix="部" />
           <AccessibleChart title="标签分布" chartLabel="标签分布图" tableLabel="标签分布数据" points={summary.tags} valueSuffix="部" drillParam="tag" />
-          <AccessibleChart title="观看方式" chartLabel="观看方式图" tableLabel="观看方式数据" points={summary.viewingMethods} />
+          <AccessibleChart title="观看方式" chartLabel="观看方式图" tableLabel="观看方式数据" points={summary.viewingMethods} drillParam="method" />
         </>
       )}
     </div>

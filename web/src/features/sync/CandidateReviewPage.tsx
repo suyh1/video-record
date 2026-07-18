@@ -66,7 +66,7 @@ export function CandidateReviewPage() {
       ) : (
         <>
           <div className="sync-bulk-actions">
-            <BulkIgnoreExact candidates={pendingCandidates} onDone={() => void candidates.refetch()} />
+            <BulkCandidateActions candidates={pendingCandidates} onDone={() => void candidates.refetch()} />
           </div>
           <ol className="sync-candidate-list" aria-label="待核对同步候选">
             {pendingCandidates.map((candidate) => <CandidateItem key={candidate.id} candidate={candidate} />)}
@@ -121,7 +121,7 @@ function CandidateItem({ candidate }: { candidate: SyncCandidate }) {
           <fieldset className="sync-match-options">
             <legend>候选条目</legend>
             {candidate.options.map((option, index) => (
-              <label key={targetKey(option)}>
+              <label key={targetKey(option)} className="sync-match-option">
                 <input
                   type="radio"
                   name={`candidate-${candidate.id}`}
@@ -129,12 +129,22 @@ function CandidateItem({ candidate }: { candidate: SyncCandidate }) {
                   checked={selectedTarget === targetKey(option)}
                   onChange={() => setSelectedTarget(targetKey(option))}
                 />
-                <span className="sync-option-index">候选 {index + 1}：</span>
-                <span><strong>{option.title}</strong>{optionMeta(option)}</span>
+                <span className="sync-option-preview">
+                  <span className="sync-option-index">候选 {index + 1}</span>
+                  <strong>{option.title}</strong>
+                  <span>{optionMeta(option)}</span>
+                  <span className="sync-option-local-status">
+                    {option.mediaType === 'tv' ? '剧集' : '电影'}
+                    {option.year ? ` · ${option.year}` : ''}
+                    {option.mediaId ? ' · 已有本地条目' : ''}
+                  </span>
+                </span>
               </label>
             ))}
           </fieldset>
-        ) : null}
+        ) : (
+          <p className="sync-option-empty">暂无本地候选；可忽略或创建自定义条目。</p>
+        )}
 
         <div className="sync-candidate-actions">
           {candidate.mediaId ? (
@@ -267,34 +277,44 @@ function formatCandidateDate(value: string) {
 }
 
 
-function BulkIgnoreExact({ candidates, onDone }: { candidates: SyncCandidate[]; onDone: () => void }) {
+function BulkCandidateActions({ candidates, onDone }: { candidates: SyncCandidate[]; onDone: () => void }) {
   const [pending, setPending] = useState(false)
   const [message, setMessage] = useState('')
-  const exact = candidates.filter((candidate) => candidate.status === 'exact' || candidate.status === 'possible')
-  if (exact.length === 0) return null
+  const confirmable = candidates.filter((candidate) => candidate.status === 'exact' && candidate.mediaId)
+  const ignorable = candidates.filter((candidate) => candidate.status === 'exact' || candidate.status === 'possible')
+  if (confirmable.length === 0 && ignorable.length === 0) return null
+
+  const run = async (kind: 'confirm' | 'ignore') => {
+    const targets = kind === 'confirm' ? confirmable : ignorable
+    if (targets.length === 0) return
+    setPending(true)
+    setMessage('')
+    try {
+      for (const candidate of targets) {
+        if (kind === 'confirm') await confirmSyncCandidate(candidate.id)
+        else await ignoreSyncCandidate(candidate.id)
+      }
+      setMessage(kind === 'confirm' ? `已确认 ${targets.length} 条匹配` : `已忽略 ${targets.length} 条候选`)
+      onDone()
+    } catch {
+      setMessage(kind === 'confirm' ? '批量确认失败，请稍后重试' : '批量忽略失败，请稍后重试')
+    } finally {
+      setPending(false)
+    }
+  }
+
   return (
-    <div>
-      <button
-        type="button"
-        disabled={pending}
-        onClick={async () => {
-          setPending(true)
-          setMessage('')
-          try {
-            for (const candidate of exact) {
-              await ignoreSyncCandidate(candidate.id)
-            }
-            setMessage(`已忽略 ${exact.length} 条候选`)
-            onDone()
-          } catch {
-            setMessage('批量忽略失败，请稍后重试')
-          } finally {
-            setPending(false)
-          }
-        }}
-      >
-        {pending ? '正在忽略' : `批量忽略 ${exact.length} 条精确/可能匹配`}
-      </button>
+    <div className="sync-bulk-action-group">
+      {confirmable.length > 0 ? (
+        <button type="button" disabled={pending} onClick={() => void run('confirm')}>
+          {pending ? '处理中' : `批量确认 ${confirmable.length} 条精确匹配`}
+        </button>
+      ) : null}
+      {ignorable.length > 0 ? (
+        <button type="button" disabled={pending} onClick={() => void run('ignore')}>
+          {pending ? '处理中' : `批量忽略 ${ignorable.length} 条精确/可能匹配`}
+        </button>
+      ) : null}
       {message ? <p role="status">{message}</p> : null}
     </div>
   )

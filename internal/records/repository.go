@@ -272,6 +272,25 @@ func (repository *SQLiteRepository) Library(ctx context.Context, userID string, 
 			)`
 		arguments = append(arguments, query.Tag)
 	}
+	if query.Genre != "" {
+		sqlQuery += `
+			AND EXISTS (
+			  SELECT 1 FROM media_genres media_genre
+			  JOIN genres genre ON genre.source = media_genre.source AND genre.source_id = media_genre.source_id
+			  WHERE media_genre.media_id = media.id AND genre.name = ?
+			)`
+		arguments = append(arguments, query.Genre)
+	}
+	if query.ViewingMethod != "" {
+		sqlQuery += `
+			AND EXISTS (
+			  SELECT 1 FROM watch_rounds round
+			  WHERE round.user_id = profile.user_id
+			    AND round.media_id = profile.media_id
+			    AND round.viewing_method = ?
+			)`
+		arguments = append(arguments, query.ViewingMethod)
+	}
 	if query.Cursor != "" {
 		cursorSort, cursorKey, mediaID, err := decodeLibraryCursor(query.Cursor)
 		if err != nil || cursorSort != sortKey {

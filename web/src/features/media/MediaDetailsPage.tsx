@@ -22,6 +22,7 @@ import { RewatchSection } from '../records/RewatchSection'
 import { RoundRecordForm } from '../records/RoundRecordForm'
 import { CastStrip } from './CastStrip'
 import { MediaHero } from './MediaHero'
+import { MediaStills } from './MediaStills'
 import { useMediaAtmosphere } from './mediaAtmosphere'
 import { TMDBLinker } from './TMDBLinker'
 
@@ -165,6 +166,8 @@ export function MediaDetailsPage() {
           <RewatchSection round={movieRound.data} onRewatched={savedMovieRound} />
         </section>
       ) : null}
+
+      {tmdbID && mediaType ? <MediaStills mediaType={mediaType} tmdbId={tmdbID} /> : null}
     </div>
   )
 }

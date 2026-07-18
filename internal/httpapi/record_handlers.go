@@ -77,12 +77,14 @@ func (handlers recordHandlers) library(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := records.LibraryQuery{
-		Status:    records.Status(strings.TrimSpace(r.URL.Query().Get("status"))),
-		Cursor:    strings.TrimSpace(r.URL.Query().Get("cursor")),
-		MediaType: strings.TrimSpace(r.URL.Query().Get("mediaType")),
-		Sort:      strings.TrimSpace(r.URL.Query().Get("sort")),
-		Query:     strings.TrimSpace(r.URL.Query().Get("q")),
-		Tag:       strings.TrimSpace(r.URL.Query().Get("tag")),
+		Status:        records.Status(strings.TrimSpace(r.URL.Query().Get("status"))),
+		Cursor:        strings.TrimSpace(r.URL.Query().Get("cursor")),
+		MediaType:     strings.TrimSpace(r.URL.Query().Get("mediaType")),
+		Sort:          strings.TrimSpace(r.URL.Query().Get("sort")),
+		Query:         strings.TrimSpace(r.URL.Query().Get("q")),
+		Tag:           strings.TrimSpace(r.URL.Query().Get("tag")),
+		Genre:         strings.TrimSpace(r.URL.Query().Get("genre")),
+		ViewingMethod: strings.TrimSpace(r.URL.Query().Get("method")),
 	}
 	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
 		limit, err := strconv.Atoi(rawLimit)

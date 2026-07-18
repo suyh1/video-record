@@ -307,6 +307,43 @@ func (handlers tmdbHandlers) credits(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tmdbCreditsResponse{Cast: cast, Crew: crew})
 }
 
+type tmdbImagesResponse struct {
+	Backdrops []tmdbImageItem `json:"backdrops"`
+}
+
+type tmdbImageItem struct {
+	URL string `json:"url"`
+}
+
+func (handlers tmdbHandlers) images(w http.ResponseWriter, r *http.Request) {
+	mediaType := chi.URLParam(r, "mediaType")
+	if mediaType != "movie" && mediaType != "tv" {
+		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_media_type")
+		return
+	}
+	id, ok := positiveURLInt(w, r, "id")
+	if !ok {
+		return
+	}
+	images, err := handlers.client.Images(r.Context(), mediaType, id)
+	if err != nil {
+		writeTMDBError(w, r, err)
+		return
+	}
+	backdrops := make([]tmdbImageItem, 0, 12)
+	for _, item := range images.Backdrops {
+		url := signedTMDBImageURL(handlers.client, "w780", item.FilePath, handlerTime(handlers.now))
+		if url == "" {
+			continue
+		}
+		backdrops = append(backdrops, tmdbImageItem{URL: url})
+		if len(backdrops) >= 12 {
+			break
+		}
+	}
+	writeJSON(w, http.StatusOK, tmdbImagesResponse{Backdrops: backdrops})
+}
+
 func signedTMDBImageURL(client *tmdb.Client, size, imagePath string, now time.Time) string {
 	if imagePath == "" || client == nil {
 		return ""

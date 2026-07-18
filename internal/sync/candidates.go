@@ -64,6 +64,7 @@ type AccountSyncStatus struct {
 	PendingCandidates int        `json:"pendingCandidates"`
 	LastRunStatus     string     `json:"lastRunStatus,omitempty"`
 	LastRunAt         *time.Time `json:"lastRunAt,omitempty"`
+	LastRunSummary    string     `json:"lastRunSummary,omitempty"`
 }
 
 type SyncStatus struct {
@@ -205,7 +206,12 @@ func (service *CandidateService) Status(ctx context.Context, userID string) (Syn
 		           SELECT COALESCE(run.finished_at, run.started_at) FROM sync_runs run
 		           WHERE run.account_id = account.id
 		           ORDER BY run.started_at DESC, run.id DESC LIMIT 1
-		       )
+		       ),
+		       COALESCE((
+		           SELECT run.summary_json FROM sync_runs run
+		           WHERE run.account_id = account.id
+		           ORDER BY run.started_at DESC, run.id DESC LIMIT 1
+		       ), '')
 		FROM external_accounts account
 		LEFT JOIN sync_candidates candidate ON candidate.account_id = account.id
 		WHERE account.user_id = ?
@@ -220,9 +226,10 @@ func (service *CandidateService) Status(ctx context.Context, userID string) (Syn
 	for rows.Next() {
 		var account AccountSyncStatus
 		var lastRunAt sql.NullInt64
+		var summaryJSON string
 		if err := rows.Scan(
 			&account.ID, &account.Provider, &account.Name, &account.Enabled,
-			&account.PendingCandidates, &account.LastRunStatus, &lastRunAt,
+			&account.PendingCandidates, &account.LastRunStatus, &lastRunAt, &summaryJSON,
 		); err != nil {
 			return SyncStatus{}, err
 		}
@@ -230,10 +237,47 @@ func (service *CandidateService) Status(ctx context.Context, userID string) (Syn
 			value := time.UnixMilli(lastRunAt.Int64).UTC()
 			account.LastRunAt = &value
 		}
+		account.LastRunSummary = describeRunSummary(account.LastRunStatus, summaryJSON)
 		status.PendingTotal += account.PendingCandidates
 		status.Accounts = append(status.Accounts, account)
 	}
 	return status, rows.Err()
+}
+
+func describeRunSummary(status, summaryJSON string) string {
+	if summaryJSON == "" || summaryJSON == "{}" {
+		if status == "failed" {
+			return "同步失败，请检查媒体服务器连接后重试"
+		}
+		if status == "succeeded" {
+			return "同步完成"
+		}
+		if status == "running" {
+			return "正在同步播放历史"
+		}
+		return ""
+	}
+	var summary struct {
+		Fetched    int `json:"fetched"`
+		Imported   int `json:"imported"`
+		Candidates int `json:"candidates"`
+	}
+	if err := json.Unmarshal([]byte(summaryJSON), &summary); err != nil {
+		if status == "failed" {
+			return "同步失败，请检查媒体服务器连接后重试"
+		}
+		return ""
+	}
+	if status == "failed" {
+		return "同步失败，请检查媒体服务器连接后重试"
+	}
+	if status == "succeeded" {
+		return fmt.Sprintf("上次成功：获取 %d 条，导入 %d 条，待核对 %d 条", summary.Fetched, summary.Imported, summary.Candidates)
+	}
+	if status == "running" {
+		return "正在同步播放历史"
+	}
+	return ""
 }
 
 func (service *CandidateService) Confirm(ctx context.Context, userID, candidateID string) (Candidate, error) {

@@ -238,7 +238,7 @@ func TestContractProvidesConcreteGeneratedTypesAndRealFileMedia(t *testing.T) {
 	queryParameters := map[string][]string{
 		http.MethodGet + " /api/v1/calendar":        {"filter", "month", "timezone"},
 		http.MethodGet + " /api/v1/data/export":     {"format"},
-		http.MethodGet + " /api/v1/library":         {"cursor", "limit", "mediaType", "q", "sort", "status", "tag"},
+		http.MethodGet + " /api/v1/library":         {"cursor", "genre", "limit", "mediaType", "method", "q", "sort", "status", "tag"},
 		http.MethodGet + " /api/v1/media/search":    {"q"},
 		http.MethodGet + " /api/v1/stats":           {"range", "timezone"},
 		http.MethodGet + " /api/v1/sync/candidates": {"status"},

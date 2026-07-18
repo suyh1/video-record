@@ -328,6 +328,7 @@ export type SyncAccountStatus = {
   pendingCandidates: number
   lastRunStatus?: 'running' | 'succeeded' | 'failed'
   lastRunAt?: string
+  lastRunSummary?: string
 }
 
 export type SyncStatusResponse = {

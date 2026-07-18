@@ -22,13 +22,15 @@ type CatalogItem struct {
 }
 
 type LibraryQuery struct {
-	Status    Status
-	Cursor    string
-	Limit     int
-	MediaType string // "", "movie", "tv"
-	Sort      string // "updated" (default), "title", "rating", "watched"
-	Query     string
-	Tag       string
+	Status         Status
+	Cursor         string
+	Limit          int
+	MediaType      string // "", "movie", "tv"
+	Sort           string // "updated" (default), "title", "rating", "watched"
+	Query          string
+	Tag            string
+	Genre          string
+	ViewingMethod  string
 }
 
 type LibraryPage struct {
@@ -73,6 +75,8 @@ func (service *Service) LibraryPage(ctx context.Context, userID string, query Li
 	}
 	query.Query = strings.TrimSpace(query.Query)
 	query.Tag = strings.TrimSpace(query.Tag)
+	query.Genre = strings.TrimSpace(query.Genre)
+	query.ViewingMethod = strings.TrimSpace(query.ViewingMethod)
 	limit := query.Limit
 	if limit == 0 {
 		limit = DefaultLibraryLimit

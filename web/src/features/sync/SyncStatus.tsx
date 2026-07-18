@@ -44,6 +44,10 @@ export function SyncStatus() {
               <div>
                 <strong>{providerName(account.provider)} · {account.name}</strong>
                 <span>{account.pendingCandidates > 0 ? `${account.pendingCandidates} 条待核对` : '没有待核对记录'}</span>
+                {account.lastRunSummary ? <span className="sync-run-summary">{account.lastRunSummary}</span> : null}
+                {account.lastRunAt ? (
+                  <span className="sync-run-time">最近运行 {formatRunAt(account.lastRunAt)}</span>
+                ) : null}
               </div>
               <AccountRunStatus account={account} />
             </li>
@@ -74,4 +78,14 @@ function providerName(provider: SyncAccountStatus['provider']) {
   if (provider === 'jellyfin') return 'Jellyfin'
   if (provider === 'emby') return 'Emby'
   return 'Plex'
+}
+
+function formatRunAt(value: string) {
+  try {
+    return new Intl.DateTimeFormat('zh-CN', {
+      month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(new Date(value))
+  } catch {
+    return value
+  }
 }

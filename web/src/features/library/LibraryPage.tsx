@@ -52,6 +52,8 @@ export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
   const [query, setQuery] = useState(() => searchParams.get('q') ?? '')
   const [debouncedQuery, setDebouncedQuery] = useState(query.trim())
   const [tag, setTag] = useState(() => searchParams.get('tag') ?? '')
+  const [genre, setGenre] = useState(() => searchParams.get('genre') ?? '')
+  const [method, setMethod] = useState(() => searchParams.get('method') ?? '')
   const [selectedCollectionID, setSelectedCollectionID] = useState('')
 
   useEffect(() => {
@@ -66,11 +68,13 @@ export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
     if (sort !== 'updated') next.set('sort', sort)
     if (debouncedQuery) next.set('q', debouncedQuery)
     if (tag) next.set('tag', tag)
+    if (genre) next.set('genre', genre)
+    if (method) next.set('method', method)
     setSearchParams(next, { replace: true })
-  }, [debouncedQuery, filter, mediaType, setSearchParams, sort, tag])
+  }, [debouncedQuery, filter, genre, mediaType, method, setSearchParams, sort, tag])
 
   const library = useInfiniteQuery({
-    queryKey: ['library', filter, mediaType, sort, debouncedQuery, tag],
+    queryKey: ['library', filter, mediaType, sort, debouncedQuery, tag, genre, method],
     queryFn: ({ pageParam, signal }) => getLibrary(filter, {
       ...(pageParam ? { cursor: pageParam } : {}),
       limit: libraryPageSize,
@@ -78,6 +82,8 @@ export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
       sort,
       ...(debouncedQuery ? { q: debouncedQuery } : {}),
       ...(tag ? { tag } : {}),
+      ...(genre ? { genre } : {}),
+      ...(method ? { method } : {}),
       signal,
     }),
     initialPageParam: undefined as string | undefined,
@@ -183,6 +189,16 @@ export function LibraryPage({ onSearch }: { onSearch?: () => void }) {
               {name}
             </button>
           ))}
+        </div>
+      ) : null}
+      {genre || method ? (
+        <div className="library-toolbar" role="group" aria-label="统计下钻筛选">
+          {genre ? (
+            <button type="button" aria-pressed onClick={() => setGenre('')}>类型：{genre} ×</button>
+          ) : null}
+          {method ? (
+            <button type="button" aria-pressed onClick={() => setMethod('')}>方式：{method} ×</button>
+          ) : null}
         </div>
       ) : null}
 

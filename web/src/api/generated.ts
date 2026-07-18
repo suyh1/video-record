@@ -1004,6 +1004,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tmdb/{mediaType}/{id}/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mediaType: components["parameters"]["MediaType"];
+                id: components["parameters"]["TMDBID"];
+            };
+            cookie?: never;
+        };
+        /** Read TMDB stills/backdrops for a movie or series */
+        get: operations["getTMDBImages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/media/{id}": {
         parameters: {
             query?: never;
@@ -1392,6 +1412,7 @@ export interface components {
             lastRunStatus?: "running" | "succeeded" | "failed";
             /** Format: date-time */
             lastRunAt?: string;
+            lastRunSummary?: string;
         };
         SyncStatus: {
             accounts: components["schemas"]["SyncAccountStatus"][];
@@ -1604,6 +1625,12 @@ export interface components {
             character: string;
             profilePath: string;
             order: number;
+        };
+        TMDBImages: {
+            backdrops: components["schemas"]["TMDBImageItem"][];
+        };
+        TMDBImageItem: {
+            url: string;
         };
         TMDBCredits: {
             cast: components["schemas"]["TMDBCastMember"][];
@@ -2418,6 +2445,8 @@ export interface operations {
                 sort?: "updated" | "title" | "rating" | "watched";
                 q?: string;
                 tag?: string;
+                genre?: string;
+                method?: string;
             };
             header?: never;
             path?: never;
@@ -3490,6 +3519,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TMDBCredits"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getTMDBImages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mediaType: components["parameters"]["MediaType"];
+                id: components["parameters"]["TMDBID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed still image URLs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TMDBImages"];
                 };
             };
             default: components["responses"]["Problem"];

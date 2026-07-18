@@ -122,3 +122,12 @@ type Credits struct {
 	Cast []CastMember `json:"cast"`
 	Crew []CrewMember `json:"crew"`
 }
+
+type ImageFile struct {
+	FilePath string `json:"file_path"`
+}
+
+type MediaImages struct {
+	Backdrops []ImageFile `json:"backdrops"`
+	Posters   []ImageFile `json:"posters"`
+}

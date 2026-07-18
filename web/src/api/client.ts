@@ -135,6 +135,13 @@ export async function getTMDBCredits(mediaType: MediaType, id: number, signal?: 
   return response
 }
 
+export async function getTMDBImages(mediaType: MediaType, id: number, signal?: AbortSignal) {
+  return requestJSON<{ backdrops: Array<{ url: string }> }>(
+    `/api/v1/tmdb/${mediaType}/${id}/images`,
+    signal ? { signal } : undefined,
+  )
+}
+
 export type UpdateCurrentRoundPayload = {
 	status: RecordStatus
 	rating?: number | null
@@ -526,6 +533,8 @@ export type GetLibraryOptions = {
   sort?: 'updated' | 'title' | 'rating' | 'watched'
   q?: string
   tag?: string
+  genre?: string
+  method?: string
   signal?: AbortSignal
 }
 
@@ -544,6 +553,8 @@ export function getLibrary(
   if (options.sort && options.sort !== 'updated') params.set('sort', options.sort)
   if (options.q) params.set('q', options.q)
   if (options.tag) params.set('tag', options.tag)
+  if (options.genre) params.set('genre', options.genre)
+  if (options.method) params.set('method', options.method)
   const query = params.toString()
   return requestJSON<LibraryResponse>(
     `/api/v1/library${query ? `?${query}` : ''}`,
