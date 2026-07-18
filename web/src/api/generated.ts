@@ -453,6 +453,47 @@ export interface paths {
         get: operations["getArchivedRound"];
         put?: never;
         post?: never;
+        /** Delete one private archived viewing round */
+        delete: operations["deleteArchivedRound"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/records/{mediaID}/rounds/current/clear-fields": {
+        parameters: {
+            query?: {
+                seasonNumber?: number;
+            };
+            header?: never;
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Clear optional private fields on the current viewing round */
+        post: operations["clearCurrentRoundFields"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/records/{mediaID}/remove-from-library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset the media record to none and remove it from the library list */
+        post: operations["removeFromLibrary"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2548,6 +2589,99 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    deleteArchivedRound: {
+        parameters: {
+            query?: {
+                seasonNumber?: number;
+            };
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+                roundID: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyObject"];
+            };
+        };
+        responses: {
+            /** @description Archived round deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    clearCurrentRoundFields: {
+        parameters: {
+            query?: {
+                seasonNumber?: number;
+            };
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyObject"];
+            };
+        };
+        responses: {
+            /** @description Current round with optional fields cleared. */
+            200: {
+                headers: {
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentRound"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    removeFromLibrary: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                "X-CSRF-Token": components["parameters"]["CSRFToken"];
+            };
+            path: {
+                mediaID: components["parameters"]["MediaID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmptyObject"];
+            };
+        };
+        responses: {
+            /** @description Media removed from the current user's library. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     startRewatchRound: {
         parameters: {
             query?: {
@@ -2699,6 +2833,7 @@ export interface operations {
         parameters: {
             query?: {
                 timezone?: string;
+                range?: string;
             };
             header?: never;
             path?: never;

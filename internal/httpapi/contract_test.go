@@ -70,7 +70,10 @@ var protectedWriteRoutes = []struct {
 	Path   string
 }{
 	{http.MethodPut, "/api/v1/records/{mediaID}/rounds/current"},
+	{http.MethodPost, "/api/v1/records/{mediaID}/rounds/current/clear-fields"},
 	{http.MethodPost, "/api/v1/records/{mediaID}/rounds/current/rewatch"},
+	{http.MethodPost, "/api/v1/records/{mediaID}/remove-from-library"},
+	{http.MethodDelete, "/api/v1/records/{mediaID}/rounds/{roundID}"},
 	{http.MethodPut, "/api/v1/records/{mediaID}/tags"},
 	{http.MethodPost, "/api/v1/collections"},
 	{http.MethodPost, "/api/v1/collections/{collectionID}/items"},
@@ -216,7 +219,10 @@ func TestContractProvidesConcreteGeneratedTypesAndRealFileMedia(t *testing.T) {
 		http.MethodPost + " /api/v1/collections/{collectionID}/items":            {},
 		http.MethodPost + " /api/v1/data/import":                                 {},
 		http.MethodPut + " /api/v1/records/{mediaID}/rounds/current":             {},
+		http.MethodPost + " /api/v1/records/{mediaID}/rounds/current/clear-fields": {},
 		http.MethodPost + " /api/v1/records/{mediaID}/rounds/current/rewatch":    {},
+		http.MethodPost + " /api/v1/records/{mediaID}/remove-from-library":       {},
+		http.MethodDelete + " /api/v1/records/{mediaID}/rounds/{roundID}":        {},
 		http.MethodPut + " /api/v1/records/{mediaID}/tags":                       {},
 		http.MethodPost + " /api/v1/records/{mediaID}/progress":                  {},
 		http.MethodPost + " /api/v1/sync/candidates/{candidateID}/confirm":       {},
@@ -234,7 +240,7 @@ func TestContractProvidesConcreteGeneratedTypesAndRealFileMedia(t *testing.T) {
 		http.MethodGet + " /api/v1/data/export":     {"format"},
 		http.MethodGet + " /api/v1/library":         {"cursor", "limit", "mediaType", "q", "sort", "status", "tag"},
 		http.MethodGet + " /api/v1/media/search":    {"q"},
-		http.MethodGet + " /api/v1/stats":           {"timezone"},
+		http.MethodGet + " /api/v1/stats":           {"range", "timezone"},
 		http.MethodGet + " /api/v1/sync/candidates": {"status"},
 		http.MethodGet + " /api/v1/tmdb/search":     {"q"},
 	}

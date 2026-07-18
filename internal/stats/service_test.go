@@ -82,7 +82,7 @@ func TestSummaryCoversViewingDimensionsAndIsolatesUsers(t *testing.T) {
 	require.NoError(t, err)
 
 	service := NewService(NewRepository(db))
-	summary, err := service.Summary(ctx, owner.ID, "UTC")
+	summary, err := service.Summary(ctx, owner.ID, "UTC", "all")
 	require.NoError(t, err)
 	require.Equal(t, 2, summary.TotalWatches)
 	require.Equal(t, 1, summary.UniqueMedia)
@@ -100,9 +100,9 @@ func TestSummaryCoversViewingDimensionsAndIsolatesUsers(t *testing.T) {
 
 func TestSummaryRejectsMissingUser(t *testing.T) {
 	service := NewService(nil)
-	_, err := service.Summary(context.Background(), "", "UTC")
+	_, err := service.Summary(context.Background(), "", "UTC", "all")
 	require.ErrorIs(t, err, ErrInvalidStatsQuery)
-	_, err = service.Summary(context.Background(), "user", "Mars/Olympus")
+	_, err = service.Summary(context.Background(), "user", "Mars/Olympus", "all")
 	require.ErrorIs(t, err, ErrInvalidStatsQuery)
 }
 
@@ -147,7 +147,7 @@ func TestArchivedStatsCountsEachViewingRoundOnce(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	summary, err := NewService(NewRepository(db)).Summary(ctx, owner.ID, "UTC")
+	summary, err := NewService(NewRepository(db)).Summary(ctx, owner.ID, "UTC", "all")
 	require.NoError(t, err)
 	require.Equal(t, 2, summary.TotalWatches)
 	require.Equal(t, 1, summary.UniqueMedia)

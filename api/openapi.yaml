@@ -542,6 +542,65 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ArchivedRoundDetail' }
         default: { $ref: '#/components/responses/Problem' }
+    delete:
+      operationId: deleteArchivedRound
+      summary: Delete one private archived viewing round
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyObject' }
+      responses:
+        '204': { description: Archived round deleted. }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/records/{mediaID}/rounds/current/clear-fields:
+    parameters:
+      - $ref: '#/components/parameters/MediaID'
+      - name: seasonNumber
+        in: query
+        required: false
+        schema: { type: integer, minimum: 1 }
+    post:
+      operationId: clearCurrentRoundFields
+      summary: Clear optional private fields on the current viewing round
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyObject' }
+      responses:
+        '200':
+          description: Current round with optional fields cleared.
+          headers:
+            ETag: { required: true, schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentRound' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/v1/records/{mediaID}/remove-from-library:
+    parameters:
+      - $ref: '#/components/parameters/MediaID'
+    post:
+      operationId: removeFromLibrary
+      summary: Reset the media record to none and remove it from the library list
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CSRFToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyObject' }
+      responses:
+        '204': { description: Media removed from the current user's library. }
+        default: { $ref: '#/components/responses/Problem' }
   /api/v1/records/{mediaID}/rounds/current/rewatch:
     parameters:
       - $ref: '#/components/parameters/MediaID'
@@ -651,6 +710,10 @@ paths:
           in: query
           required: false
           schema: { type: string, default: UTC }
+        - name: range
+          in: query
+          required: false
+          schema: { type: string, default: all }
       responses:
         '200':
           description: Viewing statistics.

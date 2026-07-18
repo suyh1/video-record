@@ -51,12 +51,21 @@ func NewService(repository Repository) *Service {
 	return &Service{repository: repository}
 }
 
-func (service *Service) Summary(ctx context.Context, userID, timezone string) (Summary, error) {
+func (service *Service) Summary(ctx context.Context, userID, timezone, rangeKey string) (Summary, error) {
 	timezone = strings.TrimSpace(timezone)
+	rangeKey = strings.TrimSpace(rangeKey)
+	if rangeKey == "" {
+		rangeKey = "all"
+	}
 	if userID == "" || service.repository == nil {
 		return Summary{}, ErrInvalidStatsQuery
 	}
 	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		return Summary{}, ErrInvalidStatsQuery
+	}
+	now := time.Now().In(location)
+	start, end, err := statsRangeBounds(rangeKey, now)
 	if err != nil {
 		return Summary{}, ErrInvalidStatsQuery
 	}
@@ -81,11 +90,19 @@ func (service *Service) Summary(ctx context.Context, userID, timezone string) (S
 	monthly := make(map[string]int)
 	yearly := make(map[string]int)
 	viewingMethods := make(map[string]int)
-	summary := Summary{TotalWatches: len(events), Genres: genres, Tags: tags}
+	var filtered int
+	var totalMinutes int
 	for _, event := range events {
-		media[event.MediaID] = struct{}{}
-		summary.TotalMinutes += event.RuntimeMinutes
 		local := event.WatchedAt.In(location)
+		if !start.IsZero() && local.Before(start) {
+			continue
+		}
+		if !end.IsZero() && !local.Before(end) {
+			continue
+		}
+		filtered++
+		media[event.MediaID] = struct{}{}
+		totalMinutes += event.RuntimeMinutes
 		monthly[local.Format("2006-01")]++
 		yearly[local.Format("2006")]++
 		method := strings.TrimSpace(event.ViewingMethod)
@@ -93,13 +110,51 @@ func (service *Service) Summary(ctx context.Context, userID, timezone string) (S
 			viewingMethods[method]++
 		}
 	}
+	summary := Summary{
+		TotalWatches: filtered,
+		Genres:       genres,
+		Tags:         tags,
+		TotalMinutes: totalMinutes,
+	}
 	summary.UniqueMedia = len(media)
 	summary.RepeatWatches = summary.TotalWatches - summary.UniqueMedia
-	summary.Monthly = pointsFromMap(monthly, false)
+	if summary.RepeatWatches < 0 {
+		summary.RepeatWatches = 0
+	}
+	summary.Monthly = limitRecentMonths(pointsFromMap(monthly, false), 12)
 	summary.Yearly = pointsFromMap(yearly, false)
 	summary.Ratings = ratingPoints(ratings)
 	summary.ViewingMethods = pointsFromMap(viewingMethods, true)
 	return summary, nil
+}
+
+func statsRangeBounds(rangeKey string, now time.Time) (time.Time, time.Time, error) {
+	switch rangeKey {
+	case "all":
+		return time.Time{}, time.Time{}, nil
+	case "month":
+		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		return start, start.AddDate(0, 1, 0), nil
+	case "year":
+		start := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
+		return start, start.AddDate(1, 0, 0), nil
+	default:
+		if len(rangeKey) == 4 {
+			year, err := time.ParseInLocation("2006", rangeKey, now.Location())
+			if err != nil {
+				return time.Time{}, time.Time{}, err
+			}
+			return year, year.AddDate(1, 0, 0), nil
+		}
+		return time.Time{}, time.Time{}, ErrInvalidStatsQuery
+	}
+}
+
+func limitRecentMonths(points []Point, max int) []Point {
+	if len(points) <= max {
+		return points
+	}
+	return points[len(points)-max:]
 }
 
 func ratingPoints(ratings []int) []Point {

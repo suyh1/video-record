@@ -40,7 +40,11 @@ func (handlers statsHandlers) summary(w http.ResponseWriter, r *http.Request) {
 	if timezone == "" {
 		timezone = "UTC"
 	}
-	summary, err := handlers.service.Summary(r.Context(), identity.User.ID, timezone)
+	rangeKey := strings.TrimSpace(r.URL.Query().Get("range"))
+	if rangeKey == "" {
+		rangeKey = "all"
+	}
+	summary, err := handlers.service.Summary(r.Context(), identity.User.ID, timezone, rangeKey)
 	if errors.Is(err, statsdomain.ErrInvalidStatsQuery) {
 		writeProblem(w, r, http.StatusBadRequest, "Bad Request", "invalid_stats_query")
 		return

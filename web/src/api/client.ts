@@ -212,6 +212,46 @@ export function startRewatch(mediaID: string, seasonNumber: number | undefined, 
 	)
 }
 
+export function clearCurrentRoundFields(mediaID: string, seasonNumber: number | undefined, version: number) {
+	const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+	return requestJSON<CurrentRound>(
+		`/api/v1/records/${encodeURIComponent(mediaID)}/rounds/current/clear-fields${roundScopeQuery(seasonNumber)}`,
+		{
+			method: 'POST',
+			headers: {
+				'Idempotency-Key': createIdempotencyKey(),
+				'If-Match': `"${version}"`,
+				'X-CSRF-Token': csrfToken,
+			},
+		},
+	)
+}
+
+export async function removeFromLibrary(mediaID: string) {
+	const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+	await request(`/api/v1/records/${encodeURIComponent(mediaID)}/remove-from-library`, {
+		method: 'POST',
+		headers: {
+			'Idempotency-Key': createIdempotencyKey(),
+			'X-CSRF-Token': csrfToken,
+		},
+	})
+}
+
+export async function deleteArchivedRound(mediaID: string, roundID: string, seasonNumber?: number) {
+	const csrfToken = sessionStorage.getItem('video-record.csrf-token') ?? ''
+	await request(
+		`/api/v1/records/${encodeURIComponent(mediaID)}/rounds/${encodeURIComponent(roundID)}${roundScopeQuery(seasonNumber)}`,
+		{
+			method: 'DELETE',
+			headers: {
+				'Idempotency-Key': createIdempotencyKey(),
+				'X-CSRF-Token': csrfToken,
+			},
+		},
+	)
+}
+
 export function getMedia(mediaID: string, signal?: AbortSignal) {
   return requestJSON<MediaDetails>(`/api/v1/media/${encodeURIComponent(mediaID)}`, signal ? { signal } : undefined)
 }
@@ -286,8 +326,8 @@ export function getCalendar(month: string, timezone: string, filter: CalendarFil
   return requestJSON<CalendarResponse>(`/api/v1/calendar?${query.toString()}`, signal ? { signal } : undefined)
 }
 
-export function getStats(timezone: string, signal?: AbortSignal) {
-  const query = new URLSearchParams({ timezone })
+export function getStats(timezone: string, range: string = 'all', signal?: AbortSignal) {
+  const query = new URLSearchParams({ timezone, range })
   return requestJSON<StatsSummary>(`/api/v1/stats?${query.toString()}`, signal ? { signal } : undefined)
 }
 
